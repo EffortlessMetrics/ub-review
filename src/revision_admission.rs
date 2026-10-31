@@ -599,6 +599,47 @@ mod tests {
         SAMPLE_FILES.iter().map(|s| (*s).to_owned()).collect()
     }
 
+    #[test]
+    fn ordinary_diff_includes_gitlink_despite_ignore_configuration() -> Result<()> {
+        let repo = init_repo()?;
+        commit_file(
+            &repo,
+            ".gitmodules",
+            "[submodule \"vendor\"]\n\tpath = vendor\n\turl = example\n\tignore = all\n",
+            "configure submodule",
+        )?;
+        let base = commit_file(&repo, "file", "base\n", "base")?;
+        git(
+            &repo,
+            &[
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                &format!("160000,{base},vendor"),
+            ],
+        )?;
+        git(&repo, &["commit", "-q", "-m", "add gitlink"])?;
+
+        let diff = crate::DiffContext::from_git(repo.root(), &base, "HEAD")?;
+        assert_eq!(diff.changed_files, ["vendor"]);
+        assert!(diff.patch.contains(&format!("+Subproject commit {base}")));
+        assert_ne!(diff.diff_class, crate::DiffClass::ArtifactOnlySmoke);
+
+        git(&repo, &["config", "diff.ignoreSubmodules", "all"])?;
+        let tree = git(&repo, &["rev-parse", &format!("{base}^{{tree}}")])?;
+        let unrelated = git(&repo, &["commit-tree", tree.trim(), "-m", "unrelated"])?;
+        let fallback = crate::DiffContext::from_git(repo.root(), unrelated.trim(), "HEAD")?;
+        assert_eq!(fallback.changed_files, ["vendor"]);
+        assert_eq!(fallback.patch, diff.patch);
+        assert_eq!(fallback.diff_class, diff.diff_class);
+
+        let empty = crate::DiffContext::from_git(repo.root(), "HEAD", "HEAD")?;
+        assert!(empty.changed_files.is_empty());
+        assert!(empty.patch.is_empty());
+        assert_eq!(empty.diff_class, crate::DiffClass::ArtifactOnlySmoke);
+        Ok(())
+    }
+
     struct TrustedFixture {
         base_tree: String,
         head_sha: String,
@@ -1101,6 +1142,56 @@ mod tests {
         // Dirt does not move the committed identity.
         assert_eq!(clean.identity_digest, dirty.identity_digest);
         assert_eq!(clean.pr_head_commit.as_deref(), Some(head.as_str()));
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_target_is_part_of_the_admitted_tree_and_repeats_stably() -> Result<()> {
+        use std::os::unix::fs::symlink;
+
+        let repo = init_repo()?;
+        commit_file(&repo, "src/a.rs", "base\n", "base")?;
+
+        symlink("target-a", repo.root().join("link"))?;
+        git(&repo, &["add", "link"])?;
+        git(&repo, &["commit", "-q", "-m", "link target a"])?;
+        let first_commit = git(&repo, &["rev-parse", "HEAD"])?.trim().to_owned();
+        let files = vec!["link".to_owned()];
+        let first_patch = "symlink target-a\n";
+        let first = admit_revision(repo.root(), "HEAD~1", "HEAD", None, &files, first_patch)?;
+        let repeated = admit_revision(
+            repo.root(),
+            "HEAD~1",
+            &first_commit,
+            None,
+            &files,
+            first_patch,
+        )?;
+        assert_eq!(first.identity_digest, repeated.identity_digest);
+        assert_eq!(first.identity_canonical, repeated.identity_canonical);
+
+        fs::remove_file(repo.root().join("link"))?;
+        symlink("target-b", repo.root().join("link"))?;
+        let dirty = admit_revision(repo.root(), "HEAD~1", "HEAD", None, &files, first_patch)?;
+        assert!(dirty.worktree_dirty);
+        assert_eq!(first.identity_digest, dirty.identity_digest);
+        git(&repo, &["add", "link"])?;
+        git(&repo, &["commit", "-q", "-m", "link target b"])?;
+        let first_tree = git(&repo, &["show", "-s", "--format=%T", &first_commit])?;
+        let second_tree = git(&repo, &["show", "-s", "--format=%T", "HEAD"])?;
+        assert_ne!(first_tree.trim(), second_tree.trim());
+        let second = admit_revision(repo.root(), "HEAD~2", "HEAD", None, &files, first_patch)?;
+
+        // Git stores a symlink's target as its blob contents. The link path
+        // stays fixed, but both its tree and the admitted identity must move.
+        assert_ne!(first.identity_digest, second.identity_digest);
+        assert_ne!(first.identity_canonical, second.identity_canonical);
+        assert!(
+            first
+                .identity_canonical
+                .contains("semantics=candidate_head")
+        );
         Ok(())
     }
 

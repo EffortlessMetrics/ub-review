@@ -87,6 +87,23 @@ pub(crate) fn plan_lane_model_display(plan: &Plan, lane_id: &str) -> Option<Stri
 }
 
 pub(crate) fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Result<String> {
+    render_summary_for_phase(out, plan, diff, true)
+}
+
+pub(crate) fn render_preliminary_summary(
+    out: &Path,
+    plan: &Plan,
+    diff: &DiffContext,
+) -> Result<String> {
+    render_summary_for_phase(out, plan, diff, false)
+}
+
+fn render_summary_for_phase(
+    out: &Path,
+    plan: &Plan,
+    diff: &DiffContext,
+    review_evidence_expected: bool,
+) -> Result<String> {
     let mut text = String::new();
     text.push_str("# UB Review Packet\n\n");
     text.push_str("This is an advisory evidence packet plus review compiler. Posting is a separate grouped Pull Request Review step.\n\n");
@@ -98,7 +115,9 @@ pub(crate) fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Res
         diff.changed_files.len()
     ));
     text.push_str(&format!("- Diff class: `{}`\n", diff.diff_class.key()));
-    render_review_efficiency_section(&mut text, out);
+    if review_evidence_expected {
+        render_review_efficiency_section(&mut text, out);
+    }
     text.push_str("\n## Sensors\n\n");
     text.push_str("| Sensor | Planned | Status | Reason | Receipt |\n");
     text.push_str("|---|---:|---|---|---|\n");
@@ -134,7 +153,9 @@ pub(crate) fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Res
         ));
     }
     render_evidence_sections(&mut text, out, plan);
-    render_model_status_sections(&mut text, out);
+    if review_evidence_expected {
+        render_model_status_sections(&mut text, out);
+    }
     text.push_str("\n## Lane packets\n\n");
     text.push_str("| Lane | Model | Packet |\n");
     text.push_str("|---|---|---|\n");
@@ -181,9 +202,50 @@ pub(crate) fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Res
 }
 
 pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
-    let Some(metrics) = read_review_metrics(out) else {
+    // A written plan has no terminal evidence yet. Once any terminal input
+    // exists, an unavailable sibling must be explicit rather than hidden.
+    if ![
+        "review/gate_outcome.json",
+        "review/metrics.json",
+        "review/calibration.json",
+        "review/terminal_state.json",
+        "review/review.json",
+    ]
+    .iter()
+    .any(|path| out.join(path).try_exists().unwrap_or(true))
+    {
         return;
-    };
+    }
+
+    text.push_str("\n## Review efficiency\n\n");
+    match read_gate_outcome(out) {
+        Ok((gate, admitted)) => {
+            // Admission below restricts the conclusion to the gate-check
+            // vocabulary; calibration is never a substitute for this input.
+            let conclusion = admitted.conclusion.as_deref().unwrap_or("unknown");
+            let blocking_reasons = admitted.reasons.len();
+            text.push_str(&format!(
+                "- Gate: `{conclusion}` with `{blocking_reasons}` blocking reasons (`review/gate_outcome.json`)\n"
+            ));
+            render_planner_required_proofs(text, &gate);
+            render_configured_required_proofs(text, &gate);
+        }
+        Err(reason) => {
+            text.push_str(&format!(
+                "- Gate: unavailable — `review/gate_outcome.json` {reason}. Recover the original packet or create a new identified run; rerendering cannot recreate gate or proof evidence.\n"
+            ));
+        }
+    }
+    match read_review_metrics(out) {
+        Ok(metrics) => render_available_review_metrics(text, &metrics),
+        Err(reason) => text.push_str(&format!(
+            "- Review metrics: unavailable — `review/metrics.json` {reason}. Available gate evidence is reported independently.\n"
+        )),
+    }
+    render_calibration_summary(text, out);
+}
+
+fn render_available_review_metrics(text: &mut String, metrics: &serde_json::Value) {
     let runtime = metrics
         .get("wall_clock_seconds")
         .and_then(serde_json::Value::as_u64)
@@ -288,7 +350,6 @@ pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
         .and_then(serde_json::Value::as_str)
         .unwrap_or("unknown");
 
-    text.push_str("\n## Review efficiency\n\n");
     text.push_str(&format!("- Runtime: `{runtime}`\n"));
     text.push_str(&format!(
         "- Run streams: coordination `{coordination_wall}`, investigation `{investigation_wall}`, proof `{proof_stream_wall}`, investigation/proof overlap `{overlap}` (`{scheduler_profile}` via `{concurrency_model}`)\n"
@@ -297,21 +358,6 @@ pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
         "- Loop detail: model `{model_wall}`, local proof `{proof_wall}`, compiler `{compiler_wall}`\n"
     ));
     text.push_str(&format!("- Terminal state: `{terminal_state}`\n"));
-    if let Some(gate) = read_gate_outcome(out) {
-        let conclusion = gate
-            .get("conclusion")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("unknown");
-        let blocking_reasons = gate
-            .get("reasons")
-            .and_then(serde_json::Value::as_array)
-            .map(Vec::len)
-            .unwrap_or(0);
-        text.push_str(&format!(
-            "- Gate: `{conclusion}` with `{blocking_reasons}` blocking reasons (`review/gate_outcome.json`)\n"
-        ));
-        render_planner_required_proofs(text, &gate);
-    }
     if metrics
         .get("model_mode")
         .and_then(serde_json::Value::as_str)
@@ -340,7 +386,9 @@ pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
     text.push_str(&format!(
         "- Review payload: `{payload_status}`; post: `{post_status}`\n"
     ));
+}
 
+fn render_calibration_summary(text: &mut String, out: &Path) {
     // Calibration summary (compact, scannable). Computed from
     // review/calibration.json — NOT from model prose.
     if let Some(cal) = read_calibration_summary(out) {
@@ -366,8 +414,8 @@ pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
             cal.proof_changed_conclusions
         ));
         text.push_str(&format!(
-            "- Final review: `{}` inline, `{}` summary | Gate: `{}`\n",
-            cal.inline_comments, cal.summary_comments, cal.gate
+            "- Final review: `{}` inline, `{}` summary\n",
+            cal.inline_comments, cal.summary_comments
         ));
     }
 }
@@ -385,7 +433,6 @@ struct CalibrationSummary {
     proof_changed_conclusions: usize,
     inline_comments: usize,
     summary_comments: usize,
-    gate: String,
 }
 
 fn read_calibration_summary(out: &Path) -> Option<CalibrationSummary> {
@@ -440,11 +487,6 @@ fn read_calibration_summary(out: &Path) -> Option<CalibrationSummary> {
             .get("summary_comments_posted")
             .and_then(|v| v.as_u64())
             .unwrap_or(0) as usize,
-        gate: cal
-            .get("gate_policy")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_owned(),
     })
 }
 
@@ -470,9 +512,38 @@ pub(crate) fn format_json_status_counts(
     }
 }
 
-pub(crate) fn read_review_metrics(out: &Path) -> Option<serde_json::Value> {
-    let text = fs::read_to_string(out.join("review/metrics.json")).ok()?;
-    serde_json::from_str(&text).ok()
+pub(crate) fn read_review_metrics(
+    out: &Path,
+) -> std::result::Result<serde_json::Value, &'static str> {
+    let bytes = read_summary_bytes(&out.join("review/metrics.json"))?;
+    let value = parse_summary_object(&bytes)?;
+    // Read the original bytes so duplicate version fields cannot be collapsed.
+    #[derive(Deserialize)]
+    struct MetricsSchema {
+        schema_version: Option<u64>,
+    }
+    let schema: MetricsSchema =
+        serde_json::from_slice(&bytes).map_err(|_| "has an invalid metrics schema version")?;
+    if schema.schema_version != Some(1) {
+        return Err("has a missing or unsupported metrics schema version");
+    }
+    Ok(value)
+}
+
+fn read_summary_bytes(path: &Path) -> std::result::Result<Vec<u8>, &'static str> {
+    fs::read(path).map_err(|error| match error.kind() {
+        std::io::ErrorKind::NotFound => "is missing",
+        _ => "cannot be read",
+    })
+}
+
+fn parse_summary_object(bytes: &[u8]) -> std::result::Result<serde_json::Value, &'static str> {
+    let value: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(|_| "contains malformed JSON")?;
+    if !value.is_object() {
+        return Err("does not contain a JSON object");
+    }
+    Ok(value)
 }
 
 /// Sanitize broker-supplied plain text for the step summary (#4271 round
@@ -493,6 +564,30 @@ fn sanitize_planner_summary_text(value: &str) -> String {
         }
     }
     out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Keep configured policy requests separate from planner portfolio obligations.
+/// This reports evidence completeness; the artifact's enforcement conclusion
+/// still follows repository policy (skips are advisory unless opted in).
+fn render_configured_required_proofs(text: &mut String, gate: &serde_json::Value) {
+    let counts = gate.get("required_proof").and_then(|accounting| {
+        let matched = accounting.get("matched")?.as_u64()?;
+        let passed = accounting.get("passed")?.as_u64()?;
+        let failed = accounting.get("failed")?.as_u64()?;
+        let skipped = accounting.get("skipped")?.as_u64()?;
+        (passed.checked_add(failed)?.checked_add(skipped)? == matched)
+            .then_some((matched, passed, failed, skipped))
+    });
+    let Some((matched, passed, failed, skipped)) = counts else {
+        text.push_str("- Configured Required proofs: accounting unavailable (`review/gate_outcome.json`); qualification cannot be inferred.\n");
+        return;
+    };
+    text.push_str(&format!(
+        "- Configured Required proofs: `{passed}/{matched}` passed (`{failed}` failed, `{skipped}` skipped); gate-required `[[proof.required]]` requests, separate from planner obligations (`review/gate_outcome.json`).\n"
+    ));
+    if failed > 0 || skipped > 0 {
+        text.push_str("- Required proof evidence is incomplete. A skipped or missing proof supplies no passing execution evidence; an advisory gate pass does not qualify these obligations. Inspect `review/proof_requests.json` and `review/proof_receipts.json`, resolve failed or unavailable execution, then obtain passing request-bound proof on the candidate revision.\n");
+    }
 }
 
 /// Retained planner-required proof obligations (#4271): the
@@ -571,9 +666,55 @@ fn render_planner_required_proofs(text: &mut String, gate: &serde_json::Value) {
     }
 }
 
-pub(crate) fn read_gate_outcome(out: &Path) -> Option<serde_json::Value> {
-    let text = fs::read_to_string(out.join("review/gate_outcome.json")).ok()?;
-    serde_json::from_str(&text).ok()
+pub(crate) fn read_gate_outcome(
+    out: &Path,
+) -> std::result::Result<(serde_json::Value, crate::gate::GateCheckOutcome), &'static str> {
+    let bytes = read_summary_bytes(&out.join("review/gate_outcome.json"))?;
+    let value = parse_summary_object(&bytes)?;
+    // Deserialize the original bytes like gate-check: a Value round-trip
+    // would silently collapse duplicate schema, conclusion or reason fields.
+    let admitted: crate::gate::GateCheckOutcome =
+        serde_json::from_slice(&bytes).map_err(|_| "has an invalid gate shape")?;
+    if admitted.schema.as_deref() != Some(crate::artifacts::GATE_OUTCOME_SCHEMA) {
+        return Err("has a missing or unsupported gate schema");
+    }
+    if !matches!(
+        admitted.conclusion.as_deref(),
+        Some("pass" | "fail" | "inconclusive")
+    ) {
+        return Err("has a missing or unsupported gate conclusion");
+    }
+    #[derive(Deserialize)]
+    struct GateRevision {
+        revision: crate::RevisionRef,
+    }
+    // Deserialize from the original bytes so duplicate revision fields cannot
+    // be hidden by the Value parser. A well-shaped gate is not current until
+    // its revision joins the packet's validated admission.
+    let gate_revision: GateRevision =
+        serde_json::from_slice(&bytes).map_err(|_| "has a missing or invalid revision")?;
+    gate_revision
+        .revision
+        .validate()
+        .map_err(|_| "has a missing or invalid revision")?;
+    let admission_bytes = read_summary_bytes(&out.join("input/revision-admission.json"))
+        .map_err(|_| "has no readable packet revision admission")?;
+    let admission: crate::revision_admission::RevisionAdmission =
+        serde_json::from_slice(&admission_bytes)
+            .map_err(|_| "has an invalid packet revision admission")?;
+    admission
+        .validate()
+        .map_err(|_| "has an invalid packet revision admission")?;
+    let identity =
+        crate::revision_identity::RevisionIdentity::from_canonical(&admission.identity_canonical)
+            .map_err(|_| "has an invalid packet revision admission")?;
+    let expected = identity.revision_ref();
+    if crate::RevisionRef::from_admission(&admission) != expected
+        || gate_revision.revision != expected
+    {
+        return Err("does not match the packet revision admission");
+    }
+    Ok((value, admitted))
 }
 
 pub(crate) fn format_seconds(seconds: u64) -> String {
@@ -599,14 +740,13 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
             .join("ub-review-sensor-status.json");
         let Some(receipt) = read_sensor_receipt(&status_path) else {
             if sensor.run {
-                // #325: a late-phase sensor without a receipt is scheduled
-                // work, not missing evidence — its receipt lands before the
-                // reporter/compile/gate. Fast sensors without receipts stay
-                // missing evidence.
+                // #325: keep late-phase scheduling distinct from absent fast
+                // evidence. The phase alone cannot establish completion, so
+                // describe the absent receipt without promising its arrival.
                 if matches!(sensor.phase, SensorPhase::Late) {
                     scheduled_late.push(format!(
-                        "{} scheduled in the late evidence phase; its receipt lands before the gate (late is not missing).",
-                        sensor.id
+                        "{} scheduled in the late evidence phase; receipt absent. Check sensors/{}/ for completion; scheduling alone is not evidence.",
+                        sensor.id, sensor.id
                     ));
                 } else {
                     missing.push(format!(
@@ -619,11 +759,25 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
             continue;
         };
         match receipt.status.as_str() {
-            "ok" => available.push(format!(
-                "{} ran; {} available.",
-                sensor.id,
-                evidence_label(&sensor.id)
-            )),
+            "ok" => {
+                if sensor.id == "unsafe-review"
+                    && let Err(gap) =
+                        read_unsafe_review_artifacts(&out.join("sensors").join(&sensor.id))
+                {
+                    missing.push(format!(
+                        "{} artifact-gap; {} unavailable; reason: {}.",
+                        sensor.id,
+                        evidence_label(&sensor.id),
+                        gap.reason()
+                    ));
+                } else {
+                    available.push(format!(
+                        "{} ran; {} available.",
+                        sensor.id,
+                        evidence_label(&sensor.id)
+                    ));
+                }
+            }
             "missing" => missing.push(format!(
                 "{} not installed; {} unavailable.",
                 sensor.id,
@@ -697,7 +851,9 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
     }
 
     text.push_str("\n## Missing evidence\n\n");
-    if missing.is_empty() {
+    if missing.is_empty() && !scheduled_late.is_empty() {
+        text.push_str("- Late-phase sensor receipts are still absent; scheduling does not establish completed evidence.\n");
+    } else if missing.is_empty() {
         text.push_str("- No planned sensor evidence is currently missing.\n");
     } else {
         for item in missing {
@@ -721,8 +877,410 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
 }
 
 #[cfg(test)]
+pub(crate) use tests::bind_gate_fixture;
+
+#[cfg(test)]
 mod tests {
     use super::*;
+
+    pub(crate) fn bind_gate_fixture(out: &Path) -> Result<String> {
+        use crate::revision_identity::{CommitTree, ReviewSemantics, RevisionIdentity};
+        let base = CommitTree::new("base", &"1".repeat(40), &"2".repeat(40))?;
+        let head = CommitTree::new("head", &"3".repeat(40), &"4".repeat(40))?;
+        let identity = RevisionIdentity::new(
+            base,
+            head.clone(),
+            head,
+            None,
+            ReviewSemantics::CandidateHead,
+            &RevisionIdentity::changed_paths_digest(["src/lib.rs"]),
+            &RevisionIdentity::diff_digest(b"fixture"),
+        )?;
+        let admission = crate::revision_admission::RevisionAdmission {
+            schema: crate::revision_admission::REVISION_ADMISSION_SCHEMA.to_owned(),
+            identity_canonical: identity.canonical_form(),
+            identity_digest: identity.identity_digest(),
+            semantics: "candidate_head".to_owned(),
+            reviewed_commit_oid: "3".repeat(40),
+            pr_head_commit: None,
+            worktree_dirty: false,
+        };
+        fs::create_dir_all(out.join("input"))?;
+        fs::write(
+            out.join("input/revision-admission.json"),
+            serde_json::to_vec(&admission)?,
+        )?;
+        let path = out.join("review/gate_outcome.json");
+        let mut gate: serde_json::Value = serde_json::from_slice(&fs::read(&path)?)?;
+        gate["revision"] = serde_json::to_value(crate::RevisionRef::from_admission(&admission))?;
+        fs::write(path, serde_json::to_vec(&gate)?)?;
+        Ok(admission.identity_digest)
+    }
+
+    #[test]
+    fn bound_gate_fixture_joins_canonical_admission() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        fs::create_dir_all(out.join("review"))?;
+        fs::write(
+            out.join("review/gate_outcome.json"),
+            r#"{"schema":"ub-review.gate_outcome.v1","conclusion":"pass","reasons":[]}"#,
+        )?;
+        let digest = bind_gate_fixture(out)?;
+        let admission: crate::revision_admission::RevisionAdmission =
+            serde_json::from_slice(&fs::read(out.join("input/revision-admission.json"))?)?;
+        admission.validate()?;
+        let canonical = crate::revision_identity::RevisionIdentity::from_canonical(
+            &admission.identity_canonical,
+        )?;
+        assert_eq!(admission.semantics, "candidate_head");
+        assert!(canonical.canonical_form().contains("\nmerge=-\n"));
+        assert_eq!(canonical.revision_ref().reviewed_commit, "3".repeat(40));
+        let changed_paths =
+            crate::revision_identity::RevisionIdentity::changed_paths_digest(["src/lib.rs"]);
+        assert!(
+            canonical
+                .canonical_form()
+                .contains(&format!("\nchanged_paths={changed_paths}\n"))
+        );
+        assert_eq!(
+            canonical.revision_ref(),
+            crate::RevisionRef::from_admission(&admission)
+        );
+        assert_eq!(digest, canonical.identity_digest());
+        let (_, gate) = read_gate_outcome(out).map_err(anyhow::Error::msg)?;
+        assert_eq!(gate.conclusion.as_deref(), Some("pass"));
+
+        let path = out.join("review/gate_outcome.json");
+        let mut gate: serde_json::Value = serde_json::from_slice(&fs::read(&path)?)?;
+        gate["revision"]["reviewed_commit"] = serde_json::json!("f".repeat(40));
+        fs::write(&path, serde_json::to_vec(&gate)?)?;
+        assert!(read_gate_outcome(out).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn bound_gate_fixture_propagates_admission_write_failure() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        let admission_path = out.join("input/revision-admission.json");
+        fs::create_dir_all(&admission_path)?;
+        fs::create_dir_all(out.join("review"))?;
+        fs::write(
+            out.join("review/gate_outcome.json"),
+            r#"{"schema":"ub-review.gate_outcome.v1","conclusion":"pass","reasons":[]}"#,
+        )?;
+        let error = bind_gate_fixture(out)
+            .err()
+            .context("writing an admission over a directory must fail")?;
+        assert!(
+            error.downcast_ref::<std::io::Error>().is_some(),
+            "{error:#}"
+        );
+        assert!(admission_path.is_dir());
+        Ok(())
+    }
+
+    #[test]
+    fn review_metrics_summary_rejects_unsupported_schema_versions() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        fs::create_dir_all(out.join("review"))?;
+        let path = out.join("review/metrics.json");
+        fs::write(
+            out.join("review/gate_outcome.json"),
+            r#"{"schema":"ub-review.gate_outcome.v1","conclusion":"pass","reasons":[]}"#,
+        )?;
+        let mut metrics = serde_json::json!({
+            "schema_version": 1,
+            "wall_clock_seconds": 42,
+            "github_review_comments": 7
+        });
+        fs::write(&path, serde_json::to_vec(&metrics)?)?;
+        bind_gate_fixture(out)?;
+        let mut valid = String::new();
+        render_review_efficiency_section(&mut valid, out);
+        assert!(!valid.contains("Review metrics: unavailable"), "{valid}");
+        assert!(valid.contains("- Inline comments: `7/0`"), "{valid}");
+
+        for version in [
+            serde_json::json!(2),
+            serde_json::json!("1"),
+            serde_json::Value::Null,
+        ] {
+            metrics["schema_version"] = version;
+            fs::write(&path, serde_json::to_vec(&metrics)?)?;
+            let mut summary = String::new();
+            render_review_efficiency_section(&mut summary, out);
+            assert!(summary.contains("Review metrics: unavailable"), "{summary}");
+            assert!(summary.contains("- Gate: `pass`"), "{summary}");
+            assert!(!summary.contains("Inline comments: `7"), "{summary}");
+        }
+        metrics
+            .as_object_mut()
+            .ok_or_else(|| anyhow::anyhow!("metrics fixture is not an object"))?
+            .remove("schema_version");
+        fs::write(&path, serde_json::to_vec(&metrics)?)?;
+        let mut summary = String::new();
+        render_review_efficiency_section(&mut summary, out);
+        assert!(summary.contains("Review metrics: unavailable"), "{summary}");
+        fs::write(
+            &path,
+            r#"{"schema_version":2,"schema_version":1,"github_review_comments":7}"#,
+        )?;
+        let mut summary = String::new();
+        render_review_efficiency_section(&mut summary, out);
+        assert!(summary.contains("Review metrics: unavailable"), "{summary}");
+
+        Ok(())
+    }
+
+    #[test]
+    fn configured_required_proof_summary_retains_gate_accounting() -> Result<()> {
+        use crate::tests::{test_plan, test_proof_receipt, test_run_args, test_terminal_state};
+
+        for (result, command_status, blocking, expected_gate, expected_counts, incomplete) in [
+            (
+                "head_passed",
+                "passed",
+                false,
+                "pass",
+                "`1/1` passed (`0` failed, `0` skipped)",
+                false,
+            ),
+            (
+                "skipped_budget",
+                "skipped",
+                false,
+                "pass",
+                "`0/1` passed (`0` failed, `1` skipped)",
+                true,
+            ),
+            (
+                "skipped_profile",
+                "skipped",
+                true,
+                "fail",
+                "`0/1` passed (`0` failed, `1` skipped)",
+                true,
+            ),
+            (
+                "missing",
+                "skipped",
+                false,
+                "pass",
+                "`0/1` passed (`0` failed, `1` skipped)",
+                true,
+            ),
+            (
+                "head_failed",
+                "failed",
+                false,
+                "fail",
+                "`0/1` passed (`1` failed, `0` skipped)",
+                true,
+            ),
+            (
+                "timed_out",
+                "timed_out",
+                false,
+                "fail",
+                "`0/1` passed (`1` failed, `0` skipped)",
+                true,
+            ),
+        ] {
+            let temp = tempfile::tempdir()?;
+            let out = temp.path();
+            fs::create_dir_all(out.join("review"))?;
+            fs::write(out.join("review/metrics.json"), "{}")?;
+            let mut args = test_run_args(out.to_path_buf());
+            args.mode = RunMode::IntelligentCi;
+            let mut config = Config::default();
+            config.gate.blocking.required_proof_unproven = blocking;
+            let request = ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "configured-check".to_owned(),
+                lane: "intelligent-ci-policy".to_owned(),
+                requested_by: vec!["proof-policy:cargo-check".to_owned()],
+                command: "cargo check --workspace --locked".to_owned(),
+                reason: "Required check".to_owned(),
+                cost: "focused-build".to_owned(),
+                timeout_sec: 300,
+                required: true,
+                status: "requested".to_owned(),
+            };
+            let mut receipt = test_proof_receipt(result, command_status);
+            receipt.request_ids = vec![request.id.clone()];
+            let receipts = if result == "missing" {
+                vec![]
+            } else {
+                vec![receipt]
+            };
+            let gate = crate::gate::build_gate_outcome(crate::gate::GateOutcomeInput {
+                args: &args,
+                config: &config,
+                tool_gate_outcomes: &[],
+                plan: &test_plan(vec![]),
+                terminal_state: &test_terminal_state("sufficient"),
+                proof_requests: &[request],
+                proof_receipts: &receipts,
+                missing_or_failed_sensor_evidence: &[],
+                missing_or_failed_model_evidence: &[],
+                reporter_gate: crate::ReporterGateInput::Absent,
+                planner_portfolio: None,
+                revision_digest: None,
+            });
+            assert_eq!(gate.conclusion, expected_gate, "{result}");
+            fs::write(
+                out.join("review/gate_outcome.json"),
+                serde_json::to_vec(&gate)?,
+            )?;
+            bind_gate_fixture(out)?;
+            let mut summary = String::new();
+            render_review_efficiency_section(&mut summary, out);
+            assert!(
+                summary.contains(&format!("- Gate: `{expected_gate}`")),
+                "{summary}"
+            );
+            assert!(
+                summary.contains(&format!("Configured Required proofs: {expected_counts}")),
+                "{result}: {summary}"
+            );
+            assert_eq!(
+                summary.contains("Required proof evidence is incomplete"),
+                incomplete,
+                "{summary}"
+            );
+            if incomplete {
+                assert!(
+                    summary.contains(
+                        "A skipped or missing proof supplies no passing execution evidence"
+                    ),
+                    "{summary}"
+                );
+                assert!(summary.contains("review/proof_requests.json"), "{summary}");
+                assert!(summary.contains("review/proof_receipts.json"), "{summary}");
+            }
+            assert!(!summary.contains("Required planner proofs:"), "{summary}");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn unsafe_review_evidence_sections_preserve_exact_availability() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        let sensor = crate::tests::sensor_plan("unsafe-review", "unsafe-review", true);
+        let plan = crate::tests::test_plan(vec![sensor.clone()]);
+        write_sensor_status(
+            out,
+            &sensor,
+            SensorStatusWrite {
+                status: "ok",
+                argv: &["unsafe-review".to_owned()],
+                duration_ms: 10,
+                reason: "completed",
+                exit_code: Some(0),
+                timed_out: false,
+            },
+        )?;
+        let mut missing = String::new();
+        render_evidence_sections(&mut missing, out, &plan);
+        assert_eq!(
+            missing,
+            concat!(
+                "\n## Available evidence\n\n",
+                "- No sensor evidence completed successfully.\n",
+                "\n## Missing evidence\n\n",
+                "- unsafe-review artifact-gap; unsafe/native reviewability packet unavailable; ",
+                "reason: unsafe-review-gate.json absent; structured evidence unavailable.\n"
+            )
+        );
+
+        let structured = out
+            .join("sensors/unsafe-review")
+            .join(UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        fs::create_dir_all(&structured)?;
+        fs::write(
+            structured.join("unsafe-review-gate.json"),
+            r#"{"schema_version":"unsafe-review-gate/v1","status":"advisory","artifacts":{"comment_plan":"comment-plan.json"}}"#,
+        )?;
+        fs::write(
+            structured.join("comment-plan.json"),
+            r#"{"schema_version":"0.1","comments":[]}"#,
+        )?;
+        let mut available = String::new();
+        render_evidence_sections(&mut available, out, &plan);
+        assert_eq!(
+            available,
+            concat!(
+                "\n## Available evidence\n\n",
+                "- unsafe-review ran; unsafe/native reviewability packet available.\n",
+                "\n## Missing evidence\n\n",
+                "- No planned sensor evidence is currently missing.\n"
+            )
+        );
+
+        // An ordinary successful sensor needs no unsafe-review artifacts.
+        let tokmd = crate::tests::sensor_plan("tokmd", "tokmd", true);
+        write_sensor_status(
+            out,
+            &tokmd,
+            SensorStatusWrite {
+                status: "ok",
+                argv: &["tokmd".to_owned()],
+                duration_ms: 10,
+                reason: "completed",
+                exit_code: Some(0),
+                timed_out: false,
+            },
+        )?;
+        let mut ordinary = String::new();
+        render_evidence_sections(&mut ordinary, out, &crate::tests::test_plan(vec![tokmd]));
+        assert_eq!(
+            ordinary,
+            concat!(
+                "\n## Available evidence\n\n",
+                "- tokmd ran; deterministic repository/diff packet available.\n",
+                "\n## Missing evidence\n\n",
+                "- No planned sensor evidence is currently missing.\n"
+            )
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn configured_required_proof_summary_distinguishes_unknown_and_empty() {
+        for accounting in [
+            serde_json::Value::Null,
+            serde_json::json!({}),
+            serde_json::json!({"matched": 1, "passed": 0, "failed": 0}),
+            serde_json::json!({"matched": 1, "passed": "hostile\n[link](url)", "failed": 0, "skipped": 1}),
+            serde_json::json!({"matched": 0, "passed": 1, "failed": 0, "skipped": 0}),
+            serde_json::json!({"matched": 1, "passed": u64::MAX, "failed": 2, "skipped": 0}),
+        ] {
+            let mut summary = String::new();
+            render_configured_required_proofs(
+                &mut summary,
+                &serde_json::json!({"required_proof": accounting}),
+            );
+            assert_eq!(
+                summary,
+                "- Configured Required proofs: accounting unavailable (`review/gate_outcome.json`); qualification cannot be inferred.\n"
+            );
+        }
+        let mut legacy = String::new();
+        render_configured_required_proofs(&mut legacy, &serde_json::json!({}));
+        assert!(legacy.contains("accounting unavailable"));
+        let mut empty = String::new();
+        render_configured_required_proofs(
+            &mut empty,
+            &serde_json::json!({"required_proof": {"matched": 0, "passed": 0, "failed": 0, "skipped": 0}}),
+        );
+        assert!(empty.contains("`0/0` passed (`0` failed, `0` skipped)"));
+        assert!(!empty.contains("evidence is incomplete"));
+    }
 
     #[test]
     fn lane_packet_model_display_resolves_encoded_hostile_lane_id() -> Result<()> {
@@ -796,6 +1354,7 @@ mod tests {
             out.join("review/gate_outcome.json"),
             serde_json::to_vec_pretty(&gate)?,
         )?;
+        let digest = bind_gate_fixture(out)?;
         let mut summary = String::new();
         render_review_efficiency_section(&mut summary, out);
         for needle in [
@@ -804,7 +1363,7 @@ mod tests {
             "proof-intent-48940c2f9ea4a58c",
             "required floor could not fit inside the remaining safe proof budget",
             "receipts: none",
-            digest,
+            digest.as_str(),
         ] {
             assert!(summary.contains(needle), "missing {needle}:\n{summary}");
         }
@@ -847,6 +1406,7 @@ mod tests {
             out.join("review/gate_outcome.json"),
             serde_json::to_vec_pretty(&gate)?,
         )?;
+        bind_gate_fixture(out)?;
         let mut summary = String::new();
         render_review_efficiency_section(&mut summary, out);
         // Inline-code fields: backticks become quotes, pipes stay literal
@@ -900,6 +1460,7 @@ mod tests {
             out.join("review/gate_outcome.json"),
             serde_json::to_vec_pretty(&gate)?,
         )?;
+        bind_gate_fixture(out)?;
         let mut summary = String::new();
         render_review_efficiency_section(&mut summary, out);
         assert!(summary.contains("`0/0` proven (`0` unproven"), "{summary}");

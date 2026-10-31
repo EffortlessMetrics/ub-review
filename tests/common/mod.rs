@@ -14,6 +14,11 @@ use anyhow::{Context, Result, bail};
 mod cli_lock;
 pub use cli_lock::cli_subprocess_test_lock;
 
+mod executable_fixture;
+pub use executable_fixture::FixtureCommandExt;
+#[cfg(unix)]
+pub use executable_fixture::write_executable_fixture;
+
 pub const CARGO_ALLOW_FOREIGN_REASON: &str = "policy/allow.toml is not a cargo-allow-dialect ledger; add \
      policy/cargo-allow.toml (see EffortlessMetrics/cargo-allow#1465)";
 
@@ -425,25 +430,35 @@ pub fn spawn_fake_openai_provider_with_contents_and_delay(
 pub fn spawn_fake_openai_provider_with_statuses(
     statuses: Vec<u16>,
 ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+    spawn_fake_openai_provider_with_responses(
+        statuses
+            .into_iter()
+            .map(|status| (status, "fake provider status response".to_owned()))
+            .collect(),
+    )
+}
+
+pub fn spawn_fake_openai_provider_with_responses(
+    responses: Vec<(u16, String)>,
+) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     listener.set_nonblocking(true)?;
     let url = format!("http://{}/v1/chat/completions", listener.local_addr()?);
     let handle = thread::spawn(move || -> Result<Vec<String>> {
-        let expected_requests = statuses.len();
+        let expected_requests = responses.len();
         let mut deadline = Instant::now() + Duration::from_secs(120);
         let mut requests = Vec::new();
         while requests.len() < expected_requests {
             match listener.accept() {
                 Ok((stream, _addr)) => {
-                    let status = statuses
+                    let (status, content) = responses
                         .get(requests.len())
-                        .copied()
                         .ok_or_else(|| anyhow::anyhow!("fake provider status missing"))?;
                     requests.push(handle_fake_openai_request_with_status(
                         stream,
-                        "fake provider status response",
+                        content,
                         Duration::ZERO,
-                        status,
+                        *status,
                     )?);
                     deadline = Instant::now() + Duration::from_secs(120);
                 }
@@ -519,6 +534,11 @@ fn handle_fake_openai_request_with_status(
     if !response_delay.is_zero() {
         thread::sleep(response_delay);
     }
+    // Status 0 models a transport failure after consuming the request: close
+    // without sending an HTTP response. Existing callers use real HTTP codes.
+    if status == 0 {
+        return Ok(request_text);
+    }
     let response_body = if status >= 400 {
         serde_json::to_vec(&serde_json::json!({
             "error": {"message": content}
@@ -571,6 +591,8 @@ pub fn join_fake_provider(handle: thread::JoinHandle<Result<Vec<String>>>) -> Re
 /// specific planner branches, and inheriting `GITHUB_ACTIONS=true` can make an
 /// unrelated box guard run before the branch under test. Explicit per-test envs
 /// are applied afterwards and still win.
+/// Hosted event payloads belong to the outer PR, not the fixture repository;
+/// inheriting them contaminates provider prompts with unrelated PR prose.
 pub fn isolated_command(program: &str, cwd: &Path) -> Command {
     let mut command = Command::new(program);
     command.current_dir(cwd);
@@ -579,7 +601,7 @@ pub fn isolated_command(program: &str, cwd: &Path) -> Command {
         if name_string.starts_with("UB_REVIEW_")
             || matches!(
                 name_string.as_ref(),
-                "GITHUB_ACTIONS" | "RUNNER_ENVIRONMENT" | "RUNNER_NAME"
+                "GITHUB_ACTIONS" | "GITHUB_EVENT_PATH" | "RUNNER_ENVIRONMENT" | "RUNNER_NAME"
             )
         {
             command.env_remove(&name);
@@ -589,7 +611,7 @@ pub fn isolated_command(program: &str, cwd: &Path) -> Command {
 }
 
 pub fn run(cwd: &Path, program: &str, args: &[&str]) -> Result<()> {
-    let output = isolated_command(program, cwd).args(args).output()?;
+    let output = isolated_command(program, cwd).args(args).fixture_output()?;
     if output.status.success() {
         return Ok(());
     }
@@ -608,7 +630,7 @@ pub fn run_with_env(cwd: &Path, program: &str, args: &[&str], envs: &[(&str, &st
     for (name, value) in envs {
         command.env(name, value);
     }
-    let output = command.output()?;
+    let output = command.fixture_output()?;
     if output.status.success() {
         return Ok(());
     }
@@ -632,7 +654,7 @@ pub fn run_capture_with_env(
     for (name, value) in envs {
         command.env(name, value);
     }
-    let output = command.output()?;
+    let output = command.fixture_output()?;
     let combined = format!(
         "{}\n{}",
         String::from_utf8_lossy(&output.stdout),
@@ -645,7 +667,7 @@ pub fn run_capture_with_env(
 }
 
 pub fn run_expect_failure(cwd: &Path, program: &str, args: &[&str]) -> Result<String> {
-    let output = isolated_command(program, cwd).args(args).output()?;
+    let output = isolated_command(program, cwd).args(args).fixture_output()?;
     if !output.status.success() {
         return Ok(format!(
             "{}\n{}",
@@ -667,7 +689,7 @@ pub fn run_expect_failure_with_env(
     for (name, value) in envs {
         command.env(name, value);
     }
-    let output = command.output()?;
+    let output = command.fixture_output()?;
     if !output.status.success() {
         return Ok(format!(
             "{}\n{}",

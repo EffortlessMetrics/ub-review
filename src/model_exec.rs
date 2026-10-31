@@ -84,6 +84,7 @@ pub(crate) fn run_refuter_pass(
         http_status: None,
         response_shape: None,
         fallback_from: None,
+        attempt_count: Some(0),
         cache_usage: ModelCacheUsage::default(),
         cohort_id,
         shared_prefix_hash,
@@ -143,6 +144,7 @@ pub(crate) fn run_refuter_pass(
     let refuter_dir = context.review_dir.join("model").join("refuter");
     fs::create_dir_all(&refuter_dir)?;
     receipt.status = "running".to_owned();
+    receipt.attempt_count = Some(1);
     match call_model_refuter(
         context.root,
         &refuter_dir,
@@ -1370,6 +1372,13 @@ The deterministic planner remains the source of proof_tasks.ndjson. Add only pro
 If impact_candidates are present in the planner input, prioritize proof that targets the highest-ranked candidates the deterministic planner skipped.
 Prefer typed `proof_intents` for new proof requests: describe the question and expected answer shape, and let the deterministic broker resolve an approved command.
 
+Current typed-intent resolver contract:
+- Request only focused-test, focused-build, or base-plus-tests. Other proof kinds have no executable resolver route; record an observation instead.
+- For focused-test or base-plus-tests, use `cargo-test:<package>/<integration-test>` naming a declared Cargo integration-test target. Function names, Rust module paths, and arbitrary route labels do not select executable tests.
+- For focused-build, use `cargo-package:<package>` naming a declared Cargo package, or `workspace` for a workspace check.
+- Use only package and integration-test names established by repository metadata or the supplied impact candidates. If no exact target is established, leave proof_intents empty and record the missing evidence; do not invent a name.
+- Omit typed-intent timeout_sec to use the approved per-command ceiling of {proof_timeout_sec}s, or supply a value in 1..={proof_timeout_sec}. runtime_budget.total_proof_timeout_sec is an aggregate budget, never a per-command timeout. The same ceiling applies to legacy proof_requests. If the ceiling or aggregate budget is zero, leave both proof arrays empty.
+
 IMPORTANT: proof commands must use the EXACT syntax the proof broker's allowlist accepts.
 - Use `--package <name>` not `-p <name>`.
 - Always include `--locked`.
@@ -1421,7 +1430,7 @@ Return only one strict JSON object:
       "command": "focused command requested from central proof broker",
       "reason": "why this proof would change the review decision",
       "cost": "focused-test|focused-build|manual",
-      "timeout_sec": 300,
+      "timeout_sec": {proof_timeout_sec},
       "required": false
     }}
   ],
@@ -1430,10 +1439,10 @@ Return only one strict JSON object:
       "claim_id": "stable-claim-id",
       "question": "the material question this proof should answer",
       "expected_answer_shape": "the observable result that confirms or refutes it",
-      "proof_kind": "focused-test|focused-build|base-plus-tests|sanitizer-witness|mutation-witness|miri-witness|source-route-probe|external-check",
-      "target": "safe repository test, package, symbol, or route target",
+      "proof_kind": "focused-test|focused-build|base-plus-tests",
+      "target": "exact Cargo target label as specified above",
       "estimated_value": "high|medium-high|medium|low",
-      "timeout_sec": 300
+      "timeout_sec": {proof_timeout_sec}
     }}
   ]
 }}
@@ -1449,6 +1458,7 @@ Do not post, mutate files, or run shell commands. Lanes request proof; only the 
         endpoint_kind = spec.endpoint_kind.key(),
         role = lane.role,
         focus = lane.focus,
+        proof_timeout_sec = input.runtime_budget.per_command_timeout_sec,
         input_json = input_json,
         output_json = output_json,
     ))
@@ -1479,6 +1489,256 @@ pub(crate) fn apply_proof_planner_model_output(
             issue_candidates: &mut ignored_issue_candidates,
         },
     );
+}
+
+#[cfg(test)]
+mod proof_planner_request_contract_tests {
+    use super::*;
+
+    fn lane() -> LanePlan {
+        LanePlan {
+            id: "proof-planner".to_owned(),
+            role: "Advisory proof planner".to_owned(),
+            model: "test-model".to_owned(),
+            model_display: "test-model".to_owned(),
+            receives: Vec::new(),
+            focus: "bounded proof".to_owned(),
+        }
+    }
+
+    fn prompt(ceiling: u64) -> Result<String> {
+        let config = Config::default();
+        let mut profile = config.selected_profile()?.clone();
+        profile.budgets.proof_command_timeout_sec = ceiling;
+        profile.budgets.proof_total_timeout_sec = 600;
+        let diff = crate::tests::test_diff();
+        let box_state = BoxState {
+            cpus: 2,
+            free_mem_mb: Some(7_000),
+            free_disk_mb: Some(10_000),
+            load_1m: Some(0.0),
+            github_actions: false,
+        };
+        let threads = absent_pr_thread_context(0);
+        let input =
+            build_proof_planner_input(&diff, &profile, &box_state, &threads, &[], Vec::new())?;
+        let output = build_proof_planner_output(&diff, &profile, &[])?;
+        let args = crate::tests::test_run_args(PathBuf::from("unused-prompt-output"));
+        render_proof_planner_model_task_prompt(
+            &lane(),
+            &direct_minimax_spec(&args),
+            &input,
+            &output,
+        )
+    }
+
+    fn response_template(prompt: &str) -> Result<serde_json::Value> {
+        let (_, response) = prompt
+            .split_once("Return only one strict JSON object:\n")
+            .context("planner response template marker")?;
+        let (response, _) = response
+            .split_once("\n\nHard caps:")
+            .context("template end")?;
+        Ok(serde_json::from_str(response)?)
+    }
+
+    #[test]
+    fn planner_response_examples_follow_the_operator_command_ceiling() -> Result<()> {
+        for ceiling in [1, 120, 300] {
+            let prompt = prompt(ceiling)?;
+            let (_, input) = prompt
+                .split_once("Planner input:\n```json\n")
+                .context("planner input marker")?;
+            let (input, _) = input.split_once("\n```").context("planner input end")?;
+            let input: serde_json::Value = serde_json::from_str(input)?;
+            assert_eq!(input["runtime_budget"]["per_command_timeout_sec"], ceiling);
+            assert_eq!(input["runtime_budget"]["total_proof_timeout_sec"], 600);
+            let response = response_template(&prompt)?;
+            assert_eq!(response["proof_requests"][0]["timeout_sec"], ceiling);
+            assert_eq!(response["proof_intents"][0]["timeout_sec"], ceiling);
+            assert!(prompt.contains(&format!("1..={ceiling}")));
+            assert!(
+                prompt.contains("runtime_budget.total_proof_timeout_sec is an aggregate budget")
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn planner_offers_only_resolvable_kinds_and_exact_cargo_target_labels() -> Result<()> {
+        let prompt = prompt(300)?;
+        let response = response_template(&prompt)?;
+        assert_eq!(
+            response["proof_intents"][0]["proof_kind"],
+            "focused-test|focused-build|base-plus-tests"
+        );
+        assert!(prompt.contains("cargo-test:<package>/<integration-test>"));
+        assert!(prompt.contains("cargo-package:<package>"));
+        assert!(prompt.contains("Function names, Rust module paths, and arbitrary route labels"));
+        assert!(prompt.contains("leave proof_intents empty"));
+        Ok(())
+    }
+
+    #[test]
+    fn literal_planner_requests_preserve_exact_resolution_and_rejection() -> Result<()> {
+        let fixture = tempfile::tempdir()?;
+        fs::create_dir_all(fixture.path().join("src"))?;
+        fs::create_dir_all(fixture.path().join("tests"))?;
+        fs::write(
+            fixture.path().join("Cargo.toml"),
+            "[package]\nname = \"planner-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )?;
+        fs::write(fixture.path().join("src/lib.rs"), "")?;
+        fs::write(fixture.path().join("tests/protocol.rs"), "")?;
+        let budget = ProofBudget {
+            max_focused_test_files: 3,
+            max_focused_tests: 3,
+            per_command_timeout_sec: 300,
+            max_total_seconds: 600,
+        };
+        let cases = [
+            (
+                "focused-test",
+                "cargo-test:planner-fixture/protocol",
+                Some(300),
+                "resolved",
+                Some("cargo test --locked --package planner-fixture --test protocol"),
+            ),
+            (
+                "base-plus-tests",
+                "cargo-test:planner-fixture/protocol",
+                None,
+                "resolved",
+                Some("cargo test --locked --package planner-fixture --test protocol"),
+            ),
+            (
+                "focused-build",
+                "cargo-package:planner-fixture",
+                Some(120),
+                "resolved",
+                Some("cargo check --locked --package planner-fixture"),
+            ),
+            (
+                "focused-test",
+                "cargo-test:planner-fixture/protocol",
+                Some(600),
+                "invalid_timeout",
+                None,
+            ),
+            (
+                "focused-test",
+                "cargo-test:planner-fixture/protocol",
+                Some(0),
+                "invalid_timeout",
+                None,
+            ),
+            (
+                "focused-test",
+                "cargo-test:planner-fixture/missing",
+                Some(300),
+                "unsupported_target",
+                None,
+            ),
+            (
+                "focused-test",
+                "planner_fixture::check_protocol",
+                Some(300),
+                "unsupported_target",
+                None,
+            ),
+            (
+                "source-route-probe",
+                "cargo-test:planner-fixture/protocol",
+                Some(300),
+                "unsupported_kind",
+                None,
+            ),
+            (
+                "mutation-witness",
+                "cargo-test:planner-fixture/protocol",
+                Some(300),
+                "unsupported_kind",
+                None,
+            ),
+            (
+                "focused-test",
+                "../protocol",
+                Some(300),
+                "rejected_admission",
+                None,
+            ),
+        ];
+        for (kind, target, timeout, expected_status, command) in cases {
+            let raw = serde_json::json!({"proof_intents": [{
+                "claim_id": "claim-protocol",
+                "question": "Does the declared protocol target answer this claim?",
+                "expected_answer_shape": "An execution receipt with the target result",
+                "proof_kind": kind,
+                "target": target,
+                "estimated_value": "medium",
+                "timeout_sec": timeout
+            }]});
+            let output: LaneModelOutput = serde_json::from_value(raw)?;
+            let mut intents = Vec::new();
+            let mut legacy_requests = Vec::new();
+            let mut observations = Vec::new();
+            apply_proof_planner_model_output(
+                &lane(),
+                output,
+                &BTreeSet::new(),
+                &mut observations,
+                &mut legacy_requests,
+                &mut intents,
+            );
+            if expected_status == "rejected_admission" {
+                assert!(intents.is_empty());
+                assert!(legacy_requests.is_empty());
+                assert_eq!(observations.len(), 1);
+                assert_eq!(observations[0].source, "proof-intent-validation");
+                assert_eq!(observations[0].kind, "missing-evidence");
+                continue;
+            }
+            assert!(observations.is_empty());
+            assert_eq!(intents.len(), 1, "{kind} {target} {timeout:?}");
+            assert!(legacy_requests.is_empty());
+            let resolved = resolve_model_proof_intents(
+                fixture.path(),
+                &crate::tests::test_diff(),
+                &intents,
+                &[],
+                budget,
+            )?;
+            assert_eq!(
+                resolved.intents[0].status, expected_status,
+                "{kind} {target} {timeout:?}"
+            );
+            if let Some(command) = command {
+                assert_eq!(resolved.proof_requests.len(), 1);
+                assert_eq!(resolved.proof_requests[0].command, command);
+                assert_eq!(
+                    resolved.proof_requests[0].timeout_sec,
+                    timeout.unwrap_or(300)
+                );
+                assert_eq!(
+                    resolved.intents[0].resolved_request_ids,
+                    vec![resolved.proof_requests[0].id.clone()]
+                );
+            } else {
+                assert!(resolved.proof_requests.is_empty());
+                assert!(resolved.intents[0].resolved_request_ids.is_empty());
+                if expected_status == "invalid_timeout" {
+                    assert_eq!(
+                        resolved.intents[0].resolution_reason,
+                        format!(
+                            "requested timeout {}s is outside the approved per-command budget of 300s",
+                            timeout.context("invalid timeout case must supply a value")?
+                        )
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 fn proof_planner_advisory_output(output: LaneModelOutput) -> LaneModelOutput {
@@ -1672,13 +1932,15 @@ pub(crate) fn call_model_prompt_content(
     let response_path = lane_dir.join("response.json");
     let stderr_path = lane_dir.join("stderr.txt");
     fs::write(&request_path, serde_json::to_vec_pretty(&payload)?)?;
+    let headers = model_request_headers(spec, lane_dir)?;
+    let header_refs: Vec<&str> = headers.iter().map(String::as_str).collect();
     let started = Instant::now();
     let process_output = run_curl_json_post(
         root,
         &url,
         &auth_header,
         &request_path,
-        &["Accept: application/json", "Content-Type: application/json"],
+        &header_refs,
         args.model_timeout_sec,
     )
     .with_context(|| "run model curl")?;
@@ -2024,24 +2286,44 @@ fn validate_proof_intent(
         });
 
     let rejection_reason = if claim_id.is_empty() {
-        Some("proof intent has empty claim_id")
+        Some((
+            "claim_id",
+            "proof intent has empty claim_id",
+            "Provide the claim identifier this proof should answer",
+        ))
     } else if question.is_empty() {
-        Some("proof intent has empty question")
+        Some((
+            "question",
+            "proof intent has empty question",
+            "State the concrete question this proof should answer",
+        ))
     } else if expected_answer_shape.is_empty() {
-        Some("proof intent has empty expected_answer_shape")
+        Some((
+            "expected_answer_shape",
+            "proof intent has empty expected_answer_shape",
+            "Describe the expected proof answer",
+        ))
     } else if !target_valid {
-        Some("proof intent target is not a safe repository symbol, test, package, or route label")
+        Some((
+            "target",
+            "proof intent target is not a safe repository symbol, test, package, or route label",
+            "Use a repository-owned label without shell syntax or whitespace",
+        ))
     } else {
         None
     };
 
-    if let Some(reason) = rejection_reason {
+    if let Some((field, reason, recovery)) = rejection_reason {
         return Err(Box::new(Observation {
             schema: crate::artifacts::OBSERVATION_SCHEMA.to_owned(),
             id: format!("proof-intent-validation-{}-{observation_ordinal}", lane.id),
             lane: lane.id.clone(),
             question: "proof-intent-validation".to_owned(),
-            claim: "Model proof intent was rejected by deterministic validation.".to_owned(),
+            // Public rendering uses only the claim. Keep its cause/recovery
+            // producer-owned; rejected model fields remain private evidence.
+            claim: format!(
+                "Model proof intent rejected: {reason}. {recovery}; this request did not execute."
+            ),
             kind: "missing-evidence".to_owned(),
             status: "open".to_owned(),
             severity: "low".to_owned(),
@@ -2057,7 +2339,7 @@ fn validate_proof_intent(
                 truncate_chars(claim_id, 80),
                 truncate_chars(target, 120),
             )],
-            dedupe_key: format!("proof-intent-validation-{}", lane.id),
+            dedupe_key: format!("proof-intent-validation-{}:{field}", lane.id),
             source: "proof-intent-validation".to_owned(),
         }));
     }
@@ -2137,6 +2419,195 @@ mod receipt_reconsideration_tests {
                 sanitize_artifact_name(lane)
             )
         );
+    }
+
+    #[test]
+    fn proof_intent_rejection_public_diagnostics_cover_each_cause() -> Result<()> {
+        // Authored expectations are independent of the producer's reason table.
+        let cases = [
+            (
+                "claim_id",
+                "Model proof intent rejected: proof intent has empty claim_id. Provide the claim identifier this proof should answer; this request did not execute.",
+            ),
+            (
+                "question",
+                "Model proof intent rejected: proof intent has empty question. State the concrete question this proof should answer; this request did not execute.",
+            ),
+            (
+                "expected_answer_shape",
+                "Model proof intent rejected: proof intent has empty expected_answer_shape. Describe the expected proof answer; this request did not execute.",
+            ),
+            (
+                "target",
+                "Model proof intent rejected: proof intent target is not a safe repository symbol, test, package, or route label. Use a repository-owned label without shell syntax or whitespace; this request did not execute.",
+            ),
+        ];
+        for (field, expected) in cases {
+            let mut intent = model_proof_intent("cli");
+            match field {
+                "claim_id" => intent.claim_id = " \t".to_owned(),
+                "question" => intent.question = " \n".to_owned(),
+                "expected_answer_shape" => intent.expected_answer_shape.clear(),
+                _ => intent.target = "cli; HOSTILE_TARGET_MARKER".to_owned(),
+            }
+            let observation = match validate_proof_intent(&proof_lane(), intent, 0, 7) {
+                Ok(value) => anyhow::bail!("invalid intent admitted: {}", value.id),
+                Err(observation) => *observation,
+            };
+            let wire = serde_json::to_value(&observation)?;
+            assert_eq!(wire["schema"], "ub-review.observation.v1");
+            assert_eq!(wire["kind"], "missing-evidence");
+            assert_eq!(wire["status"], "open");
+            assert_eq!(wire["claim"], expected);
+            assert_eq!(wire["path"], serde_json::Value::Null);
+            let body = render_review_body(
+                "fixture",
+                &crate::tests::test_plan(Vec::new()),
+                &crate::tests::test_diff(),
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[observation],
+                &[],
+                16_384,
+                ReviewBodyAudience::PullRequest,
+            );
+            assert_eq!(body, format!("## Evidence gaps\n\n- {expected}\n"));
+            assert!(!body.contains("HOSTILE_TARGET_MARKER"));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn proof_intent_rejection_causes_survive_admission_grouping_and_compilation() -> Result<()> {
+        let mut values = Vec::new();
+        for field in [
+            "claim_id",
+            "question",
+            "expected_answer_shape",
+            "target",
+            "claim_id",
+        ] {
+            let mut value = serde_json::json!({
+                "claim_id": "claim-1", "question": "does the proof answer the claim?",
+                "expected_answer_shape": "terminal receipt", "proof_kind": "focused-test",
+                "target": "cli", "estimated_value": "high", "timeout_sec": 180,
+            });
+            value[field] = serde_json::Value::String(String::new());
+            values.push(value);
+        }
+        // A valid request must still be admitted, independently of the rejected ones.
+        values.push(serde_json::json!({
+            "claim_id": "valid-claim", "question": "does the proof answer the claim?",
+            "expected_answer_shape": "terminal receipt", "proof_kind": "focused-test",
+            "target": "cli", "estimated_value": "high", "timeout_sec": 180,
+        }));
+        let output: LaneModelOutput =
+            serde_json::from_value(serde_json::json!({"proof_intents": values}))?;
+        let mut inline = Vec::new();
+        let mut summary = Vec::new();
+        let mut observations = Vec::new();
+        let mut requests = Vec::new();
+        let mut intents = Vec::new();
+        let mut issues = Vec::new();
+        apply_model_output(
+            &proof_lane(),
+            output,
+            &BTreeSet::new(),
+            ModelOutputSinks {
+                inline_comments: &mut inline,
+                summary_only_findings: &mut summary,
+                model_observations: &mut observations,
+                proof_requests: &mut requests,
+                proof_intents: &mut intents,
+                issue_candidates: &mut issues,
+            },
+        );
+        assert!(
+            inline.is_empty() && summary.is_empty() && requests.is_empty() && issues.is_empty()
+        );
+        assert_eq!(intents.len(), 1);
+        assert_eq!(intents[0].claim_id, "valid-claim");
+        assert_eq!(intents[0].target, "cli");
+        assert_eq!(intents[0].status, "requested");
+        assert!(intents[0].resolved_request_ids.is_empty());
+        assert_eq!(observations.len(), 5);
+        let groups = observation_summary_artifacts(&observations);
+        assert_eq!(
+            groups.unique.len(),
+            4,
+            "different rejection causes must remain distinct"
+        );
+        assert_eq!(
+            groups.merged.len(),
+            1,
+            "equivalent causes must still deduplicate"
+        );
+        assert_eq!(groups.dropped.len(), 1);
+        assert_eq!(groups.unique[0].duplicate_count, 1);
+        let temp = tempfile::tempdir()?;
+        write_observation_artifacts(temp.path(), &observations)?;
+        let retained: Vec<Observation> =
+            serde_json::from_slice(&fs::read(temp.path().join("review/observations.json"))?)?;
+        assert_eq!(retained.len(), 5);
+        let retained_groups: serde_json::Value = serde_json::from_slice(&fs::read(
+            temp.path().join("review/unique_observations.json"),
+        )?)?;
+        assert_eq!(retained_groups.as_array().map(Vec::len), Some(4));
+        let args = crate::tests::test_run_args(temp.path().to_path_buf());
+        let plan = crate::tests::test_plan(Vec::new());
+        let diff = crate::tests::test_diff();
+        let policy = ReviewBodyPolicy::default();
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "fixture",
+            review_body_policy: &policy,
+            run_pass: RunPass::Manual,
+            post_review_on: &[],
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &[],
+            summary_only_findings: &[],
+            observations: &retained,
+            proof_receipts: &[],
+            suggested_issues: &[],
+            final_follow_up_tasks: 0,
+            reporter_distillation: None,
+        })?;
+        assert!(surface.should_prepare_github_review);
+        assert_eq!(
+            surface
+                .github_review
+                .body
+                .matches("Model proof intent rejected:")
+                .count(),
+            4
+        );
+        assert_eq!(
+            surface
+                .github_review
+                .body
+                .matches("this request did not execute.")
+                .count(),
+            4
+        );
+        assert!(
+            surface
+                .github_review
+                .body
+                .starts_with("## Evidence gaps\n\n")
+        );
+        assert!(surface.github_review.comments.is_empty());
+        assert!(!surface.github_review.body.contains("## Confirmed findings"));
+        assert!(!surface.github_review.body.contains("## Decision"));
+        assert!(!surface.github_review.body.contains("## Test proof"));
+        assert!(!has_standalone_approval_line(&surface.github_review.body));
+        Ok(())
     }
 
     #[test]
@@ -2282,6 +2753,7 @@ mod receipt_reconsideration_tests {
             http_status: None,
             response_shape: None,
             fallback_from: None,
+            attempt_count: None,
             cache_usage: ModelCacheUsage::default(),
             cohort_id: String::new(),
             shared_prefix_hash: String::new(),

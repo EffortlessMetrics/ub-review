@@ -286,8 +286,8 @@ pub(crate) fn build_gate_truth(input: GateTruthInput<'_>) -> GateTruth {
     {
         not_proven_reasons.push(format!(
             "required-planner-proof: {} of {} required planner proof tasks ended without a \
-             receipt (safe wind-down/deferral); see review/proof_portfolio.json and \
-             review/gate_outcome.json",
+             satisfying receipt; inspect task status and receipt results in \
+             review/proof_portfolio.json, review/proof_receipts.json, and review/gate_outcome.json",
             accounting.unproven, accounting.total
         ));
     }
@@ -910,7 +910,7 @@ mod tests {
             truth
                 .not_proven_reasons
                 .iter()
-                .any(|reason| reason.starts_with("required-planner-proof:")),
+                .any(|reason| reason == "required-planner-proof: 1 of 1 required planner proof tasks ended without a satisfying receipt; inspect task status and receipt results in review/proof_portfolio.json, review/proof_receipts.json, and review/gate_outcome.json"),
             "{:?}",
             truth.not_proven_reasons
         );

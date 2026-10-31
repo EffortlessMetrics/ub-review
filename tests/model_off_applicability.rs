@@ -507,6 +507,10 @@ fn model_auto_keeps_transport_failure_missing_and_unproven() -> Result<()> {
             .any(|issue| issue["status"] == "preflight_failed")
     );
     let summary = fs::read_to_string(out.join("running-summary.md"))?;
+    ensure!(
+        summary.contains("- Model lanes: `0/4` usable (`0` ok, `0` degraded)"),
+        "enabled transport failure must retain model-lane efficiency disclosure: {summary}"
+    );
     let missing = summary
         .split("## Missing or failed model evidence\n")
         .nth(1)
