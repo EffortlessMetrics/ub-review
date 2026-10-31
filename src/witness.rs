@@ -77,10 +77,15 @@ pub(crate) fn write_follow_up_question_packets(
     }
     fs::create_dir_all(&follow_up_dir)
         .with_context(|| format!("create {}", follow_up_dir.display()))?;
+    // Outputs and receipts are immutable during this write. Share their
+    // excerpts across consumers, then discard the snapshot before any later
+    // proof phase or reused-output invocation can replace the source evidence.
+    let mut excerpts_by_receipt = BTreeMap::new();
     for task in tasks {
         // Excerpts are resolved at packet-write time so the packet artifact
         // records exactly the prompt the model later receives.
-        let excerpts = routed_receipt_excerpts_for_task(out, task, proof_receipts);
+        let excerpts =
+            routed_receipt_excerpts_for_task(out, task, proof_receipts, &mut excerpts_by_receipt);
         let packet = follow_up_question_packet(task, &excerpts);
         fs::write(
             follow_up_dir.join(format!("{}.json", sanitize_artifact_name(&task.id))),
@@ -180,6 +185,9 @@ pub(crate) fn witness_status_for_observation(observation: &Observation) -> &'sta
 }
 
 pub(crate) fn witness_status_for_proof_receipt(receipt: &ProofReceipt) -> &'static str {
+    if proof_receipt_has_contradictory_completion(receipt) {
+        return "needs-witness";
+    }
     match receipt.result.as_str() {
         "discriminating" | "head_passed" | "head_failed" => "tool-confirmed",
         _ => "needs-witness",
@@ -267,4 +275,217 @@ pub(crate) fn write_witness_artifacts(out: &Path, witnesses: &[WitnessRecord]) -
     }
     fs::write(out.join("witnesses.ndjson"), ndjson)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod routed_packet_tests {
+    use super::*;
+    use anyhow::ensure;
+    use std::io::{Seek, SeekFrom, Write};
+
+    fn receipt() -> ProofReceipt {
+        ProofReceipt {
+            schema: "ub-review.proof_receipt.v1".to_owned(),
+            id: "proof-1".to_owned(),
+            kind: "focused-build".to_owned(),
+            base: "base".to_owned(),
+            head: "head".to_owned(),
+            revision: None,
+            test_patch_mode: "head".to_owned(),
+            requested_by: vec!["tests".to_owned()],
+            request_ids: Vec::new(),
+            commands: vec![ProofCommandReceipt {
+                side: "head".to_owned(),
+                command: "cargo check --locked".to_owned(),
+                env: BTreeMap::new(),
+                status: "passed".to_owned(),
+                exit_code: Some(0),
+                timed_out: false,
+                timeout_sec: 60,
+                duration_ms: 1,
+                stdout: "stdout.txt".to_owned(),
+                stderr: "stderr.txt".to_owned(),
+                reason: "completed".to_owned(),
+            }],
+            result: "passed".to_owned(),
+            reason: "completed".to_owned(),
+        }
+    }
+
+    fn task(id: usize, receipt: &ProofReceipt) -> FollowUpQuestionTask {
+        FollowUpQuestionTask {
+            schema: "ub-review.follow_up_question_task.v1".to_owned(),
+            id: format!("task-{id}"),
+            group_id: "group".to_owned(),
+            stage: "tertiary".to_owned(),
+            stage_reason: "proof available".to_owned(),
+            evidence_need: "proof-confirmation".to_owned(),
+            disposition: "summary-only".to_owned(),
+            candidate_ids: Vec::new(),
+            observation_group_ids: Vec::new(),
+            routed_evidence: vec![proof_receipt_routed_evidence(receipt)],
+            question: "Does the proof resolve this?".to_owned(),
+            status: "pending".to_owned(),
+            reason: "proof available".to_owned(),
+        }
+    }
+
+    fn packet(out: &Path, id: usize) -> Result<serde_json::Value> {
+        Ok(serde_json::from_slice(&fs::read(out.join(format!(
+            "questions/orchestrator-follow-up/task-{id}.json"
+        )))?)?)
+    }
+
+    #[test]
+    fn routed_packet_consumption_measurement() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        // Sparse files keep fixture setup cheap while exercising multi-MiB
+        // streams. Only the final caps belong in each downstream packet.
+        let stream_bytes = 4 * 1024 * 1024;
+        for (name, cap) in [("stdout.txt", 600), ("stderr.txt", 1200)] {
+            let mut file = fs::File::create(out.join(name))?;
+            file.set_len(stream_bytes)?;
+            file.seek(SeekFrom::End(-(cap as i64)))?;
+            file.write_all(&vec![b'x'; cap])?;
+        }
+        let receipt = receipt();
+        let tasks: Vec<_> = (0..16).map(|id| task(id, &receipt)).collect();
+        let started = Instant::now();
+        write_follow_up_question_packets(out, &tasks, &[receipt])?;
+        let elapsed = started.elapsed();
+        let expected_excerpt = format!(
+            "  command `cargo check --locked` side=`head` status=`passed` exit=Some(0)\n    stderr (last 1200 bytes of {stream_bytes}):\n      {}\n    stdout (last 600 bytes of {stream_bytes}):\n      {}\n",
+            "x".repeat(1200),
+            "x".repeat(600)
+        );
+        let mut output_bytes = 0;
+        for id in 0..16 {
+            let value = packet(out, id)?;
+            let prompt = value["prompt"].as_str().context("prompt")?;
+            ensure!(prompt.contains(&expected_excerpt));
+            ensure!(!prompt.contains('\0'));
+            output_bytes += serde_json::to_vec_pretty(&value)?.len();
+        }
+        eprintln!(
+            "routed packet measurement: 16 tasks, 2 x {stream_bytes} byte streams, {output_bytes} packet bytes, {elapsed:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn routed_packet_refreshes_sources_and_rejects_unmatched_routes() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        let mut receipt = receipt();
+        let mut tasks = vec![task(0, &receipt), task(1, &receipt)];
+        fs::write(out.join("stdout.txt"), "old-proof")?;
+        fs::write(out.join("stderr.txt"), "")?;
+        write_follow_up_question_packets(out, &tasks, &[receipt.clone()])?;
+        let original = packet(out, 0)?;
+        let prompt = original["prompt"].as_str().context("prompt")?;
+        ensure!(prompt.contains("old-proof"));
+        ensure!(prompt.contains("    stderr: (empty)\n"));
+        ensure!(!prompt.contains("stderr: (unavailable at"));
+
+        // Same path and length, new source bytes: no cross-write cache may
+        // relabel the previous invocation's excerpt as current evidence.
+        fs::write(out.join("stdout.txt"), "new-proof")?;
+        receipt.commands[0].status = "failed".to_owned();
+        receipt.commands[0].exit_code = Some(101);
+        receipt.result = "failed".to_owned();
+        tasks[0].routed_evidence = vec![proof_receipt_routed_evidence(&receipt)];
+        tasks[1].routed_evidence = tasks[0].routed_evidence.clone();
+        let mut wrong_kind = tasks[0].routed_evidence[0].clone();
+        wrong_kind.kind = "resource-lease".to_owned();
+        tasks[0].routed_evidence.insert(0, wrong_kind);
+        let mut unknown = tasks[1].routed_evidence[0].clone();
+        unknown.id = "absent-proof".to_owned();
+        tasks[1].routed_evidence = vec![unknown];
+        write_follow_up_question_packets(out, &tasks, &[receipt.clone()])?;
+        let current = packet(out, 0)?;
+        let prompt = current["prompt"].as_str().context("prompt")?;
+        ensure!(prompt.contains("new-proof") && !prompt.contains("old-proof"));
+        ensure!(prompt.contains("status=`failed` exit=Some(101)"));
+        ensure!(
+            !packet(out, 1)?["prompt"]
+                .as_str()
+                .context("prompt")?
+                .contains("Receipt content")
+        );
+
+        fs::remove_file(out.join("stdout.txt"))?;
+        write_follow_up_question_packets(out, &tasks, std::slice::from_ref(&receipt))?;
+        let unavailable = packet(out, 0)?;
+        let prompt = unavailable["prompt"].as_str().context("prompt")?;
+        ensure!(prompt.contains("stdout: (unavailable at `stdout.txt`)"));
+        ensure!(!prompt.contains("new-proof"));
+
+        // A recovered empty stream must replace the previous batch's
+        // unavailable result, while retaining its distinct empty marker.
+        fs::write(out.join("stdout.txt"), "")?;
+        write_follow_up_question_packets(out, &tasks, &[receipt])?;
+        let recovered = packet(out, 0)?;
+        let prompt = recovered["prompt"].as_str().context("prompt")?;
+        ensure!(prompt.contains("    stdout: (empty)\n"));
+        ensure!(!prompt.contains("stdout: (unavailable at"));
+        Ok(())
+    }
+
+    #[test]
+    fn routed_packet_batch_reuses_only_matching_receipt_excerpts() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        let receipt = receipt();
+        let task = task(0, &receipt);
+        fs::write(out.join("stdout.txt"), "same-batch-proof")?;
+        fs::write(out.join("stderr.txt"), "")?;
+        let receipts = [receipt];
+        let mut excerpts = BTreeMap::new();
+        let first = routed_receipt_excerpts_for_task(out, &task, &receipts, &mut excerpts);
+        ensure!(first["proof-1"].contains("same-batch-proof"));
+        // A second consumer must reuse the existing snapshot, not re-open
+        // streams. A fresh batch must instead report their absence.
+        fs::remove_file(out.join("stdout.txt"))?;
+        let second = routed_receipt_excerpts_for_task(out, &task, &receipts, &mut excerpts);
+        ensure!(first == second);
+        let fresh = routed_receipt_excerpts_for_task(out, &task, &receipts, &mut BTreeMap::new());
+        ensure!(fresh["proof-1"].contains("unavailable"));
+        let mut unrelated = task.clone();
+        unrelated.routed_evidence[0].kind = "resource-lease".to_owned();
+        ensure!(
+            routed_receipt_excerpts_for_task(out, &unrelated, &receipts, &mut excerpts).is_empty()
+        );
+        unrelated.routed_evidence[0].kind = "proof-receipt".to_owned();
+        unrelated.routed_evidence[0].id = "other-proof".to_owned();
+        ensure!(
+            routed_receipt_excerpts_for_task(out, &unrelated, &receipts, &mut excerpts).is_empty()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn routed_packet_tail_preserves_utf8_and_missing_stream_format() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        let receipt = receipt();
+        // The 600-byte cut lands inside the euro character. It must trim
+        // continuation bytes exactly as the full-read verifier mirror does.
+        fs::write(out.join("stdout.txt"), format!("xx€{}", "y".repeat(598)))?;
+        fs::create_dir(out.join("stderr.txt"))?;
+        let evidence = proof_receipt_routed_evidence(&receipt);
+        let excerpt = routed_proof_receipt_excerpt(out, &evidence, std::slice::from_ref(&receipt))
+            .context("excerpt")?;
+        ensure!(excerpt.contains(&format!(
+            "stdout (last 600 bytes of 603):\n      {}\n",
+            "y".repeat(598)
+        )));
+        ensure!(!excerpt.contains('�'));
+        ensure!(excerpt.contains("stderr: (unavailable at `stderr.txt`)"));
+        fs::write(out.join("stdout.txt"), [0xff, b'x', b'\r', b'\n'])?;
+        let excerpt =
+            routed_proof_receipt_excerpt(out, &evidence, &[receipt]).context("excerpt")?;
+        ensure!(excerpt.contains("stdout:\n      �x\n"));
+        Ok(())
+    }
 }

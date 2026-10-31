@@ -235,13 +235,10 @@ pub(crate) fn parse_reporter_conclusion(
     cohort_id: &str,
     thread_id: &str,
 ) -> ReporterConclusion {
-    // Try to parse as JSON {distillation, proposed_follow_ups}.
+    // Retain follow-ups even when the JSON lacks a usable distillation, but
+    // accept a verdict only alongside that explanatory text.
     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(content) {
-        let distillation = parsed
-            .get("distillation")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_owned();
+        let distillation = parsed.get("distillation").and_then(|v| v.as_str());
         let proposed_follow_ups = parsed
             .get("proposed_follow_ups")
             .and_then(|v| v.as_array())
@@ -253,14 +250,14 @@ pub(crate) fn parse_reporter_conclusion(
             .unwrap_or_default();
         return ReporterConclusion {
             schema: REPORTER_THREAD_SCHEMA.to_owned(),
-            distillation,
+            distillation: distillation.unwrap_or(content).to_owned(),
             proposed_follow_ups,
-            verdict: parse_verdict(&parsed),
+            verdict: distillation.map_or(ReporterVerdict::None, |_| parse_verdict(&parsed)),
             cohort_id: cohort_id.to_owned(),
             thread_id: thread_id.to_owned(),
         };
     }
-    // Fallback: the raw response text is the distillation.
+    // Non-JSON responses are retained as raw, undecided distillations.
     ReporterConclusion {
         schema: REPORTER_THREAD_SCHEMA.to_owned(),
         distillation: content.to_owned(),
@@ -589,6 +586,19 @@ pub(crate) fn resolve_reporter_turn(
     }) else {
         return ReporterTurnResolution::Absent;
     };
+    // A failed parse cannot stand in for a real turn number: u32::MAX is
+    // itself a valid identity. Validate the canonical artifact component
+    // before using it as a path or admitting its self-reported receipt.
+    let Some(turn_number) = latest_id
+        .strip_prefix("turn-")
+        .and_then(|value| value.parse::<u32>().ok())
+        .filter(|number| latest_id == format!("turn-{number:03}"))
+    else {
+        return ReporterTurnResolution::Malformed {
+            receipt: "review/threads/reporter/thread.json".to_owned(),
+            error: format!("invalid rollup latest_turn `{latest_id}`"),
+        };
+    };
     let receipt_ref = format!("review/threads/reporter/{latest_id}.json");
     if let Some(latest_ref) = rollup.latest_turn_ref.as_deref()
         && latest_ref != receipt_ref
@@ -666,12 +676,7 @@ pub(crate) fn resolve_reporter_turn(
         };
     }
     let mut identity_mismatches = Vec::new();
-    if turn.turn
-        != latest_id
-            .strip_prefix("turn-")
-            .and_then(|value| value.parse().ok())
-            .unwrap_or(u32::MAX)
-    {
+    if turn.turn != turn_number {
         identity_mismatches.push("turn.turn/rollup.latest_turn");
     }
     if turn.thread_id != rollup.thread_id {
@@ -848,6 +853,41 @@ mod tests {
     }
 
     #[test]
+    fn unstructured_json_response_survives_reporter_artifact_round_trip() -> Result<()> {
+        for content in [r#""A short review""#, r#"{"verdict":"clear"}"#] {
+            let conclusion = parse_reporter_conclusion(content, "cid", "tid");
+            assert_eq!(conclusion.distillation, content);
+            assert_eq!(conclusion.verdict, ReporterVerdict::None);
+            let temp = tempfile::tempdir()?;
+            write_reporter_thread(temp.path(), &conclusion, "head-a")?;
+            match resolve_reporter_turn(temp.path(), "head-a") {
+                ReporterTurnResolution::Current(turn) => {
+                    assert_eq!(turn.distillation, content);
+                    assert_eq!(turn.verdict, ReporterVerdict::None);
+                }
+                other => anyhow::bail!("expected Current, got {other:?}"),
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn follow_ups_survive_missing_or_non_string_distillation() {
+        for content in [
+            r#"{"proposed_follow_ups":["tests-oracle: inspect the failing test"],"verdict":"clear"}"#,
+            r#"{"distillation":42,"proposed_follow_ups":["tests-oracle: inspect the failing test"],"verdict":"clear"}"#,
+        ] {
+            let conclusion = parse_reporter_conclusion(content, "cid", "tid");
+            assert_eq!(conclusion.distillation, content);
+            assert_eq!(conclusion.verdict, ReporterVerdict::None);
+            assert_eq!(
+                conclusion.proposed_follow_ups,
+                vec!["tests-oracle: inspect the failing test"]
+            );
+        }
+    }
+
+    #[test]
     fn lane_digests_skip_unexecuted_lanes() -> Result<()> {
         let mut receipt = crate::ModelLaneReceipt {
             lane: "x".to_owned(),
@@ -860,6 +900,7 @@ mod tests {
             http_status: None,
             response_shape: None,
             fallback_from: None,
+            attempt_count: None,
             cache_usage: crate::ModelCacheUsage::default(),
             cohort_id: "cid".to_owned(),
             shared_prefix_hash: "h".to_owned(),
@@ -902,6 +943,7 @@ mod tests {
             http_status: None,
             response_shape: None,
             fallback_from: None,
+            attempt_count: None,
             cache_usage: crate::ModelCacheUsage::default(),
             cohort_id: "cid".to_owned(),
             shared_prefix_hash: "h".to_owned(),
@@ -955,6 +997,122 @@ mod tests {
             resolve_reporter_turn(&review_dir, "abc"),
             ReporterTurnResolution::Absent
         );
+        Ok(())
+    }
+
+    #[test]
+    fn reporter_resolution_rejects_invalid_turn_references() -> Result<()> {
+        for latest_id in [
+            "turn-invalid",
+            "turn-4294967296",
+            "../turn-4294967295",
+            "turn-+4294967295",
+            "turn-04294967295",
+        ] {
+            let temp = tempfile::tempdir()?;
+            let review_dir = temp.path().join("review");
+            let thread_dir = review_dir.join("threads/reporter");
+            let conclusion = ReporterConclusion {
+                schema: REPORTER_THREAD_SCHEMA.to_owned(),
+                distillation: "must not become authoritative".to_owned(),
+                proposed_follow_ups: vec![],
+                verdict: ReporterVerdict::Clear,
+                cohort_id: "cid".to_owned(),
+                thread_id: "tid".to_owned(),
+            };
+            write_reporter_turn(
+                &review_dir,
+                &conclusion,
+                u32::MAX,
+                "head-a",
+                "reporter_completed",
+                &[],
+            )?;
+            assert!(matches!(
+                resolve_reporter_turn(&review_dir, "head-a"),
+                ReporterTurnResolution::Current(_)
+            ));
+            let receipt_ref = format!("review/threads/reporter/{latest_id}.json");
+            let turn_path = thread_dir.join("turn-4294967295.json");
+            let mut turn: crate::LaneThreadTurn =
+                serde_json::from_slice(&std::fs::read(&turn_path)?)?;
+            turn.receipt_ref = receipt_ref.clone();
+            std::fs::write(
+                thread_dir.join(format!("{latest_id}.json")),
+                serde_json::to_vec_pretty(&turn)?,
+            )?;
+            let rollup_path = thread_dir.join("thread.json");
+            let mut rollup: crate::LaneThreadSession =
+                serde_json::from_slice(&std::fs::read(&rollup_path)?)?;
+            rollup.latest_turn = Some(latest_id.to_owned());
+            rollup.latest_turn_ref = Some(receipt_ref);
+            std::fs::write(&rollup_path, serde_json::to_vec_pretty(&rollup)?)?;
+
+            let resolution = resolve_reporter_turn(&review_dir, "head-a");
+            assert!(
+                matches!(
+                    &resolution,
+                    ReporterTurnResolution::Malformed { receipt, error }
+                        if receipt == "review/threads/reporter/thread.json"
+                            && error == &format!("invalid rollup latest_turn `{latest_id}`")
+                ),
+                "{latest_id}: {resolution:?}"
+            );
+            assert!(resolution.public_distillation().is_none(), "{latest_id}");
+            assert!(matches!(
+                resolution.gate_input(),
+                ReporterGateInput::Unusable { kind, .. } if kind == "reporter-malformed"
+            ));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn reporter_resolution_preserves_legacy_and_missing_turn_references() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        let thread_dir = review_dir.join("threads/reporter");
+        let conclusion = ReporterConclusion {
+            schema: REPORTER_THREAD_SCHEMA.to_owned(),
+            distillation: "current conclusion".to_owned(),
+            proposed_follow_ups: vec![],
+            verdict: ReporterVerdict::Clear,
+            cohort_id: "cid".to_owned(),
+            thread_id: "tid".to_owned(),
+        };
+        write_reporter_turn(
+            &review_dir,
+            &conclusion,
+            1000,
+            "head-a",
+            "reporter_completed",
+            &[],
+        )?;
+        let rollup_path = thread_dir.join("thread.json");
+        let original_rollup = std::fs::read(&rollup_path)?;
+        let mut legacy: crate::LaneThreadSession = serde_json::from_slice(&original_rollup)?;
+        legacy.latest_turn = None;
+        legacy.latest_turn_ref = None;
+        std::fs::write(&rollup_path, serde_json::to_vec_pretty(&legacy)?)?;
+        assert!(matches!(
+            resolve_reporter_turn(&review_dir, "head-a"),
+            ReporterTurnResolution::Current(turn)
+                if turn.turn == 1000
+                    && turn.receipt_ref == "review/threads/reporter/turn-1000.json"
+                    && turn.distillation == "current conclusion"
+                    && turn.verdict == ReporterVerdict::Clear
+        ));
+
+        std::fs::write(&rollup_path, original_rollup)?;
+        std::fs::remove_file(thread_dir.join("turn-1000.json"))?;
+        let missing = resolve_reporter_turn(&review_dir, "head-a");
+        assert!(missing.public_distillation().is_none());
+        assert!(matches!(
+            missing.gate_input(),
+            ReporterGateInput::Unusable { kind, receipt, .. }
+                if kind == "reporter-malformed"
+                    && receipt == "review/threads/reporter/turn-1000.json"
+        ));
         Ok(())
     }
 
@@ -1269,6 +1427,13 @@ mod tests {
                 "receipt_ref",
                 serde_json::json!("review/threads/reporter/turn-999.json"),
                 "turn.receipt_ref",
+            ),
+            (
+                "rollup-receipt",
+                "rollup",
+                "latest_turn_ref",
+                serde_json::json!("review/threads/reporter/turn-999.json"),
+                "latest_turn_ref",
             ),
             (
                 "turn-number",

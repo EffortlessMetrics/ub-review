@@ -133,6 +133,20 @@ jobs:
           test "$(jq -r '.archive_sha256' "$manifest")" = "$archive_sha256"
           sha256sum -c "dist/$ASSET_NAME.sha256"
 
+      - name: Install pinned Rust toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.95.0 --profile minimal
+
+      - name: Render release notes
+        shell: bash
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cargo +1.95.0 run --locked --package xtask -- render-release-notes --tag "$TAG" --output dist/release-notes.md
+
       - name: Publish GitHub release asset
         shell: bash
         env:
@@ -146,5 +160,5 @@ jobs:
             gh release create "$TAG" "dist/$ASSET_NAME" "dist/$ASSET_NAME.sha256" \
               --verify-tag \
               --title "$TAG" \
-              --notes-file .github/release-notes.md
+              --notes-file dist/release-notes.md
           fi

@@ -5,8 +5,15 @@
 use crate::*;
 
 pub(crate) fn render_model_status_sections(text: &mut String, out: &Path) {
-    let Some(review) = read_review_summary_receipt(out) else {
-        return;
+    let review = match read_review_summary_receipt(out) {
+        Ok(review) => review,
+        Err(error) => {
+            text.push_str("\n## Missing or failed model evidence\n\n");
+            text.push_str(&format!(
+                "- Review evidence is incomplete: {error}. Model evidence availability cannot be established. Restore or regenerate `review/review.json` for this run, then rerun `ub-review summary --run-dir <RUN_DIR>`.\n"
+            ));
+            return;
+        }
     };
 
     text.push_str("\n## Provider preflights\n\n");
@@ -104,9 +111,10 @@ pub(crate) fn model_status_evidence_issues(review: &ReviewSummaryReceipt) -> Vec
     issues
 }
 
-pub(crate) fn read_review_summary_receipt(out: &Path) -> Option<ReviewSummaryReceipt> {
-    let text = fs::read_to_string(out.join("review/review.json")).ok()?;
-    serde_json::from_str(&text).ok()
+pub(crate) fn read_review_summary_receipt(out: &Path) -> Result<ReviewSummaryReceipt> {
+    let bytes = fs::read(out.join("review/review.json"))
+        .context("`review/review.json` is missing or unreadable")?;
+    serde_json::from_slice(&bytes).context("`review/review.json` is invalid")
 }
 
 pub(crate) fn optional_u16_cell(value: Option<u16>) -> String {
@@ -189,7 +197,7 @@ pub(crate) const CORE_REVIEW_TOOLS: [&str; 6] = [
     "ast-grep",
     "actionlint",
 ];
-pub(crate) const STANDARD_IMAGE_TOKMD_VERSION: &str = "1.12.0";
+pub(crate) const STANDARD_IMAGE_TOKMD_VERSION: &str = "1.15.0";
 pub(crate) const STANDARD_IMAGE_CARGO_ALLOW_VERSION: &str = "0.1.8";
 // Core Rust sensors must not float on crates.io latest: the install script took
 // crates.io latest, so image and local drifted apart silently (#316 — the

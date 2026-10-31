@@ -21,8 +21,13 @@ pub(crate) fn render_ledger_context(
         root.join(configured_path)
     };
     if !path.exists() {
+        let source = if args.ledger_path.trim().is_empty() {
+            "`[repo].ledger`"
+        } else {
+            "`--ledger-path` / `UB_REVIEW_LEDGER_PATH`"
+        };
         return Ok(format!(
-            "- UB ledger configured but unavailable at `{}`.\n",
+            "- UB ledger configured by {source} but unavailable at `{}`; optional context omitted. Verify the configured path to include ledger context.\n",
             path.display()
         ));
     }
@@ -92,12 +97,40 @@ pub(crate) fn read_bounded_text(path: &Path, max_bytes: usize) -> Result<String>
 }
 
 pub(crate) fn read_bounded_text_with_status(path: &Path, max_bytes: usize) -> Result<BoundedText> {
-    let mut file = File::open(path).with_context(|| format!("open {}", path.display()))?;
-    let mut buffer = vec![0; max_bytes.saturating_add(1)];
+    let file = File::open(path).with_context(|| format!("open {}", path.display()))?;
+    let regular_file = file
+        .metadata()
+        .map(|metadata| metadata.is_file())
+        .unwrap_or(false);
+    capture_bounded_local_text(file, max_bytes, regular_file)
+        .with_context(|| format!("read {}", path.display()))
+}
+
+fn capture_bounded_local_text(
+    mut reader: impl std::io::Read,
+    max_bytes: usize,
+    regular_file: bool,
+) -> std::io::Result<BoundedText> {
     use std::io::Read as _;
-    let count = file
-        .read(&mut buffer)
-        .with_context(|| format!("read {}", path.display()))?;
+
+    let (mut buffer, count) = if regular_file {
+        // A regular-file ceiling limits reads, rather than requesting an
+        // allocation. Retain one-byte lookahead, including usize::MAX caps.
+        let read_limit = u64::try_from(max_bytes)
+            .unwrap_or(u64::MAX)
+            .saturating_add(1);
+        let mut buffer = Vec::new();
+        let count = reader.take(read_limit).read_to_end(&mut buffer)?;
+        (buffer, count)
+    } else {
+        // Keep the original single read for streams (or unknown file type).
+        // A FIFO's writer may remain open after supplying the current seed;
+        // waiting for EOF would stall packet construction. These inputs
+        // retain their existing ceiling-sized reservation and read semantics.
+        let mut buffer = vec![0; max_bytes.saturating_add(1)];
+        let count = reader.read(&mut buffer)?;
+        (buffer, count)
+    };
     buffer.truncate(count.min(max_bytes));
     let mut text = String::from_utf8_lossy(&buffer).to_string();
     if count > max_bytes {
@@ -200,6 +233,7 @@ pub(crate) fn build_model_lane_receipts(
                 http_status: None,
                 response_shape: None,
                 fallback_from: None,
+                attempt_count: Some(0),
                 cache_usage: ModelCacheUsage::default(),
                 // Preflight/planned receipts carry empty cohort provenance;
                 // the cohort is stamped when the lane executes (model_exec /
@@ -309,18 +343,19 @@ pub(crate) fn is_model_receipt_evidence_issue(receipt: &ModelLaneReceipt) -> boo
 
 pub(crate) fn is_model_skipped_evidence_issue(receipt: &ModelLaneReceipt) -> bool {
     receipt.status == "skipped"
-        && matches!(
-            receipt.reason.as_str(),
-            // The wave-loop sweep writes the budget-only phrasing; the
-            // "or inline comment cap" variant is the legacy phrasing kept so
-            // older receipts still classify. Without the current string,
-            // budget-skipped lanes (including a starved fallback retry)
-            // silently vanished from missing model evidence.
-            "model-mode off"
-                | "model call budget reached before lane execution"
-                | "model call budget or inline comment cap reached before lane execution"
-                | "model call budget exhausted before refuter pass"
-        )
+        && (model_lane_call_attempted(receipt)
+            || matches!(
+                receipt.reason.as_str(),
+                // The wave-loop sweep writes the budget-only phrasing; the
+                // "or inline comment cap" variant is the legacy phrasing kept so
+                // older receipts still classify. Without the current string,
+                // budget-skipped lanes (including a starved fallback retry)
+                // silently vanished from missing model evidence.
+                "model-mode off"
+                    | "model call budget reached before lane execution"
+                    | "model call budget or inline comment cap reached before lane execution"
+                    | "model call budget exhausted before refuter pass"
+            ))
 }
 
 pub(crate) fn collect_sensor_evidence_issues(out: &Path, plan: &Plan) -> Vec<SensorEvidenceIssue> {
@@ -375,4 +410,109 @@ pub(crate) fn is_sensor_skipped_evidence_issue(sensor: &SensorPlan, reason: &str
         || sensor.run
         || reason == "dry-run; sensor not executed"
         || reason.starts_with("box guard failed")
+}
+
+#[cfg(test)]
+mod bounded_file_tests {
+    use super::*;
+
+    struct OneChunkThenError {
+        chunk: Option<&'static [u8]>,
+        reads: usize,
+    }
+
+    impl std::io::Read for OneChunkThenError {
+        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+            self.reads += 1;
+            let chunk = self.chunk.take().ok_or_else(|| {
+                std::io::Error::other(
+                    "a stream must return its available seed before reading again",
+                )
+            })?;
+            let count = chunk.len().min(buffer.len());
+            buffer[..count].copy_from_slice(&chunk[..count]);
+            Ok(count)
+        }
+    }
+
+    #[test]
+    fn bounded_file_stream_returns_one_chunk_without_requiring_eof() -> Result<()> {
+        for (budget, expected, truncated) in [
+            (0, "\n[truncated]\n", true),
+            (3, "Pri\n[truncated]\n", true),
+            (23, "Prior review: accepted\n", false),
+            (64, "Prior review: accepted\n", false),
+        ] {
+            let mut reader = OneChunkThenError {
+                chunk: Some(b"Prior review: accepted\n"),
+                reads: 0,
+            };
+            let actual = capture_bounded_local_text(&mut reader, budget, false)?;
+            assert_eq!(actual.text, expected);
+            assert_eq!(actual.truncated, truncated);
+            assert_eq!(reader.reads, 1);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn bounded_file_empty_does_not_reserve_the_capture_ceiling() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("empty.md");
+        fs::write(&path, b"")?;
+        let actual = read_bounded_text_with_status(&path, usize::MAX)?;
+        assert_eq!(actual.text, "");
+        assert!(!actual.truncated);
+        Ok(())
+    }
+
+    #[test]
+    fn bounded_file_small_does_not_reserve_the_capture_ceiling() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("ledger.md");
+        fs::write(&path, "Prior claim: café remains unresolved.\n")?;
+        let actual = read_bounded_text_with_status(&path, usize::MAX)?;
+        assert_eq!(actual.text, "Prior claim: café remains unresolved.\n");
+        assert!(!actual.truncated);
+        assert_eq!(
+            read_bounded_text(&path, usize::MAX)?,
+            "Prior claim: café remains unresolved.\n"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn bounded_file_preserves_exact_excerpts_and_truncation_truth() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("excerpt.txt");
+        let cases: &[(&[u8], usize, &str, bool)] = &[
+            (b"", 0, "", false),
+            (b"abc", 0, "\n[truncated]\n", true),
+            (b"abc", 2, "ab\n[truncated]\n", true),
+            (b"abc", 3, "abc", false),
+            (b"abc", 4, "abc", false),
+            ("café".as_bytes(), 4, "caf\u{fffd}\n[truncated]\n", true),
+            ("café".as_bytes(), 5, "café", false),
+            (&[b'a', 0xff, b'b'], 3, "a\u{fffd}b", false),
+        ];
+        for (input, budget, expected, truncated) in cases {
+            fs::write(&path, input)?;
+            let actual = read_bounded_text_with_status(&path, *budget)?;
+            assert_eq!(actual.text, *expected, "input {input:?}, budget {budget}");
+            assert_eq!(actual.truncated, *truncated, "budget {budget}");
+            assert_eq!(read_bounded_text(&path, *budget)?, *expected);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn bounded_file_missing_remains_an_error() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let missing = temp.path().join("missing.md");
+        let error = read_bounded_text_with_status(&missing, usize::MAX)
+            .err()
+            .context("missing evidence must not be admitted as empty text")?;
+        assert!(error.to_string().contains("open "));
+        Ok(())
+    }
 }

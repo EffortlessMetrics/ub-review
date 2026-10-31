@@ -22,6 +22,20 @@ leasing broader proof.
 | `auto` | conservative detection |
 | `custom` | config-owned |
 
+## Generating a starter
+
+`init --profile` generates the built-in profiles above or `auto`.
+`init --profile custom` is rejected before creating or overwriting either the
+configuration or the guide, including with `--force` or `--no-guide`. The shared
+profile argument still lists `custom` because runtime consumers support it;
+`init` cannot invent the repository's custom budgets.
+
+To use a custom profile, generate a built-in starter, define `[profiles.custom]`
+with the intended settings, and select `profile = "custom"`. The table key is
+the runtime profile's identity; an omitted or different `name` inside the table
+does not change that identity. Commands that read that configuration, including
+`run`, `plan`, and `doctor`, retain custom-profile support. The rejection applies only to generating an undefined custom starter.
+
 Review breadth and local work are separate.
 
 ```text

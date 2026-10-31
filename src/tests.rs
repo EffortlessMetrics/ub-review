@@ -12,6 +12,9 @@ use anyhow::{Context, Result, ensure};
 
 use crate::*;
 
+#[path = "tests/proof_budget_regressions.rs"]
+mod proof_budget_regressions;
+
 const BASE: &str = "origin/main";
 const HEAD: &str = "HEAD";
 const SHARED_CONTEXT_ID: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -86,9 +89,9 @@ fn bless_value_enabled(value: Option<&str>) -> bool {
     value == Some("1")
 }
 
-fn snapshot_text(case: &GoldenCase, surface: &CompiledReviewSurface) -> Result<String> {
-    let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/review-golden");
-    fs::create_dir_all(&out).with_context(|| format!("create {}", out.display()))?;
+fn snapshot_post_args(case: &GoldenCase) -> Result<(tempfile::TempDir, PostArgs)> {
+    let workspace = tempfile::tempdir().context("create golden snapshot workspace")?;
+    let out = workspace.path().to_owned();
     let patch_path = out.join(format!("{}.patch", case.id));
     fs::write(&patch_path, &case.patch)
         .with_context(|| format!("write {}", patch_path.display()))?;
@@ -102,6 +105,11 @@ fn snapshot_text(case: &GoldenCase, surface: &CompiledReviewSurface) -> Result<S
         github_api_url: "https://api.github.invalid".to_owned(),
         fail_on_post_error: true,
     };
+    Ok((workspace, post_args))
+}
+
+fn snapshot_text(case: &GoldenCase, surface: &CompiledReviewSurface) -> Result<String> {
+    let (_workspace, post_args) = snapshot_post_args(case)?;
     if surface.should_prepare_github_review {
         validate_github_review_payload_for_post(&post_args, &surface.github_review)
             .with_context(|| format!("validate `{}` post payload", case.id))?;
@@ -506,5 +514,161 @@ fn clean_case_stays_silent() -> Result<()> {
     ensure!(!surface.should_prepare_github_review);
     ensure!(surface.github_review.body.is_empty());
     ensure!(surface.github_review.comments.is_empty());
+    Ok(())
+}
+
+#[test]
+fn overlapping_snapshots_keep_independent_validation_patches() -> Result<()> {
+    let case = suggestion_case();
+    let surface = case.compile()?;
+    let (_first_workspace, first) = snapshot_post_args(&case)?;
+    let (_second_workspace, second) = snapshot_post_args(&case)?;
+    validate_github_review_payload_for_post(&first, &surface.github_review)?;
+    validate_github_review_payload_for_post(&second, &surface.github_review)?;
+
+    // Pause the second writer after truncation, before any patch bytes are written.
+    // The first snapshot must still validate its complete RIGHT-side line 39.
+    let second_patch = second
+        .diff_patch
+        .as_ref()
+        .context("second snapshot patch")?;
+    let _writer = fs::File::create(second_patch)?;
+    validate_github_review_payload_for_post(&first, &surface.github_review)?;
+    let error = validate_github_review_payload_for_post(&second, &surface.github_review)
+        .err()
+        .context("truncated patch unexpectedly validated")?;
+    ensure!(format!("{error:#}").contains("src/buffer.rs:39 is not a valid RIGHT-side diff line"));
+    Ok(())
+}
+
+// These semantic checks deliberately do not use the blessable snapshots: a
+// wording refresh must not bless away the reader's decision or heading map.
+#[test]
+fn review_renderer_findings_lead_successful_proof_and_keep_private_evidence() -> Result<()> {
+    let mut case = inline_and_summary_case();
+    let private_evidence = "private-evidence-marker-task31";
+    case.summary_only_findings[0].evidence = private_evidence.to_owned();
+    case.proof_receipts = discriminating_proof_case().proof_receipts;
+    let surface = case.compile()?;
+    let body = &surface.github_review.body;
+    ensure!(surface.should_prepare_github_review);
+    ensure!(
+        body.starts_with(
+            "## Decision\n\n- Needs reviewer attention before upstream: findings remain.\n"
+        ),
+        "findings must lead successful proof: {body}"
+    );
+    ensure!(body.contains("`from_raw_parts` runs before the zero-length guard"));
+    ensure!(body.contains("`Pool::lease` retains the same construction"));
+    ensure!(body.contains("HEAD passed (exit 0) and base+tests failed (exit 1)"));
+    ensure!(
+        body.lines()
+            .filter(|line| line.starts_with('#'))
+            .collect::<Vec<_>>()
+            == ["## Decision", "## Confirmed findings", "## Test proof"],
+        "mixed review must have one navigable heading per section: {body}"
+    );
+    ensure!(surface.artifact_body.contains(private_evidence));
+    for private in [
+        private_evidence,
+        SHARED_CONTEXT_ID,
+        "proof-golden-discriminating",
+        "[source-route]",
+    ] {
+        ensure!(
+            !body.contains(private),
+            "private evidence leaked: {private}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn review_renderer_failed_proof_leads_green_proof_and_verification() -> Result<()> {
+    let mut case = discriminating_proof_case();
+    let mut failed = red_green_receipt("proof-private-failed", "head_failed", "failed", Vec::new());
+    failed.kind = "focused-test".to_owned();
+    failed.test_patch_mode = "head-only".to_owned();
+    failed.commands.truncate(1);
+    failed.commands[0].status = "failed".to_owned();
+    failed.commands[0].exit_code = Some(1);
+    failed.reason = "HEAD test failed".to_owned();
+    case.proof_receipts.push(failed);
+    case.summary_only_findings.push(summary_finding(
+        "Confirm `Pool::lease` reaches the changed zero-length guard.",
+    ));
+    let surface = case.compile()?;
+    let body = &surface.github_review.body;
+    ensure!(surface.should_prepare_github_review);
+    ensure!(
+        body.starts_with(
+            "## Decision\n\n- Needs focused proof failure resolved before upstream.\n"
+        ),
+        "green proof must not obscure a current failure: {body}"
+    );
+    ensure!(body.contains("Confirm `Pool::lease` reaches the changed zero-length guard."));
+    ensure!(body.contains("Focused HEAD proof failed"));
+    ensure!(body.contains("HEAD passed (exit 0) and base+tests failed (exit 1)"));
+    ensure!(
+        body.lines()
+            .filter(|line| line.starts_with('#'))
+            .collect::<Vec<_>>()
+            == ["## Decision", "## Verification questions", "## Test proof"],
+        "failure and question must retain distinct navigable sections: {body}"
+    );
+    ensure!(!body.contains("proof-private-failed"));
+    Ok(())
+}
+
+#[test]
+fn review_renderer_green_proof_does_not_answer_a_source_route_question() -> Result<()> {
+    let mut case = discriminating_proof_case();
+    case.summary_only_findings.push(summary_finding(
+        "Confirm base+tests red/green proof covers `Pool::lease` reaching the changed zero-length guard.",
+    ));
+    let surface = case.compile()?;
+    let body = &surface.github_review.body;
+    ensure!(surface.should_prepare_github_review);
+    ensure!(
+        body.starts_with("## Decision\n\n- Needs one verification check before upstream.\n"),
+        "patch discrimination does not establish source-route coverage: {body}"
+    );
+    ensure!(body.contains("Confirm base+tests red/green proof covers `Pool::lease` reaching the changed zero-length guard."));
+    ensure!(body.contains("HEAD passed (exit 0) and base+tests failed (exit 1)"));
+    ensure!(
+        body.lines()
+            .filter(|line| line.starts_with('#'))
+            .collect::<Vec<_>>()
+            == ["## Decision", "## Verification questions", "## Test proof"],
+        "question must lead supporting proof: {body}"
+    );
+    // The identical question is answered when it asks only for test evidence.
+    case.summary_only_findings[0].lane = "tests-oracle".to_owned();
+    let test_question = case.compile()?;
+    ensure!(
+        test_question
+            .github_review
+            .body
+            .starts_with("## Test proof\n\n")
+    );
+    ensure!(!test_question.github_review.body.contains("## Decision"));
+    ensure!(
+        !test_question
+            .github_review
+            .body
+            .contains("## Verification questions")
+    );
+    // Positive/quiet controls prevent 'always needs attention' from passing.
+    let proof_only = discriminating_proof_case().compile()?;
+    ensure!(
+        proof_only
+            .github_review
+            .body
+            .starts_with("## Test proof\n\n")
+    );
+    ensure!(!proof_only.github_review.body.contains("## Decision"));
+    let clean = clean_case().compile()?;
+    ensure!(!clean.should_prepare_github_review);
+    ensure!(clean.github_review.body.is_empty());
     Ok(())
 }

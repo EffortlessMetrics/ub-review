@@ -36,6 +36,13 @@ pub(crate) struct InitPackageScript {
 }
 
 pub(crate) fn cmd_init(args: InitArgs) -> Result<()> {
+    if args.profile.key() == "custom" {
+        bail!(
+            "`init --profile custom` cannot generate a valid starter without a \
+             [profiles.custom] definition; use a built-in --profile value or author the \
+             config manually with [profiles.custom] before running `ub-review doctor`"
+        );
+    }
     if args.path.exists() && !args.force {
         bail!(
             "{} already exists; pass --force to overwrite",
@@ -61,6 +68,7 @@ pub(crate) fn cmd_init(args: InitArgs) -> Result<()> {
                 args.root.display()
             );
         }
+        preflight_init_guide_destination(&args.guide_out)?;
     }
     let config = starter_config(args.profile.key());
     let guide = if args.no_guide {
@@ -73,6 +81,59 @@ pub(crate) fn cmd_init(args: InitArgs) -> Result<()> {
     if let Some(guide) = guide {
         fs::write(&args.guide_out, guide)?;
         println!("wrote {}", args.guide_out.display());
+    }
+    Ok(())
+}
+
+fn preflight_init_guide_destination(path: &Path) -> Result<()> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let parent_metadata = fs::metadata(parent).with_context(|| {
+        format!(
+            "cannot access guide parent {} for {}; pass --guide-out <file> or --no-guide",
+            parent.display(),
+            path.display()
+        )
+    })?;
+    if !parent_metadata.is_dir() {
+        bail!(
+            "guide parent {} for {} is not a directory; pass --guide-out <file> or --no-guide",
+            parent.display(),
+            path.display()
+        );
+    }
+    match fs::metadata(path) {
+        Ok(metadata) if metadata.is_dir() => {
+            bail!(
+                "{} is a directory; pass --guide-out <file> or --no-guide",
+                path.display()
+            );
+        }
+        Ok(metadata) if metadata.is_file() => {
+            fs::OpenOptions::new()
+                .write(true)
+                .create(false)
+                .truncate(false)
+                .open(path)
+                .with_context(|| {
+                    format!(
+                        "cannot write guide {}; pass --guide-out <file> or --no-guide",
+                        path.display()
+                    )
+                })?;
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "cannot inspect guide {}; pass --guide-out <file> or --no-guide",
+                    path.display()
+                )
+            });
+        }
     }
     Ok(())
 }
@@ -109,6 +170,10 @@ pub(crate) fn init_destination_key(path: &Path) -> Result<PathBuf> {
             .context("resolve current directory for init output paths")?
             .join(path)
     };
+    if absolute.exists() {
+        return fs::canonicalize(&absolute)
+            .with_context(|| format!("resolve existing init output {}", path.display()));
+    }
     Ok(init_normalize_path_lexically(&absolute))
 }
 
@@ -131,13 +196,15 @@ pub(crate) fn init_normalize_path_lexically(path: &Path) -> PathBuf {
 }
 
 pub(crate) fn render_init_guide(args: &InitArgs, config: &Config) -> Result<String> {
+    let config_path = init_posix_shell_path(&args.path)?;
+    let root_path = init_posix_shell_path(&args.root)?;
     let inspection = inspect_init_guide_repo(&args.root)?;
     let mut text = String::new();
     text.push_str("# ub-review init guide\n\n");
     text.push_str("## Decision\n\n");
     text.push_str(&format!(
         "- Starter config: `{}` using profile `{}`.\n",
-        args.path.display(),
+        init_markdown_inline_code(&args.path.to_string_lossy()),
         config.profile
     ));
     text.push_str(
@@ -146,7 +213,10 @@ pub(crate) fn render_init_guide(args: &InitArgs, config: &Config) -> Result<Stri
     text.push_str("- `audit-ci` and `setup-ci` own CI migration; `init` only writes the starter config and this handoff.\n\n");
 
     text.push_str("## Repo inspection\n\n");
-    text.push_str(&format!("- Root: `{}`.\n", inspection.root.display()));
+    text.push_str(&format!(
+        "- Root: `{}`.\n",
+        init_markdown_inline_code(&inspection.root.to_string_lossy())
+    ));
     if inspection.build_systems.is_empty() {
         text.push_str("- Build systems: no recognized manifest found; add required proof commands manually.\n");
     } else {
@@ -217,15 +287,17 @@ pub(crate) fn render_init_guide(args: &InitArgs, config: &Config) -> Result<Stri
     render_init_config_proposal(&mut text, &inspection);
 
     text.push_str("\n## Recommended path\n\n");
-    text.push_str(&format!(
-        "1. Run `ub-review doctor --config {} --root {} --require-core-tools` and fix missing tools or provider keys before trusting the standard gate image.\n",
-        args.path.display(),
-        args.root.display()
-    ));
-    text.push_str(&format!(
-        "2. Run `ub-review audit-ci --root {} --out target/ub-review` for read-only CI receipts.\n",
-        args.root.display()
-    ));
+    text.push_str("These commands use POSIX `sh` syntax. Run them from the same working directory used for `init`.\n\n");
+    text.push_str("1. Run doctor and fix missing tools or provider keys before trusting the standard gate image.\n");
+    render_init_posix_command(
+        &mut text,
+        &format!("ub-review doctor --config={config_path} --root={root_path} --require-core-tools"),
+    );
+    text.push_str("2. Collect read-only CI receipts.\n");
+    render_init_posix_command(
+        &mut text,
+        &format!("ub-review audit-ci --root={root_path} --out target/ub-review"),
+    );
     text.push_str(
         "3. Run `ub-review setup-ci --print-pr --out target/ub-review` to inspect the migration without writes.\n",
     );
@@ -244,6 +316,35 @@ pub(crate) fn render_init_guide(args: &InitArgs, config: &Config) -> Result<Stri
     text.push_str("- Follow-up capture: route real out-of-scope work into issue candidates with evidence, plan, and acceptance criteria.\n");
 
     Ok(text)
+}
+
+fn init_posix_shell_path(path: &Path) -> Result<String> {
+    let value = path
+        .to_str()
+        .context("POSIX command paths must be valid UTF-8")?;
+    anyhow::ensure!(
+        !value.contains('\r'),
+        "POSIX command paths must not contain carriage returns: Markdown changes line endings"
+    );
+    Ok(format!("'{}'", value.replace('\'', "'\\''")))
+}
+
+fn render_init_posix_command(text: &mut String, command: &str) {
+    let fence_length = command
+        .split(|ch| ch != '`')
+        .map(str::len)
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1)
+        .max(3);
+    let fence = "`".repeat(fence_length);
+    text.push_str(&format!("\n   {fence}sh\n"));
+    for line in command.split('\n') {
+        text.push_str("   ");
+        text.push_str(line);
+        text.push('\n');
+    }
+    text.push_str(&format!("   {fence}\n\n"));
 }
 
 pub(crate) fn render_init_audit_ci_summary(text: &mut String, inspection: &InitGuideInspection) {
@@ -512,7 +613,6 @@ pub(crate) fn inspect_init_guide_repo(root: &Path) -> Result<InitGuideInspection
         .count();
     let unsafe_native_found = rust_files
         .iter()
-        .take(256)
         .any(|path| init_rust_file_has_unsafe_native(path));
     let docs_or_specs_count = collect_init_repo_files(&root, is_init_docs_or_spec_file, 256).len();
     let mut build_systems = Vec::new();
@@ -920,5 +1020,157 @@ pub(crate) fn init_join_or_none(values: &[String]) -> String {
         "none detected".to_owned()
     } else {
         values.join(", ")
+    }
+}
+
+#[cfg(test)]
+mod profile_tests {
+    use super::*;
+    use clap::ValueEnum;
+
+    #[test]
+    fn init_custom_profile_rejects_before_creating_or_overwriting_outputs() -> Result<()> {
+        for no_guide in [false, true] {
+            for force in [false, true] {
+                for existing in [false, true] {
+                    let temp = tempfile::tempdir()?;
+                    let path = temp.path().join("custom.toml");
+                    let guide_out = temp.path().join("custom-guide.md");
+                    if existing {
+                        fs::write(&path, "config sentinel\n")?;
+                        fs::write(&guide_out, "guide sentinel\n")?;
+                    }
+                    let result = cmd_init(InitArgs {
+                        path: path.clone(),
+                        root: temp.path().to_path_buf(),
+                        guide_out: guide_out.clone(),
+                        no_guide,
+                        profile: ProfileArg::Custom,
+                        force,
+                    });
+                    let error = result.err().context("custom init unexpectedly succeeded")?;
+                    let diagnostic = error.to_string();
+                    anyhow::ensure!(
+                        diagnostic.contains("init --profile custom")
+                            && diagnostic.contains("[profiles.custom]"),
+                        "missing custom-profile recovery guidance: {diagnostic}"
+                    );
+                    if existing {
+                        anyhow::ensure!(fs::read(&path)? == b"config sentinel\n");
+                        anyhow::ensure!(fs::read(&guide_out)? == b"guide sentinel\n");
+                    } else {
+                        anyhow::ensure!(!path.exists(), "rejected init created its config");
+                        anyhow::ensure!(!guide_out.exists(), "rejected init created its guide");
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn init_accepted_profiles_survive_full_config_loader() -> Result<()> {
+        for profile in ProfileArg::value_variants() {
+            if matches!(profile, ProfileArg::Custom) {
+                continue;
+            }
+            let temp = tempfile::tempdir()?;
+            let path = temp.path().join("config.toml");
+            cmd_init(InitArgs {
+                path: path.clone(),
+                root: temp.path().to_path_buf(),
+                guide_out: temp.path().join("unused-guide.md"),
+                no_guide: true,
+                profile: profile.clone(),
+                force: false,
+            })?;
+            let reloaded = Config::load_or_default(&path, None)?;
+            anyhow::ensure!(
+                reloaded.policy_errors.is_empty(),
+                "generated profile `{}` failed its own loader: {:?}",
+                profile.key(),
+                reloaded.policy_errors
+            );
+            anyhow::ensure!(!temp.path().join("unused-guide.md").exists());
+            let original = fs::read(&path)?;
+            let repeated = cmd_init(InitArgs {
+                path: path.clone(),
+                root: temp.path().to_path_buf(),
+                guide_out: temp.path().join("unused-guide.md"),
+                no_guide: true,
+                profile: profile.clone(),
+                force: false,
+            });
+            anyhow::ensure!(repeated.is_err(), "init unexpectedly overwrote {profile:?}");
+            anyhow::ensure!(fs::read(&path)? == original);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn init_rejection_preserves_config_owned_custom_profile_support() -> Result<()> {
+        let mut config = starter_config("custom");
+        let custom = config
+            .profiles
+            .get("gh-runner")
+            .cloned()
+            .context("missing built-in gh-runner profile")?;
+        config.profiles.insert("custom".to_owned(), custom);
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("custom.toml");
+        fs::write(&path, render_starter_config(&config)?)?;
+        let reloaded = Config::load_or_default(&path, None)?;
+        anyhow::ensure!(reloaded.policy_errors.is_empty());
+        anyhow::ensure!(reloaded.profile == "custom");
+        anyhow::ensure!(reloaded.profiles.contains_key("custom"));
+
+        Ok(())
+    }
+}
+
+#[cfg(all(test, unix))]
+mod guide_presentation_tests {
+    use super::*;
+
+    #[test]
+    fn init_guide_identifies_the_inspected_root_with_safe_literal_metadata() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        for (name, display_name) in [
+            ("repo", "repo"),
+            ("My Repo", "My Repo"),
+            ("literal`root", "literal'root"),
+            ("line\n```\nroot", "line ''' root"),
+        ] {
+            let root = temp.path().join(name);
+            fs::create_dir(&root)?;
+            let args = InitArgs {
+                path: temp.path().join("config.toml"),
+                root,
+                guide_out: temp.path().join("guide.md"),
+                no_guide: false,
+                profile: ProfileArg::Cx23,
+                force: false,
+            };
+            let guide = render_init_guide(&args, &starter_config("cx23"))?;
+            let inspection = guide
+                .split_once("## Repo inspection\n\n")
+                .context("repo inspection section is missing")?
+                .1
+                .split_once("\n## Sensor receipts")
+                .context("repo inspection section is not bounded")?
+                .0;
+            let root_lines = inspection
+                .lines()
+                .filter(|line| line.starts_with("- Root: "))
+                .collect::<Vec<_>>();
+            let expected = format!("- Root: `{}/{display_name}`.", temp.path().display());
+            assert_eq!(
+                root_lines,
+                vec![expected.as_str()],
+                "guide must identify the inspected root on one safe metadata line"
+            );
+        }
+
+        Ok(())
     }
 }

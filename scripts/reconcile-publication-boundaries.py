@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail-closed publication-boundary entrypoint over the retained core checker.
 
-The core implementation remains byte-identical to the reviewed #1304 candidate.
+The core implements the retained shadow publication comparison.
 This entrypoint adds the final completeness invariant found during exact-head
 source review: a successful terminal transaction must account for every
 prepared inline delivery. Retry/subset transactions remain unverifiable until
