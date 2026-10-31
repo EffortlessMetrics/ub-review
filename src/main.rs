@@ -39,6 +39,7 @@ pub(crate) use proof::*;
 pub(crate) use proof_task_ledger::*;
 mod tools;
 pub(crate) use tools::*;
+mod analyzer_selection;
 mod lanes;
 pub(crate) use lanes::*;
 mod observations;
@@ -201,6 +202,7 @@ fn main() -> Result<()> {
         Command::Recommend(args) => cmd_recommend(args),
         Command::Promote(args) => cmd_promote(args),
         Command::Doctor(args) => cmd_doctor(args),
+        Command::VerifyAnalyzerBundle(args) => analyzer_selection::cmd_verify_analyzer_bundle(args),
         Command::Cache(args) => cmd_cache(args),
         Command::Plan(args) => cmd_plan(args),
         Command::Run(args) => {
