@@ -1761,6 +1761,7 @@ mod tests {
             reviewed_commit_oid: merge.clone(),
             pr_head_commit: Some(HEAD.to_owned()),
             worktree_dirty: false,
+            worktree_evidence: None,
         };
         for case in [
             "valid",
