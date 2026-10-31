@@ -187,7 +187,6 @@ impl RevisionIdentity {
         Self::diff_digest(bytes) == self.diff
     }
 
-
     /// Validates and constructs an identity from resolved object ids.
     ///
     /// All object ids must share one width (all sha1 or all sha256): mixing

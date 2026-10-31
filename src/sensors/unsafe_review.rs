@@ -325,6 +325,30 @@ pub(crate) fn read_unsafe_review_artifacts(
 ) -> Result<UnsafeReviewArtifacts, UnsafeReviewIngestGap> {
     let out_dir = sensor_dir.join(UNSAFE_REVIEW_OUTPUT_SUBDIR);
     let gate_path = out_dir.join("unsafe-review-gate.json");
+    // The pointer check below cannot establish this initial manifest's custody:
+    // both the output directory and the manifest may themselves be symlinks.
+    // Anchor the output to the caller's sensor directory before reading bytes.
+    let gate_path = match fs::canonicalize(&gate_path) {
+        Ok(path) => path,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(UnsafeReviewIngestGap::Absent);
+        }
+        Err(err) => return Err(UnsafeReviewIngestGap::Unreadable(err.to_string())),
+    };
+    let canonical_sensor_dir = fs::canonicalize(sensor_dir)
+        .map_err(|err| UnsafeReviewIngestGap::Unreadable(err.to_string()))?;
+    let canonical_out_dir = fs::canonicalize(&out_dir)
+        .map_err(|err| UnsafeReviewIngestGap::Unreadable(err.to_string()))?;
+    if !canonical_out_dir.starts_with(&canonical_sensor_dir) {
+        return Err(UnsafeReviewIngestGap::Unreadable(
+            "canonical output directory escapes sensor directory".to_owned(),
+        ));
+    }
+    if !gate_path.starts_with(&canonical_out_dir) {
+        return Err(UnsafeReviewIngestGap::Unreadable(
+            "canonical gate target escapes output directory".to_owned(),
+        ));
+    }
     let text = match fs::read_to_string(&gate_path) {
         Ok(text) => text,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -352,7 +376,7 @@ pub(crate) fn read_unsafe_review_artifacts(
         .artifacts
         .get("comment_plan")
         .ok_or(UnsafeReviewIngestGap::CommentPlanMissingPointer)?;
-    let comment_plan_path = confined_comment_plan_path(&out_dir, comment_plan_rel)?;
+    let comment_plan_path = confined_comment_plan_path(&canonical_out_dir, comment_plan_rel)?;
     let comment_plan_text = fs::read_to_string(&comment_plan_path)
         .map_err(|err| UnsafeReviewIngestGap::CommentPlanUnreadable(err.to_string()))?;
     let comment_plan = parse_comment_plan(&comment_plan_text)?;
@@ -828,6 +852,81 @@ mod tests {
             gap,
             super::UnsafeReviewIngestGap::CommentPlanInvalidPointer(_)
         ));
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn structured_gate_symlink_escape_is_rejected() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir =
+            write_comment_plan_gate(&sensor_dir, r#"{"comment_plan":"comment-plan.json"}"#)?;
+        fs::write(
+            out_dir.join("comment-plan.json"),
+            r#"{"schema_version":"0.1","comments":[]}"#,
+        )?;
+        let gate_path = out_dir.join("unsafe-review-gate.json");
+        let outside = temp.path().join("harmless-outside-gate.json");
+        fs::rename(&gate_path, &outside)?;
+        std::os::unix::fs::symlink(&outside, &gate_path)?;
+        let result = super::read_unsafe_review_artifacts(&sensor_dir);
+        assert_eq!(
+            result.err(),
+            Some(super::UnsafeReviewIngestGap::Unreadable(
+                "canonical gate target escapes output directory".to_owned()
+            ))
+        );
+        assert!(fs::read_to_string(outside)?.contains("advisory"));
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn structured_output_directory_symlink_escape_is_rejected() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir =
+            write_comment_plan_gate(&sensor_dir, r#"{"comment_plan":"comment-plan.json"}"#)?;
+        fs::write(
+            out_dir.join("comment-plan.json"),
+            r#"{"schema_version":"0.1","comments":[]}"#,
+        )?;
+        let outside = temp.path().join("harmless-outside-output");
+        fs::rename(&out_dir, &outside)?;
+        std::os::unix::fs::symlink(&outside, &out_dir)?;
+        let result = super::read_unsafe_review_artifacts(&sensor_dir);
+        assert_eq!(
+            result.err(),
+            Some(super::UnsafeReviewIngestGap::Unreadable(
+                "canonical output directory escapes sensor directory".to_owned()
+            ))
+        );
+        assert!(fs::read_to_string(outside.join("comment-plan.json"))?.contains("comments"));
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn structured_contained_symlinks_preserve_advisory_evidence() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir =
+            write_comment_plan_gate(&sensor_dir, r#"{"comment_plan":"comment-plan.json"}"#)?;
+        let retained = out_dir.join("retained");
+        fs::create_dir(&retained)?;
+        fs::write(
+            retained.join("plan.json"),
+            r#"{"schema_version":"0.1","comments":[]}"#,
+        )?;
+        let gate_path = out_dir.join("unsafe-review-gate.json");
+        fs::rename(&gate_path, retained.join("gate.json"))?;
+        std::os::unix::fs::symlink("retained/gate.json", &gate_path)?;
+        std::os::unix::fs::symlink("retained/plan.json", out_dir.join("comment-plan.json"))?;
+        let artifacts = super::read_unsafe_review_artifacts(&sensor_dir)
+            .map_err(|gap| anyhow::anyhow!("contained artifacts rejected: {gap:?}"))?;
+        assert_eq!(artifacts.gate.status, "advisory");
+        assert!(artifacts.comment_plan.is_empty());
         Ok(())
     }
 
