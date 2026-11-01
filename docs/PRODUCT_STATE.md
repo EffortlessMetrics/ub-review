@@ -1,9 +1,9 @@
 # Product state
 
-_Last reconciled against `main` at `4cc2e90` on 2026-10-30 UTC; roadmap
+_Last reconciled against `main` at `30a0ab8`+ on 2026-10-31 UTC; roadmap
 dependencies retain the model-off CI-efficiency amendment. Merged [#1289]
 provides bounded shadow comparisons, not completed #957 acceptance. The
-2026-10-29/30 gate-train wave landed 40 fix PRs and closed 5 superseded
+2026-10-29/30 gate-train wave landed 40 fix PRs and closed 5 superseded; the follow-up draft train landed 24 more (see git log 2026-10-31)
 branches; #1608 restored `main` after two gate-green PRs (#1520's
 `normalize_repo_path` change and b9df50b's broker `b/`-path test) semantically
 conflicted: the bun focused-test detector now accepts a `test`/`tests`
