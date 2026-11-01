@@ -7869,6 +7869,7 @@ fn real_fake_tool_writers_survive_concurrent_launches() -> Result<()> {
     use std::thread;
 
     let temp = tempfile::tempdir()?;
+    let cwd = tempfile::tempdir_in("/tmp")?;
     let start = Arc::new(Barrier::new(5));
     thread::scope(|scope| -> Result<()> {
         let mut launchers = Vec::new();
@@ -7888,7 +7889,12 @@ fn real_fake_tool_writers_survive_concurrent_launches() -> Result<()> {
             write_fake_bun(&dir)?;
             write_fake_cargo(&dir)?;
             for tool in ["bun", "cargo"] {
-                let output = Command::new(dir.join(tool)).fixture_output()?;
+                let output = Command::new(dir.join(tool))
+                    .current_dir(cwd.path())
+                    .env_remove("FAKE_BUN_SLEEP_SECONDS")
+                    .env_remove("FAKE_CARGO_LOG")
+                    .env_remove("FAKE_CARGO_SLEEP_SECONDS")
+                    .fixture_output()?;
                 assert!(output.status.success());
                 assert_eq!(output.stdout, format!("fake {tool} \n").as_bytes());
             }

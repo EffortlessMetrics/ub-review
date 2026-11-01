@@ -23,7 +23,17 @@ const FALSE_POSITIVE_THRESHOLD: f64 = 0.10; // 10%
 /// recommendation logic.
 pub(crate) fn load_calibration(run_dir: &Path) -> Result<CalibrationArtifact> {
     let path = run_dir.join("review").join("calibration.json");
-    let bytes = fs::read(&path).with_context(|| format!("read {}", path.display()))?;
+    let bytes = fs::read(&path).map_err(|error| {
+        let context = if error.kind() == std::io::ErrorKind::NotFound {
+            format!(
+                "read {}; missing calibration artifact; select an existing completed run with `ub-review status --run-dir <RUN_DIR>`",
+                path.display()
+            )
+        } else {
+            format!("read {}", path.display())
+        };
+        anyhow::Error::new(error).context(context)
+    })?;
     let artifact: CalibrationArtifact = serde_json::from_slice(&bytes)
         .with_context(|| format!("parse {} as calibration artifact", path.display()))?;
     if artifact.schema != CALIBRATION_SCHEMA {
@@ -559,6 +569,62 @@ mod tests {
         assert_eq!(loaded.schema, CALIBRATION_SCHEMA);
         assert_eq!(loaded.cohort.provider, "minimax");
         assert_eq!(loaded.classification.suggested_class, "expected-quiet");
+        Ok(())
+    }
+
+    #[test]
+    fn missing_calibration_names_input_and_recovery() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        for run_dir in [temp.path().to_path_buf(), temp.path().join("absent run")] {
+            let error = load_calibration(&run_dir)
+                .err()
+                .context("missing artifact must fail")?;
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "read {}; missing calibration artifact; select an existing completed run with `ub-review status --run-dir <RUN_DIR>`",
+                    run_dir.join("review/calibration.json").display()
+                )
+            );
+            assert_eq!(
+                error
+                    .downcast_ref::<std::io::Error>()
+                    .map(std::io::Error::kind),
+                Some(std::io::ErrorKind::NotFound)
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn malformed_calibration_keeps_parse_context() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        fs::create_dir_all(&review_dir)?;
+        let path = review_dir.join("calibration.json");
+        fs::write(&path, b"{")?;
+        let error = load_calibration(temp.path())
+            .err()
+            .context("malformed artifact must fail")?;
+        assert_eq!(
+            error.to_string(),
+            format!("parse {} as calibration artifact", path.display())
+        );
+        assert!(error.downcast_ref::<serde_json::Error>().is_some());
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_calibration_keeps_read_context() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("review/calibration.json");
+        fs::create_dir_all(&path)?;
+        let error = load_calibration(temp.path())
+            .err()
+            .context("directory artifact must fail")?;
+        assert_eq!(error.to_string(), format!("read {}", path.display()));
+        assert!(error.downcast_ref::<std::io::Error>().is_some());
         Ok(())
     }
 

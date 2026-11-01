@@ -116,6 +116,32 @@ pub(crate) fn build_compiler_reconciliation_receipt(
     })
 }
 
+/// Apply the reconciliation outcome before public artifacts are written.
+/// A compiler error has no native process completion to credit as evidence.
+pub(crate) fn finalize_compiler_reconciliation(
+    result: Result<CompilerReconciliationReceipt>,
+    head_sha: &str,
+    sensor_issues: &mut Vec<SensorEvidenceIssue>,
+    inline_comments: &mut Vec<ReviewInlineComment>,
+    summary_findings: &mut Vec<SummaryOnlyFinding>,
+) -> CompilerReconciliationReceipt {
+    match result {
+        Ok(receipt) => receipt,
+        Err(error) => {
+            sensor_issues.push(SensorEvidenceIssue {
+                sensor: "compiler-reconciliation".to_owned(),
+                status: "failed".to_owned(),
+                reason: format!("final compiler reconciliation failed: {error:#}"),
+                exit_code: None,
+                timed_out: false,
+            });
+            inline_comments.clear();
+            summary_findings.clear();
+            compiler_reconciliation_failure(head_sha, format!("{error:#}"))
+        }
+    }
+}
+
 pub(crate) fn compiler_reconciliation_failure(
     head_sha: &str,
     error: impl Into<String>,
@@ -570,6 +596,83 @@ mod tests {
                 .to_string()
                 .contains("removed without an adjudication")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn reconciliation_outcome_preserves_native_evidence_and_publication_boundaries() -> Result<()> {
+        for fail in [true, false] {
+            let mut inline = vec![ReviewInlineComment {
+                lane: "ub-memory-lifetime".to_owned(),
+                severity: "high".to_owned(),
+                confidence: "high".to_owned(),
+                path: "src/allocation.rs".to_owned(),
+                line: 17,
+                side: "RIGHT".to_owned(),
+                body: "Distinct allocation lifetime finding.".to_owned(),
+                evidence: "allocation receipt".to_owned(),
+                suggestion: None,
+            }];
+            let mut findings = vec![summary("Unexplained parser loss.")];
+            let head = "reviewed-head";
+            let result = build_compiler_reconciliation_receipt(CompilerReconciliationInput {
+                head_sha: head,
+                observations: &[],
+                review_inline_comments: &inline,
+                review_summary_only_findings: &findings,
+                follow_up_summary_only_findings: &[],
+                resolved_away_candidates: &[],
+                final_inline_comments: &inline,
+                final_summary_only_findings: if fail { &[] } else { &findings },
+                graph: &build_shadow_claim_graph(head),
+            });
+            let original_inline = serde_json::to_value(&inline)?;
+            let original_findings = serde_json::to_value(&findings)?;
+            let original_result = result.as_ref().ok().map(serde_json::to_value).transpose()?;
+            let original_error = result.as_ref().err().map(|error| format!("{error:#}"));
+            assert_eq!(result.is_err(), fail, "exercise the real builder outcome");
+            let mut issues = vec![SensorEvidenceIssue {
+                sensor: "zizmor".to_owned(),
+                status: "missing".to_owned(),
+                reason: "command not found".to_owned(),
+                exit_code: None,
+                timed_out: false,
+            }];
+            let original_issues = serde_json::to_value(&issues)?;
+            let receipt = finalize_compiler_reconciliation(
+                result,
+                head,
+                &mut issues,
+                &mut inline,
+                &mut findings,
+            );
+            if fail {
+                let error = original_error.context("real builder error")?;
+                assert!(error.contains("removed without an adjudication"));
+                assert_eq!(receipt.status, "error");
+                assert_eq!(receipt.head_sha, head);
+                assert_eq!(receipt.error.as_deref(), Some(error.as_str()));
+                assert!(inline.is_empty());
+                assert!(findings.is_empty());
+                let wire = serde_json::to_value(&issues)?;
+                assert_eq!(wire.as_array().map(Vec::len), Some(2));
+                assert_eq!(wire[0], original_issues[0]);
+                assert_eq!(wire[1]["sensor"], "compiler-reconciliation");
+                assert_eq!(wire[1]["status"], "failed");
+                assert_eq!(
+                    wire[1]["reason"],
+                    format!("final compiler reconciliation failed: {error}")
+                );
+                assert!(wire[1].get("exit_code").is_none());
+                assert_eq!(wire[1]["timed_out"], false);
+                assert!(!sensor_issue_is_demonstrated_finding(&issues[1]));
+            } else {
+                assert_eq!(serde_json::to_value(&issues)?, original_issues);
+                assert_eq!(serde_json::to_value(&inline)?, original_inline);
+                assert_eq!(serde_json::to_value(&findings)?, original_findings);
+                assert_eq!(Some(serde_json::to_value(receipt)?), original_result);
+            }
+        }
         Ok(())
     }
 

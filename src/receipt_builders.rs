@@ -371,6 +371,8 @@ pub(crate) fn collect_sensor_evidence_issues(out: &Path, plan: &Plan) -> Vec<Sen
                 .as_ref()
                 .map(|receipt| receipt.status.clone())
                 .unwrap_or_else(|| "receipt-absent".to_owned());
+            let exit_code = receipt.as_ref().and_then(|receipt| receipt.exit_code);
+            let timed_out = receipt.as_ref().is_some_and(|receipt| receipt.timed_out);
             let reason = receipt
                 .map(|receipt| receipt.reason)
                 .unwrap_or_else(|| sensor.reason.clone());
@@ -383,6 +385,8 @@ pub(crate) fn collect_sensor_evidence_issues(out: &Path, plan: &Plan) -> Vec<Sen
                     sensor: sensor.id.clone(),
                     status: "artifact-gap".to_owned(),
                     reason: gap.reason(),
+                    exit_code,
+                    timed_out,
                 });
             }
             if !is_sensor_evidence_issue(sensor, &status, &reason) {
@@ -392,6 +396,8 @@ pub(crate) fn collect_sensor_evidence_issues(out: &Path, plan: &Plan) -> Vec<Sen
                 sensor: sensor.id.clone(),
                 status,
                 reason,
+                exit_code,
+                timed_out,
             })
         })
         .collect()

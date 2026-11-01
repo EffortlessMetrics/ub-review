@@ -1,8 +1,11 @@
 use std::fs;
-use std::process::{Command, Output, Stdio};
+use std::io::Read;
+use std::process::{Child, Command, ExitStatus, Output, Stdio};
+use std::sync::mpsc;
+use std::thread;
 use std::time::Duration;
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
@@ -130,14 +133,179 @@ impl Fixture {
             .current_dir(self.root.path())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        let mut child = command.spawn()?;
-        if child.wait_timeout(Duration::from_secs(20))?.is_none() {
-            child.kill()?;
-            child.wait()?;
+        wait_with_pipes(command.spawn()?, Duration::from_secs(20))
+    }
+}
+
+fn wait_with_pipes(mut child: Child, timeout: Duration) -> Result<Output> {
+    let mut stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("missing stdout"))?;
+    let mut stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("missing stderr"))?;
+    let (out_send, out_recv) = mpsc::channel();
+    let (err_send, err_recv) = mpsc::channel();
+    thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let _ = out_send.send(stdout.read_to_end(&mut bytes).map(|_| bytes));
+    });
+    thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let _ = err_send.send(stderr.read_to_end(&mut bytes).map(|_| bytes));
+    });
+    let wait_result = child.wait_timeout(timeout);
+    let status = resolve_wait(wait_result, || {
+        let killed = child.kill();
+        finish_termination(killed, || child.wait_timeout(Duration::from_secs(2)))
+    })?;
+    let stdout = out_recv
+        .recv_timeout(Duration::from_secs(2))
+        .context("stdout reader did not finish")?
+        .context("stdout read failed")?;
+    let stderr = err_recv
+        .recv_timeout(Duration::from_secs(2))
+        .context("stderr reader did not finish")?
+        .context("stderr read failed")?;
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+fn resolve_wait(
+    wait_result: std::io::Result<Option<ExitStatus>>,
+    cleanup: impl FnOnce() -> Result<()>,
+) -> Result<ExitStatus> {
+    Ok(match wait_result {
+        Ok(Some(status)) => status,
+        Ok(None) => {
+            if let Err(error) = cleanup() {
+                bail!("recorded CLI timed out; cleanup failed: {error:#}");
+            }
             bail!("recorded CLI timed out");
         }
-        Ok(child.wait_with_output()?)
+        Err(error) => {
+            let cleanup = cleanup();
+            bail!("recorded CLI wait failed: {error}; cleanup: {cleanup:?}");
+        }
+    })
+}
+
+#[test]
+fn wait_error_runs_cleanup_and_preserves_both_errors() {
+    let calls = std::cell::Cell::new(0);
+    let result = resolve_wait(Err(std::io::Error::other("injected wait error")), || {
+        calls.set(calls.get() + 1);
+        bail!("injected cleanup error")
+    });
+    assert_eq!(calls.get(), 1);
+    let message = format!("{result:?}");
+    assert!(message.contains("injected wait error"));
+    assert!(message.contains("injected cleanup error"));
+    let result = resolve_wait(Err(std::io::Error::other("injected wait error")), || {
+        calls.set(calls.get() + 1);
+        Ok(())
+    });
+    assert_eq!(calls.get(), 2);
+    assert!(format!("{result:?}").contains("cleanup: Ok(())"));
+}
+
+fn finish_termination(
+    killed: std::io::Result<()>,
+    wait: impl FnOnce() -> std::io::Result<Option<ExitStatus>>,
+) -> Result<()> {
+    killed.context("kill failed")?;
+    if wait().context("reap failed")?.is_none() {
+        bail!("reap timed out");
     }
+    Ok(())
+}
+
+#[test]
+fn failed_kill_is_reported_without_waiting() {
+    let waited = std::cell::Cell::new(false);
+    let result = finish_termination(Err(std::io::Error::other("injected kill failure")), || {
+        waited.set(true);
+        Ok(None)
+    });
+    assert!(!waited.get());
+    assert!(format!("{result:?}").contains("injected kill failure"));
+}
+
+#[test]
+fn failed_or_timed_out_reap_is_reported() {
+    let error = finish_termination(Ok(()), || {
+        Err(std::io::Error::other("injected reap failure"))
+    });
+    assert!(format!("{error:?}").contains("injected reap failure"));
+    let timeout = finish_termination(Ok(()), || Ok(None));
+    assert!(format!("{timeout:?}").contains("reap timed out"));
+}
+
+#[cfg(unix)]
+#[test]
+fn bounded_pipe_capture_kills_and_reaps_timed_out_child() -> Result<()> {
+    let child = Command::new("sh")
+        .args(["-c", "exec sleep 5"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let start = std::time::Instant::now();
+    let error = wait_with_pipes(child, Duration::from_millis(100))
+        .err()
+        .ok_or_else(|| anyhow::anyhow!("timed-out child succeeded"))?;
+    assert!(error.to_string().contains("recorded CLI timed out"));
+    assert!(start.elapsed() < Duration::from_secs(3));
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn pipe_capture_preserves_large_stdout_stderr_and_exit_status() -> Result<()> {
+    let child = Command::new("sh")
+        .args([
+            "-c",
+            "head -c 200000 /dev/zero; head -c 200000 /dev/zero >&2; exit 7",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let output = wait_with_pipes(child, Duration::from_secs(5))?;
+    assert_eq!(output.status.code(), Some(7));
+    assert_eq!(output.stdout.len(), 200_000);
+    assert_eq!(output.stderr.len(), 200_000);
+    Ok(())
+}
+
+#[test]
+fn large_pinned_answer_export_drains_child_pipes() -> Result<()> {
+    let mut f = Fixture::new()?;
+    let answer_path = f.root.path().join("answer.json");
+    let mut answer = fs::read(&answer_path)?;
+    answer.resize(60_599, b' ');
+    fs::write(&answer_path, &answer)?;
+    f.intake["answer"]["sha256"] = json!(hash(&answer));
+    let plan_path = f.root.path().join("plan.json");
+    let mut plan: Value = serde_json::from_slice(&fs::read(&plan_path)?)?;
+    plan["judgment_digest"] = json!(hash(&answer));
+    let plan = serde_json::to_vec(&plan)?;
+    fs::write(plan_path, &plan)?;
+    f.intake["plan"]["sha256"] = json!(hash(&plan));
+    let output = f.invoke("export", &[])?;
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stdout.len() > 65_536);
+    let view: Value = serde_json::from_slice(&output.stdout)?;
+    let recorded: Vec<u8> = serde_json::from_value(view["judgment"]["recorded_bytes"].clone())?;
+    assert_eq!(recorded, answer);
+    Ok(())
 }
 
 fn rejected(output: Output, message: &str) {
