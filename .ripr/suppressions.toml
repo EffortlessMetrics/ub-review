@@ -44171,3 +44171,53 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_judgment_public_plan.rs:match_arm:d35390de"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1390; probe PublicDisposition::Withheld { .. } => {}: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by duplicate_locations_forged_subjects_and_reference_tampering_fail, independent_body_anchor_and_input_size_controls_fail_closed, internal_audit_observations_are_withheld_from_public_review_boundary. Re-verify after any edit to src/review_judgment/public_plan.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec_completion.rs:match_arm:7060fc0d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1411; probe let diagnosis = match value.as_str() {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by adoption_docs_match_setup_ci_current_surface, ambiguous_cross_surface_match_is_not_explained, artifact_contract_docs_match_ci_audit_verifier_coverage. Re-verify after any edit to src/model_exec/completion.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec_completion.rs:match_arm:18d6f6b4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1411; probe Some(reason) if completed.contains(&reason) => continue,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cargo_allow_foreign_dialect_reason_wins_before_box_guard, cargo_allow_foreign_policy_ledger_skips_with_linked_artifact_reason, command_failure_reason_retains_signal_and_numeric_exit. Re-verify after any edit to src/model_exec/completion.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec_completion.rs:match_arm:fa9616f5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1411; probe Some(reason) if incomplete.contains(&reason) => reason,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cargo_allow_foreign_dialect_reason_wins_before_box_guard, cargo_allow_foreign_policy_ledger_skips_with_linked_artifact_reason, command_failure_reason_retains_signal_and_numeric_exit. Re-verify after any edit to src/model_exec/completion.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec_completion.rs:match_arm:e1fb8e4a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1411; probe Some(_) => \"unsupported\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by adjudicate_citation_beats_unsupported, calibration_guidance_rejects_unsupported_runs_without_changing_thresholds, complete_provider_turns_are_accepted. Re-verify after any edit to src/model_exec/completion.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec_completion.rs:match_arm:80cd991a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1411; probe None if value.is_null() => \"null\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by compiler_surface_caps_inline_comments_after_value_ranking, complete_provider_turns_are_accepted, completed_consumer_preserves_missing_content_and_unusable_text. Re-verify after any edit to src/model_exec/completion.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec_completion.rs:match_arm:f046cbb8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1411; probe None => \"non-string\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by badge_requires_an_explicit_string_schema_version, bound_gate_fixture_joins_canonical_admission, build_unsafe_review_inline_comments_skips_non_diff_anchor. Re-verify after any edit to src/model_exec/completion.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec_completion.rs:error_path:759a29b3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1411; probe bail!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by complete_provider_turns_are_accepted, completed_consumer_preserves_missing_content_and_unusable_text, completed_consumer_returns_exact_valued_clean_audit. Re-verify after any edit to src/model_exec/completion.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec_completion.rs:call_deletion:b18f2a6a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1411; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by complete_provider_turns_are_accepted, completed_consumer_preserves_missing_content_and_unusable_text, completed_consumer_returns_exact_valued_clean_audit. Re-verify after any edit to src/model_exec/completion.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec_completion.rs:return_value:fd4e9a42"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1411; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by complete_provider_turns_are_accepted, completed_consumer_preserves_missing_content_and_unusable_text, completed_consumer_returns_exact_valued_clean_audit. Re-verify after any edit to src/model_exec/completion.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_exec_completion.rs:return_value:946a94ed"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1411; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by anchoring_failure_keeps_the_model_finding_out_of_the_diagnostic, both_status_marker_cases_survive_wrapped_errors, calibration_missing_proof. Re-verify after any edit to src/model_exec/completion.rs."
