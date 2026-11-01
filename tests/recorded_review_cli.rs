@@ -281,12 +281,23 @@ fn repinned_stale_and_altered_views_sources_and_ci_are_rejected() -> Result<()> 
 #[test]
 fn independently_repinned_moved_revision_still_rejects_old_graph() -> Result<()> {
     let mut f = Fixture::new()?;
+    f.intake["answer"] = Value::Null;
+    f.intake["plan"] = Value::Null;
+    f.intake["delivery_subject"]["head_sha"] = json!("f".repeat(40));
     let path = f.root.path().join("revision.txt");
     let original = fs::read_to_string(&path)?;
     let moved = original.replace(&"a".repeat(40), &"f".repeat(40));
     fs::write(&path, &moved)?;
     f.intake["revision"]["sha256"] = json!(hash(moved.as_bytes()));
-    let source = f.source_json.replace(
+    let graph_path = f.root.path().join("graph.json");
+    let original_graph = fs::read_to_string(&graph_path)?;
+    let graph = original_graph.replace(
+        &format!("\"head_sha\":\"{}\"", "a".repeat(40)),
+        &format!("\"head_sha\":\"{}\"", "f".repeat(40)),
+    );
+    fs::write(&graph_path, &graph)?;
+    f.intake["graph"]["sha256"] = json!(hash(graph.as_bytes()));
+    let source = f.source_json.replace(&original_graph, &graph).replace(
         &serde_json::to_string(&original)?,
         &serde_json::to_string(&moved)?,
     );
@@ -295,6 +306,32 @@ fn independently_repinned_moved_revision_still_rejects_old_graph() -> Result<()>
         source.as_bytes()
     ));
     rejected(f.invoke("export", &[])?, "source validation rejected");
+    let original_revision: Value = serde_json::from_str(&original_graph)?;
+    let original_digest = original_revision["revision"]["digest"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("graph revision digest missing"))?;
+    let moved_graph = graph
+        .replace(
+            original_digest,
+            &domain_hash("ub-review.revision-identity.digest.v1", moved.as_bytes()),
+        )
+        .replace(
+            &format!("\"reviewed_commit\":\"{}\"", "a".repeat(40)),
+            &format!("\"reviewed_commit\":\"{}\"", "f".repeat(40)),
+        );
+    fs::write(graph_path, &moved_graph)?;
+    f.intake["graph"]["sha256"] = json!(hash(moved_graph.as_bytes()));
+    let moved_source = source.replace(&graph, &moved_graph);
+    f.intake["source_manifest_digest"] = json!(domain_hash(
+        "ub-review.recorded-judgment-source.v1",
+        moved_source.as_bytes()
+    ));
+    let output = f.invoke("export", &[])?;
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     Ok(())
 }
 

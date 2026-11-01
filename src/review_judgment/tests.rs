@@ -380,6 +380,31 @@ fn byte_tamper_source_staleness_and_ci_missingness_fail_before_lead() -> Result<
 }
 
 #[test]
+fn independently_repinned_graph_revision_mismatch_has_specific_diagnostic() -> Result<()> {
+    let mut fixture = Fixture::new()?;
+    fixture
+        .graph
+        .revision
+        .as_mut()
+        .ok_or_else(|| anyhow::anyhow!("missing graph revision"))?
+        .digest = "f".repeat(64);
+    let evidence = fixture.evidence();
+    let source = fixture.source(&evidence);
+    let error = validate_recorded_judgment(
+        &source,
+        &fixture.identity,
+        &source_manifest_digest(&source)?,
+        None,
+        None,
+        Some(&fixture.ci),
+    )
+    .err()
+    .ok_or_else(|| anyhow::anyhow!("stale graph was admitted"))?;
+    assert!(error.to_string().contains("graph revision mismatch"));
+    Ok(())
+}
+
+#[test]
 fn resealed_sources_still_require_current_identity_and_unambiguous_references() -> Result<()> {
     let mut fixture = Fixture::new()?;
     fixture.graph.claims.push(fixture.graph.claims[0].clone());
