@@ -3,13 +3,8 @@
 //! render lane prose, invoke a model, or prepare/post a production payload.
 //! Public-content admission/classification and delivery-subject authority are
 //! independently pinned caller obligations, not permissions minted here.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "policy/allow.toml#recorded-public-plan-shadow-1014"
-    )
-)]
+
+pub(crate) mod recorded_export;
 
 use std::collections::BTreeSet;
 use std::io::{self, Write};
@@ -232,6 +227,17 @@ pub(crate) fn validate_recorded_public_plan(
                 .is_none_or(|ci| ci.bytes.len() <= MAX_SOURCE_BYTES),
         "recorded evidence exceeds byte limit"
     );
+    let public = input.public_source;
+    ensure!(
+        public.diff_patch.len() <= MAX_SOURCE_BYTES,
+        "public source exceeds limit"
+    );
+    // Diff custody is mandatory even when the optional lead or plan is absent.
+    ensure!(
+        input.current_revision.matches_diff_bytes(public.diff_patch)
+            && RevisionIdentity::diff_digest(public.diff_patch) == public.diff_digest,
+        "recorded diff mismatch"
+    );
     let lead = validate_recorded_judgment(
         source,
         input.current_revision,
@@ -306,12 +312,10 @@ pub(crate) fn validate_recorded_public_plan(
         }
     }
     let plan: PublicReviewPlan = serde_json::from_slice(plan_bytes)?;
-    let public = input.public_source;
     ensure!(
         public.materials.len() <= MAX_ROWS
             && public.anchors.len() <= MAX_ROWS
-            && plan.items.len() <= MAX_ROWS
-            && public.diff_patch.len() <= MAX_SOURCE_BYTES,
+            && plan.items.len() <= MAX_ROWS,
         "public source exceeds limit"
     );
     ensure!(
@@ -333,11 +337,6 @@ pub(crate) fn validate_recorded_public_plan(
             && public.delivery_subject.pull_number > 0
             && public.delivery_subject.head_sha == input.current_revision.candidate_head_commit(),
         "invalid delivery subject"
-    );
-    ensure!(
-        input.current_revision.matches_diff_bytes(public.diff_patch)
-            && RevisionIdentity::diff_digest(public.diff_patch) == public.diff_digest,
-        "recorded diff mismatch"
     );
     let patch = std::str::from_utf8(public.diff_patch).context("recorded diff is not UTF-8")?;
     let lines = crate::right_side_diff_line_text(patch);
