@@ -6,6 +6,9 @@ use crate::review_judgment::{ImportedCi, RecordedEvidence, source_manifest_diges
 use crate::revision_identity::{CommitTree, ReviewSemantics};
 use serde_json::{Value, json};
 
+mod payload;
+mod recorded_export;
+
 const PATCH: &str = "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1 +1 @@\n-safe();\n+danger();\n";
 const BODY_A: &[u8] = b"This unchecked index may read beyond the allocation.";
 const BODY_B: &[u8] = b"The summary-only claim remains material without an inline anchor.";

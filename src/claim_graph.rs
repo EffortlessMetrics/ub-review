@@ -8,7 +8,7 @@
 //!
 //! Order 3 of the evidence-control-plane epic (#655).
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 use crate::artifacts::CLAIM_GRAPH_SCHEMA;
@@ -43,7 +43,8 @@ pub(crate) struct ClaimGraph {
 
 /// A single claim in the graph. Each claim corresponds to a candidate,
 /// observation, or finding from the review lanes.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct ClaimNode {
     pub(crate) id: String,
     /// What the claim asserts (e.g., "this test does not discriminate the patch").
@@ -151,7 +152,7 @@ pub(crate) fn should_continue_convergence(
 }
 
 /// The adjudication state of a claim.
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) enum ClaimState {
     /// Initial state — raised but not yet investigated.
     Hypothesized,
@@ -190,7 +191,8 @@ impl ClaimState {
 }
 
 /// A typed reference to a piece of evidence.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct EvidenceRef {
     /// Evidence class (determines precedence in adjudication).
     pub(crate) class: EvidenceClass,
@@ -202,7 +204,7 @@ pub(crate) struct EvidenceRef {
 
 /// The class of evidence, used for precedence-based adjudication
 /// (Order 4 of epic #655). Lower ordinal value = higher precedence.
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) enum EvidenceClass {
     /// Highest precedence: a deterministic proof receipt.
     ProofReceipt,
@@ -241,7 +243,8 @@ impl EvidenceClass {
 
 /// A causal relevance path explaining why a claim is related to the diff.
 /// (Order 5 of epic #655 enforces this for every surfaced claim.)
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct RelevancePath {
     /// The type of causal relationship.
     pub(crate) kind: RelevanceKind,
@@ -250,7 +253,7 @@ pub(crate) struct RelevancePath {
 }
 
 /// Types of causal relevance between a claim and the diff.
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) enum RelevanceKind {
     /// The claim is about a changed line.
     ChangedLine,
@@ -292,7 +295,8 @@ impl RelevanceKind {
 }
 
 /// A detected conflict between two or more claims.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct ConflictRecord {
     /// IDs of the conflicting claims.
     pub(crate) claim_ids: Vec<String>,
@@ -307,7 +311,7 @@ pub(crate) struct ConflictRecord {
 }
 
 /// How a conflict was (or wasn't) resolved.
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub(crate) enum ConflictResolution {
     /// Not yet resolved; awaiting evidence.
     Unresolved,
@@ -322,7 +326,8 @@ pub(crate) enum ConflictResolution {
 }
 
 /// An evidence gap: a claim that needs evidence but doesn't have it.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct ClaimEvidenceGap {
     pub(crate) claim_id: String,
     pub(crate) needed_evidence_class: String,
