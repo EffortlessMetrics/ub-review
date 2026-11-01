@@ -45661,3 +45661,13 @@ kind = "exposure_gap"
 finding_id = "probe:src_lanes.rs:match_arm:5f66e7ab"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1466; probe _ => continue,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by advisory_result_planes_cannot_override_legacy_gate_enforcement, bun_mixed_and_unknown_languages_keep_existing_focus, convergence_continues_with_unresolved_and_transitions. Re-verify after any edit to src/lanes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_diff_posture.rs:match_arm:7429cb6e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1466; probe let mut lanes = match diff_class {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by adoption_docs_match_setup_ci_current_surface, advisory_result_planes_cannot_override_legacy_gate_enforcement, ambiguous_cross_surface_match_is_not_explained. Re-verify after any edit to src/diff_posture.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:field_construction:0f891405"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1466; probe \"{} retains unrelated {unrelated} axis: {}\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_internal_audit_retains_no_evidence_semantics, advisory_result_planes_cannot_override_legacy_gate_enforcement, bun_mixed_and_unknown_languages_keep_existing_focus. Re-verify after any edit to src/lanes.rs."
