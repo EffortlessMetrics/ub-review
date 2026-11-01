@@ -44286,3 +44286,13 @@ kind = "exposure_gap"
 finding_id = "probe:src_main.rs:match_arm:71cfaf0a"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1498; probe Ok(receipt) => receipt,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_pr_thread_context_omits_reuse_rules, accounting_ambiguous_or_unbound_receipts_keep_reservation, action_config_input_overrides_bundled_preset_selection. Re-verify after any edit to src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:ba808354"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1498; probe sensor_issues: &mut Vec<SensorEvidenceIssue>,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by ambiguous_cross_surface_match_is_not_explained, cross_surface_duplicate_is_explicitly_accounted, current_head_thread_explains_removed_surface. Re-verify after any edit to src/compiler_reconciliation.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:match_arm:f9a5a6ee"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1498; probe Err(error) => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_pr_thread_context_omits_reuse_rules, action_config_input_overrides_bundled_preset_selection, action_release_download_verifies_sha256_receipt. Re-verify after any edit to src/main.rs."
