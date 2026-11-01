@@ -45611,3 +45611,13 @@ kind = "exposure_gap"
 finding_id = "probe:tests_analyzer_selection_blocked.rs:return_value:94c952c9"
 owner = "ub-review/core"
 reason = "reachable_unrevealed static-path gap on PR #1385; probe Ok(()): No assertion found on related tests. Reached by generation_only_tamper_is_rejected, inventory_order_and_checkout_root_do_not_change_generation, packet_is_blocked_and_sealed_against_frozen_mirrors. Re-verify after any edit to tests/analyzer_selection_blocked.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_analyzer_selection_blocked.rs:return_value:7d02b491"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1385; probe \"{:x}\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_ci_stays_absent_without_a_gate_result, accounting_ambiguous_or_unbound_receipts_keep_reservation, accounting_matrix_releases_early_commands_before_required_build. Re-verify after any edit to tests/analyzer_selection_blocked.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_analyzer_selection_blocked.rs:return_value:ab204719"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1385; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_internal_audit_retains_no_evidence_semantics, adoption_docs_match_setup_ci_current_surface, artifact_contract_docs_match_ci_audit_verifier_coverage. Re-verify after any edit to tests/analyzer_selection_blocked.rs."
