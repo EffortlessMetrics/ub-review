@@ -44531,3 +44531,13 @@ kind = "exposure_gap"
 finding_id = "probe:tests_recorded_review_cli.rs:call_deletion:1bdbbdc2"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1395; probe }): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_lead_is_distinct_from_declared_missing_or_invalid_lead, duplicate_intake_field_is_rejected_with_exact_raw_pin, graph_row_boundaries_precede_downstream_checks. Re-verify after any edit to tests/recorded_review_cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:b1eaef65"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1395; probe .fixture_output()?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_lead_is_distinct_from_declared_missing_or_invalid_lead, action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:b1eaef65.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1395; probe .fixture_output()?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_lead_is_distinct_from_declared_missing_or_invalid_lead, action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input. Re-verify after any edit to tests/cli.rs."
