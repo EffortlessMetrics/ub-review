@@ -46576,3 +46576,13 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_red_green.rs:match_arm:c7e73544"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1417; probe \"timed_out\" => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, base_worktree_cleanup_precedes_ledger_cleanup_completion, classify_passes_through_passed_timed_out_skipped. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:6b78083a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe run_selection_checked_command(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_pr_thread_context_omits_reuse_rules, action_config_input_overrides_bundled_preset_selection, action_release_download_verifies_sha256_receipt. Re-verify after any edit to src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:2b0b124a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1417; probe _ => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_base_target_cleans_before_decline_and_head_release_waits_for_publication, base_worktree_cleanup_precedes_ledger_cleanup_completion, real_timeout_cannot_be_relabelled_as_decisive_proof. Re-verify after any edit to src/proof/red_green.rs."
