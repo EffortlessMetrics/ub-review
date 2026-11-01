@@ -1,5 +1,7 @@
 use std::fs;
-use std::process::{Command, Output, Stdio};
+use std::io::Read;
+use std::process::{Child, Command, Output, Stdio};
+use std::thread;
 use std::time::Duration;
 
 use anyhow::{Result, bail};
@@ -130,14 +132,90 @@ impl Fixture {
             .current_dir(self.root.path())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        let mut child = command.spawn()?;
-        if child.wait_timeout(Duration::from_secs(20))?.is_none() {
-            child.kill()?;
-            child.wait()?;
-            bail!("recorded CLI timed out");
-        }
-        Ok(child.wait_with_output()?)
+        wait_with_pipes(command.spawn()?, Duration::from_secs(20))
     }
+}
+
+fn wait_with_pipes(mut child: Child, timeout: Duration) -> Result<Output> {
+    let mut stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("missing stdout"))?;
+    let mut stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("missing stderr"))?;
+    let out_reader = thread::spawn(move || {
+        let mut bytes = Vec::new();
+        stdout.read_to_end(&mut bytes).map(|_| bytes)
+    });
+    let err_reader = thread::spawn(move || {
+        let mut bytes = Vec::new();
+        stderr.read_to_end(&mut bytes).map(|_| bytes)
+    });
+    let status = child.wait_timeout(timeout);
+    if !matches!(status, Ok(Some(_))) {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    let stdout = out_reader
+        .join()
+        .map_err(|_| anyhow::anyhow!("stdout reader panicked"))??;
+    let stderr = err_reader
+        .join()
+        .map_err(|_| anyhow::anyhow!("stderr reader panicked"))??;
+    let Some(status) = status? else {
+        bail!("recorded CLI timed out");
+    };
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+#[cfg(unix)]
+#[test]
+fn bounded_pipe_capture_kills_and_reaps_timed_out_child() -> Result<()> {
+    let child = Command::new("sh")
+        .args(["-c", "exec sleep 5"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let start = std::time::Instant::now();
+    let error = wait_with_pipes(child, Duration::from_millis(100))
+        .err()
+        .ok_or_else(|| anyhow::anyhow!("timed-out child succeeded"))?;
+    assert!(error.to_string().contains("recorded CLI timed out"));
+    assert!(start.elapsed() < Duration::from_secs(3));
+    Ok(())
+}
+
+#[test]
+fn large_pinned_answer_export_drains_child_pipes() -> Result<()> {
+    let mut f = Fixture::new()?;
+    let answer_path = f.root.path().join("answer.json");
+    let mut answer = fs::read(&answer_path)?;
+    answer.resize(60_599, b' ');
+    fs::write(&answer_path, &answer)?;
+    f.intake["answer"]["sha256"] = json!(hash(&answer));
+    let plan_path = f.root.path().join("plan.json");
+    let mut plan: Value = serde_json::from_slice(&fs::read(&plan_path)?)?;
+    plan["judgment_digest"] = json!(hash(&answer));
+    let plan = serde_json::to_vec(&plan)?;
+    fs::write(plan_path, &plan)?;
+    f.intake["plan"]["sha256"] = json!(hash(&plan));
+    let output = f.invoke("export", &[])?;
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stdout.len() > 65_536);
+    let view: Value = serde_json::from_slice(&output.stdout)?;
+    let recorded: Vec<u8> = serde_json::from_value(view["judgment"]["recorded_bytes"].clone())?;
+    assert_eq!(recorded, answer);
+    Ok(())
 }
 
 fn rejected(output: Output, message: &str) {
