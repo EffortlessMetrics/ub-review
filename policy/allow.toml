@@ -2,8 +2,6 @@ schema_version = "1"
 tool = "cargo-allow"
 
 [[exception]]
-<<<<<<< HEAD
-<<<<<<< HEAD
 id = "precommit-staged-subject-checks"
 kind = "process-spawn"
 glob = "{xtask/src/main.rs,xtask/tests/precommit_subject_binding.rs}"
@@ -12,20 +10,6 @@ reason = "Issue #1477 uses local Git index/worktree comparisons before and after
 created = "2026-10-16"
 review_after = "2027-01-16"
 
-=======
->>>>>>> 4279e190 (wip(review): checkpoint recorded file export/replay CLI)
-=======
-id = "recorded-prepared-payload-shadow-1014"
-kind = "rust-lint-suppression"
-path = "src/review_judgment/public_plan/payload.rs"
-lint = "dead_code"
-owner = "ub-review/review-final-1014"
-reason = "Pure whole-body/comment-slot recorded payload binding precedes its consumer; no production compiler/transport or delivery authority. Remove when the recorded consumer uses it."
-created = "2026-10-11"
-review_after = "2026-11-11"
-expires = "2026-12-11"
-
->>>>>>> 04058281 (feat(review): bind recorded public plans to prepared payload slots)
 # Default source-tree exception ledger. Keep this consolidated until real
 # exception volume proves that narrower ledgers improve reviewability.
 
@@ -235,3 +219,14 @@ reason = "Issue #1465 preparatory source installation runs one fixed python3 -B 
 created = "2026-10-18"
 review_after = "2027-01-18"
 expires = "2027-04-18"
+
+[[exception]]
+id = "recorded-prepared-payload-shadow-1014"
+kind = "rust-lint-suppression"
+path = "src/review_judgment/public_plan/payload.rs"
+lint = "dead_code"
+owner = "ub-review/review-final-1014"
+reason = "Pure whole-body/comment-slot recorded payload binding precedes its consumer; no production compiler/transport or delivery authority. Remove when the recorded consumer uses it."
+created = "2026-10-11"
+review_after = "2026-11-11"
+expires = "2026-12-11"
