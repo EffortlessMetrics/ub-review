@@ -156,23 +156,11 @@ fn wait_with_pipes(mut child: Child, timeout: Duration) -> Result<Output> {
         let mut bytes = Vec::new();
         let _ = err_send.send(stderr.read_to_end(&mut bytes).map(|_| bytes));
     });
-    let status = match child.wait_timeout(timeout) {
-        Ok(Some(status)) => status,
-        Ok(None) => {
-            let killed = child.kill();
-            if let Err(error) =
-                finish_termination(killed, || child.wait_timeout(Duration::from_secs(2)))
-            {
-                bail!("recorded CLI timed out; cleanup failed: {error:#}");
-            }
-            bail!("recorded CLI timed out");
-        }
-        Err(error) => {
-            let killed = child.kill();
-            let cleanup = finish_termination(killed, || child.wait_timeout(Duration::from_secs(2)));
-            bail!("recorded CLI wait failed: {error}; cleanup: {cleanup:?}");
-        }
-    };
+    let wait_result = child.wait_timeout(timeout);
+    let status = resolve_wait(wait_result, || {
+        let killed = child.kill();
+        finish_termination(killed, || child.wait_timeout(Duration::from_secs(2)))
+    })?;
     let stdout = out_recv
         .recv_timeout(Duration::from_secs(2))
         .context("stdout reader did not finish")?
@@ -186,6 +174,44 @@ fn wait_with_pipes(mut child: Child, timeout: Duration) -> Result<Output> {
         stdout,
         stderr,
     })
+}
+
+fn resolve_wait(
+    wait_result: std::io::Result<Option<ExitStatus>>,
+    cleanup: impl FnOnce() -> Result<()>,
+) -> Result<ExitStatus> {
+    Ok(match wait_result {
+        Ok(Some(status)) => status,
+        Ok(None) => {
+            if let Err(error) = cleanup() {
+                bail!("recorded CLI timed out; cleanup failed: {error:#}");
+            }
+            bail!("recorded CLI timed out");
+        }
+        Err(error) => {
+            let cleanup = cleanup();
+            bail!("recorded CLI wait failed: {error}; cleanup: {cleanup:?}");
+        }
+    })
+}
+
+#[test]
+fn wait_error_runs_cleanup_and_preserves_both_errors() {
+    let calls = std::cell::Cell::new(0);
+    let result = resolve_wait(Err(std::io::Error::other("injected wait error")), || {
+        calls.set(calls.get() + 1);
+        bail!("injected cleanup error")
+    });
+    assert_eq!(calls.get(), 1);
+    let message = format!("{result:?}");
+    assert!(message.contains("injected wait error"));
+    assert!(message.contains("injected cleanup error"));
+    let result = resolve_wait(Err(std::io::Error::other("injected wait error")), || {
+        calls.set(calls.get() + 1);
+        Ok(())
+    });
+    assert_eq!(calls.get(), 2);
+    assert!(format!("{result:?}").contains("cleanup: Ok(())"));
 }
 
 fn finish_termination(
