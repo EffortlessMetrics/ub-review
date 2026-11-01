@@ -404,3 +404,45 @@ fn absent_ci_stays_absent_without_a_gate_result() -> Result<()> {
         },
     )
 }
+
+#[test]
+fn replay_recorded_ci_bytes_respect_one_mib_limit() -> Result<()> {
+    let mut f = Fixture::new()?;
+    f.ci = vec![b'x'; 1024 * 1024];
+    f.ci_digest = sha256_hex(&f.ci);
+    let export = with_input(&f, true, true, |_| {}, |_| {}, export_recorded_review)?;
+    with_input(
+        &f,
+        true,
+        true,
+        |_| {},
+        |_| {},
+        |input| replay_recorded_review_export(input, &export, &sha256_hex(&export.view_json)),
+    )?;
+    let mut oversized = RecordedReviewExport {
+        view_json: export.view_json.clone(),
+        imported_ci_bytes: export.imported_ci_bytes.clone(),
+    };
+    oversized
+        .imported_ci_bytes
+        .as_mut()
+        .ok_or_else(|| anyhow::anyhow!("CI absent"))?
+        .push(b'x');
+    let error = with_input(
+        &f,
+        true,
+        true,
+        |_| {},
+        |_| {},
+        |input| replay_recorded_review_export(input, &oversized, &sha256_hex(&oversized.view_json)),
+    )
+    .err()
+    .ok_or_else(|| anyhow::anyhow!("oversized CI admitted"))?;
+    assert!(
+        error
+            .to_string()
+            .contains("recorded export exceeds byte limit")
+    );
+    assert_eq!(export.imported_ci_bytes.as_deref(), Some(f.ci.as_slice()));
+    Ok(())
+}
