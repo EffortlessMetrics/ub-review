@@ -305,17 +305,17 @@ fn release_resolver_executes_identity_fixture_cases() -> Result<()> {
         let candidate_dir = temp.path().join(format!("candidate-{name}"));
         fs::create_dir(&candidate_dir)?;
         let candidate = candidate_dir.join("ub-review");
-        fs::write(&candidate, format!("#!/bin/sh\n{version_body}\n"))?;
-        fs::set_permissions(&candidate, fs::Permissions::from_mode(0o755))?;
+        let candidate_script = format!("#!/bin/sh\n{version_body}\n");
+        write_executable_fixture(&candidate, &candidate_script)?;
         if matches!(layout, "nested" | "root-and-nested") {
             let nested = candidate_dir.join("nested");
             fs::create_dir(&nested)?;
-            fs::copy(&candidate, nested.join("ub-review"))?;
+            write_executable_fixture(&nested.join("ub-review"), &candidate_script)?;
         }
         if layout == "root-and-nested-space" {
             let nested = candidate_dir.join("nested dir");
             fs::create_dir(&nested)?;
-            fs::copy(&candidate, nested.join("ub-review"))?;
+            write_executable_fixture(&nested.join("ub-review"), &candidate_script)?;
         }
         if layout == "root-symlink" {
             let nested = candidate_dir.join("nested");
@@ -1040,7 +1040,7 @@ fn verify_init_guide_posix_paths(root_name: &str, config_name: &str) -> Result<(
         .arg("--guide-out")
         .arg(&guide)
         .args(["--profile", "cx23"])
-        .output()?;
+        .fixture_output()?;
     anyhow::ensure!(
         init.status.success(),
         "init failed: {}",
@@ -1063,7 +1063,7 @@ fn verify_init_guide_posix_paths(root_name: &str, config_name: &str) -> Result<(
             .env("UB_REVIEW_TEST_EXPAND", "expanded")
             .env("GITHUB_REPOSITORY", "fixture/path-proof")
             .args(["-c", &script])
-            .output()?;
+            .fixture_output()?;
         let raw_argv = fs::read(&argv_path).context("command did not invoke ub-review")?;
         anyhow::ensure!(raw_argv.last() == Some(&0), "argv is not NUL-terminated");
         let mut argv = Vec::new();
@@ -1195,7 +1195,7 @@ fn init_guide_rejects_non_utf8_command_paths_before_writes() -> Result<()> {
             .arg(&config)
             .arg("--guide-out")
             .arg(&guide)
-            .output()?;
+            .fixture_output()?;
         anyhow::ensure!(!output.status.success());
         anyhow::ensure!(
             String::from_utf8_lossy(&output.stderr)
@@ -1232,7 +1232,7 @@ fn init_guide_rejects_carriage_return_command_paths_before_writes() -> Result<()
                 .arg(&config)
                 .arg("--guide-out")
                 .arg(&guide)
-                .output()?;
+                .fixture_output()?;
             anyhow::ensure!(
                 !output.status.success(),
                 "init accepted a carriage return in a command path"
@@ -1652,7 +1652,7 @@ fn calibration_guidance_rejects_unsupported_runs_without_changing_thresholds() -
         let output = Command::new(bin)
             .args([command, "--runs-dir"])
             .arg(&runs)
-            .output()?;
+            .fixture_output()?;
         assert!(output.status.success(), "{command}: {:?}", output.stderr);
         let stdout = String::from_utf8(output.stdout)?;
         assert!(
@@ -1674,7 +1674,7 @@ fn calibration_guidance_rejects_unsupported_runs_without_changing_thresholds() -
         let output = Command::new(bin)
             .args([command, "--runs-dir"])
             .arg(&runs)
-            .output()?;
+            .fixture_output()?;
         assert!(
             !output.status.success(),
             "{command} silently excluded an incompatible run"
@@ -1708,7 +1708,7 @@ fn calibration_guidance_rejects_unsupported_runs_without_changing_thresholds() -
         let output = Command::new(bin)
             .args([command, "--runs-dir"])
             .arg(&runs)
-            .output()?;
+            .fixture_output()?;
         assert!(output.status.success(), "{command}: {:?}", output.stderr);
         let stdout = String::from_utf8(output.stdout)?;
         assert!(stdout.contains("6 runs"), "{command}: {stdout}");
@@ -7792,8 +7792,10 @@ fn write_fake_bun(dir: &Path) -> Result<()> {
     }
     #[cfg(not(windows))]
     {
+        #[cfg(not(unix))]
+        use write_file as write_executable_fixture;
         let script = dir.join("bun");
-        write_file(
+        write_executable_fixture(
             &script,
             r#"#!/bin/sh
 echo "fake bun $*"
@@ -7813,14 +7815,6 @@ esac
 exit 0
 "#,
         )?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-
-            let mut permissions = fs::metadata(&script)?.permissions();
-            permissions.set_mode(0o755);
-            fs::set_permissions(&script, permissions)?;
-        }
     }
     Ok(())
 }
@@ -7848,8 +7842,10 @@ fn write_fake_cargo(dir: &Path) -> Result<()> {
     }
     #[cfg(not(windows))]
     {
+        #[cfg(not(unix))]
+        use write_file as write_executable_fixture;
         let script = dir.join("cargo");
-        write_file(
+        write_executable_fixture(
             &script,
             r#"#!/bin/sh
 echo "fake cargo $*"
@@ -7862,16 +7858,48 @@ fi
 exit 0
 "#,
         )?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-
-            let mut permissions = fs::metadata(&script)?.permissions();
-            permissions.set_mode(0o755);
-            fs::set_permissions(&script, permissions)?;
-        }
     }
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn real_fake_tool_writers_survive_concurrent_launches() -> Result<()> {
+    use std::sync::{Arc, Barrier};
+    use std::thread;
+
+    let temp = tempfile::tempdir()?;
+    let start = Arc::new(Barrier::new(5));
+    thread::scope(|scope| -> Result<()> {
+        let mut launchers = Vec::new();
+        for _ in 0..4 {
+            let start = Arc::clone(&start);
+            launchers.push(scope.spawn(move || -> Result<()> {
+                start.wait();
+                for _ in 0..100 {
+                    assert!(Command::new("/bin/true").fixture_status()?.success());
+                }
+                Ok(())
+            }));
+        }
+        start.wait();
+        for index in 0..100 {
+            let dir = temp.path().join(index.to_string());
+            write_fake_bun(&dir)?;
+            write_fake_cargo(&dir)?;
+            for tool in ["bun", "cargo"] {
+                let output = Command::new(dir.join(tool)).fixture_output()?;
+                assert!(output.status.success());
+                assert_eq!(output.stdout, format!("fake {tool} \n").as_bytes());
+            }
+        }
+        for launcher in launchers {
+            launcher
+                .join()
+                .map_err(|_| anyhow::anyhow!("launcher panicked"))??;
+        }
+        Ok(())
+    })
 }
 
 #[cfg(windows)]

@@ -44221,3 +44221,13 @@ kind = "exposure_gap"
 finding_id = "probe:src_model_exec_completion.rs:return_value:946a94ed"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1411; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by anchoring_failure_keeps_the_model_finding_out_of_the_diagnostic, both_status_marker_cases_survive_wrapped_errors, calibration_missing_proof. Re-verify after any edit to src/model_exec/completion.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:b1eaef65"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1620; probe .fixture_output()?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence. Re-verify after any edit to tests/cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:b1eaef65.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1620; probe .fixture_output()?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by action_forwards_complete_trusted_diff_admission_inputs, action_forwards_prior_resolved_candidates_input, actual_entrypoint_rejects_wrong_missing_stale_and_unqualified_evidence. Re-verify after any edit to tests/cli.rs."
