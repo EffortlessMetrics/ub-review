@@ -1207,6 +1207,8 @@ pub(crate) use tests::{FakeHttpResponse, lock_fake_delivery_tests, spawn_fake_de
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[path = "native_http_status_tests.rs"]
+    mod native_http_status_tests;
     use anyhow::{bail, ensure};
     use std::collections::BTreeMap;
     use std::collections::VecDeque;
