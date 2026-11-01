@@ -45681,3 +45681,13 @@ kind = "exposure_gap"
 finding_id = "probe:src_gate.rs:field_construction:e3ebb0c9"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1474; probe revision_digest,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by agreeing_duplicate_observations_preserve_terminal_results, artifact_bound_to_other_run_is_missing_artifact, artifact_only_run_with_no_usable_lane_is_not_proven. Re-verify after any edit to src/gate.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:match_arm:917663d1"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1474; probe match self {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by active_graph_keeps_unresolved_conflict_when_another_lane_lacks_evidence, active_graph_resolves_explicit_conflict_using_proof_precedence, adoption_docs_match_setup_ci_current_surface. Re-verify after any edit to src/gate.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:6bbb2a38"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1474; probe ),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by agreeing_duplicate_observations_preserve_terminal_results, artifact_bound_to_other_run_is_missing_artifact, artifact_only_run_with_no_usable_lane_is_not_proven. Re-verify after any edit to src/gate.rs."
