@@ -451,3 +451,156 @@ fn serde_json_ambient_contract_rejects_nonfinite_float_exponents() -> Result<()>
     }
     Ok(())
 }
+
+fn diagnostic_inputs(root: &Path) -> Result<()> {
+    for (path, value) in [
+        (
+            "input/revision-admission.json",
+            json!({"schema":"ub-review.revision_admission.v1","revision":"candidate"}),
+        ),
+        (
+            "input/diff-context.json",
+            json!({"base":"base-oid","head":"head-oid","patch":"x".repeat(20000)}),
+        ),
+        (
+            "review/gate_outcome.json",
+            json!({"schema":"ub-review.gate_outcome.v1","gate_result":"fail"}),
+        ),
+        (
+            "sensors/ripr/ub-review-sensor-status.json",
+            json!({"sensor":"ripr","status":"ok","exit_code":0}),
+        ),
+        (
+            "sensors/ripr/gate-decision.json",
+            json!({"schema_version":"0.6","kind":"ripr","status":"fail"}),
+        ),
+        (
+            "sensors/ripr/exposure-gaps.json",
+            json!({"schema":"ub-review.ripr_exposure_gaps.v3","status":"ok","entries":[{"id":"gap-1"}]}),
+        ),
+    ] {
+        write_json(root, path, value)?;
+    }
+    fs::write(
+        root.join("sensors/ripr/exposure-gaps.ripr.stdout"),
+        vec![b'x'; 200_000],
+    )?;
+    Ok(())
+}
+
+fn diagnostic(root: &Path, role: &str) -> Result<(i32, Vec<u8>, Value)> {
+    let out = Command::new(env!("CARGO_BIN_EXE_xtask"))
+        .arg("task-projection-reader")
+        .arg(root)
+        .args(["--kind", "gate-diagnostic", "--role", role])
+        .output()?;
+    let code = out.status.code().context("diagnostic exit")?;
+    let value = serde_json::from_slice(&out.stdout)?;
+    Ok((code, out.stdout, value))
+}
+
+#[test]
+fn gate_diagnostic_is_bounded_deterministic_and_keeps_role_and_unknowns() -> Result<()> {
+    let root = tempfile::tempdir()?;
+    diagnostic_inputs(root.path())?;
+    let (code, bytes, value) = diagnostic(root.path(), "candidate")?;
+    ensure!(
+        code == 0 && value["role"] == "candidate",
+        "candidate unavailable"
+    );
+    ensure!(
+        bytes == diagnostic(root.path(), "candidate")?.1,
+        "non-deterministic output"
+    );
+    ensure!(
+        diagnostic(root.path(), "baseline")?.2["role"] == "baseline",
+        "role lost"
+    );
+    ensure!(
+        bytes.len() < 10_000,
+        "projection unexpectedly large: {}",
+        bytes.len()
+    );
+    ensure!(
+        value["native_stdout"]["document_complete"] == "unverified"
+            && value["native_stdout"]["sha256"].is_null(),
+        "raw completeness falsely asserted"
+    );
+    ensure!(
+        !value["coverage"]
+            .as_object()
+            .context("coverage")?
+            .contains_key("sensors/ripr/exposure-gaps.ripr.stdout"),
+        "raw stdout read"
+    );
+    ensure!(
+        !value["documents_json"]["input/diff-context.json"]
+            .as_str()
+            .context("diff")?
+            .contains("patch"),
+        "patch was rendered"
+    );
+    ensure!(
+        value["source_artifacts"]
+            .as_array()
+            .context("sources")?
+            .len()
+            == 6,
+        "missing source hashes"
+    );
+    Ok(())
+}
+
+#[test]
+fn gate_diagnostic_rejects_missing_corrupt_unknown_and_oversize_inputs() -> Result<()> {
+    let root = tempfile::tempdir()?;
+    diagnostic_inputs(root.path())?;
+    let receipt = root
+        .path()
+        .join("sensors/ripr/ub-review-sensor-status.json");
+    fs::remove_file(&receipt)?;
+    ensure!(
+        diagnostic(root.path(), "candidate")?.0 == 2,
+        "missing receipt accepted"
+    );
+    fs::write(&receipt, b"{")?;
+    ensure!(
+        diagnostic(root.path(), "candidate")?.0 == 2,
+        "corrupt receipt accepted"
+    );
+    fs::write(&receipt, b"{}")?;
+    ensure!(
+        diagnostic(root.path(), "candidate")?.0 == 2,
+        "incomplete receipt accepted"
+    );
+    fs::write(&receipt, br#"{"sensor":"ripr","status":"ok"}"#)?;
+    write_json(
+        root.path(),
+        "sensors/ripr/exposure-gaps.json",
+        json!({"schema":"future"}),
+    )?;
+    ensure!(
+        diagnostic(root.path(), "candidate")?.0 == 2,
+        "unknown schema accepted"
+    );
+    fs::write(
+        root.path().join("sensors/ripr/exposure-gaps.json"),
+        vec![b' '; 4 * 1024 * 1024 + 1],
+    )?;
+    let (code, _, result) = diagnostic(root.path(), "candidate")?;
+    ensure!(
+        code == 2 && result["reader_status"] == "input_unavailable",
+        "oversize accepted"
+    );
+    write_json(
+        root.path(),
+        "sensors/ripr/exposure-gaps.json",
+        json!({"schema":"ub-review.ripr_exposure_gaps.v3", "status":"ok", "entries":[{"text":"z".repeat(530_000)}]}),
+    )?;
+    let (code, bytes, result) = diagnostic(root.path(), "candidate")?;
+    ensure!(
+        code == 2 && result["documents_omitted"] == true && bytes.len() < 4096,
+        "oversized report not refused"
+    );
+    Ok(())
+}

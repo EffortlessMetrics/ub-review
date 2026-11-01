@@ -187,3 +187,30 @@ with `?`. These differences are not full Python byte-parity claims. Native joins
 revision/event replay, lifecycle/report publication, complete corpus parity and
 the ten-retained-packet parity window remain open under #1292. Existing CI and
 the Python scripts remain the operative reconciliation implementation.
+
+### Gate diagnostic handoff
+
+`cargo xtask task-projection-reader <packet> --kind gate-diagnostic --role candidate`
+reads six bounded existing JSON artifacts and emits a reader-only index. Use a
+separate invocation with `--role baseline` for an independently obtained baseline;
+the role is caller-supplied, and no relationship between packets is verified.
+The `documents_json` values are JSON strings containing canonical JSON; parse each
+string for the document. Source hashes bind the complete bytes read, even where
+the diff patch is omitted from the index. The exposure projection is the existing
+pre-policy artifact, including any producer clipping; it is not a substitute for
+the native output. Gate and sensor results are reported without reclassification.
+
+The reader never opens the native RIPR detail stdout or stderr. Their hashes,
+content, producer completeness, including `document_complete` and
+`limited_findings_bound`, and correspondence to the projection are unverified.
+It checks strict JSON, object shape, named schemas and a few required fields; it
+does not verify cross-file identities or artifact authenticity. Unversioned
+receipts have no general schema validation. Missing, malformed, unsupported and
+oversized inputs yield exit 2. A report exceeding 512 KiB yields an explicit
+unavailable receipt rather than a partial evidence claim. Successful exit means
+only that the selected inputs were read under this narrow contract, not that the
+gate passed or that the evidence is complete. Preserve the full packet separately.
+
+As with the existing reader, the packet must remain immutable during inspection;
+concurrent replacement of the root path is not excluded by its path checks. This
+mode is local inspection and does not publish a separate CI artifact.

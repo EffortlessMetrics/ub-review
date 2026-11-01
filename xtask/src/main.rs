@@ -112,7 +112,7 @@ cargo xtask commands
   cargo xtask precommit         run diff-scoped Rust precommit checks
   cargo xtask ripr              reproduce hosted ripr ready-mode feedback locally
   cargo xtask smoke-base        select a non-empty local smoke diff base
-  cargo xtask task-projection-reader <packet> [--kind review|worker]
+  cargo xtask task-projection-reader <packet> [--kind review|worker|gate-diagnostic] [--role candidate|baseline]
                                inspect bounded reader inputs only (#1292)
   cargo xtask calibration-report <dir>  aggregate review/calibration.json files
 

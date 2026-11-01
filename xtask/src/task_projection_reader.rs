@@ -11,7 +11,7 @@ use serde_json::json;
 #[path = "../../src/task_projection_reconciliation/reader.rs"]
 mod reader;
 
-use reader::{JsonShape, JsonValue as Value, PacketReader, canonical, strict_json};
+use reader::{JsonShape, JsonValue as Value, PacketReader, canonical, canonical_json, strict_json};
 
 const READER_SCHEMA: &str = "ub-review.task_projection_reader.v1";
 const MAX_REPORT_BYTES: usize = 512 * 1024;
@@ -109,14 +109,32 @@ pub(super) fn run(mut args: impl Iterator<Item = String>) -> Result<i32> {
         .next()
         .context("usage: cargo xtask task-projection-reader <packet> [--kind review|worker]")?;
     let mut kind = "review".to_owned();
+    let mut role = None;
     while let Some(arg) = args.next() {
+        if arg == "--role" {
+            role = Some(
+                args.next()
+                    .context("--role requires candidate or baseline")?,
+            );
+            continue;
+        }
         if arg != "--kind" {
             bail!("unexpected task-projection-reader argument `{arg}`");
         }
         kind = args.next().context("--kind requires review or worker")?;
-        if !matches!(kind.as_str(), "review" | "worker") {
-            bail!("--kind must be review or worker");
+        if !matches!(kind.as_str(), "review" | "worker" | "gate-diagnostic") {
+            bail!("--kind must be review, worker or gate-diagnostic");
         }
+    }
+    if kind == "gate-diagnostic" {
+        let role = role.context("gate-diagnostic requires --role candidate or baseline")?;
+        if !matches!(role.as_str(), "candidate" | "baseline") {
+            bail!("--role must be candidate or baseline");
+        }
+        return gate_diagnostic(PathBuf::from(root), &role);
+    }
+    if role.is_some() {
+        bail!("--role is only valid for gate-diagnostic");
     }
     let mut packet = match PacketReader::new(&PathBuf::from(root)) {
         Ok(packet) => packet,
@@ -209,6 +227,91 @@ pub(super) fn run(mut args: impl Iterator<Item = String>) -> Result<i32> {
         .write_all(&bytes)
         .context("write reader-only evidence")?;
     Ok(if packet.input_unavailable() { 2 } else { 0 })
+}
+
+// This is a reader-only handoff, not a verifier or a new gate. The embedded
+// JSON strings preserve exact numeric lexemes; consumers must parse them.
+fn gate_diagnostic(root: PathBuf, role: &str) -> Result<i32> {
+    let mut packet = PacketReader::new(&root).context("invalid packet root")?;
+    let inputs = [
+        (
+            "input/revision-admission.json",
+            Some("ub-review.revision_admission.v1"),
+        ),
+        ("input/diff-context.json", None),
+        (
+            "review/gate_outcome.json",
+            Some("ub-review.gate_outcome.v1"),
+        ),
+        ("sensors/ripr/ub-review-sensor-status.json", None),
+        ("sensors/ripr/gate-decision.json", None),
+        (
+            "sensors/ripr/exposure-gaps.json",
+            Some("ub-review.ripr_exposure_gaps.v3"),
+        ),
+    ];
+    let mut documents = std::collections::BTreeMap::new();
+    for (path, schema) in inputs {
+        match packet.load(path, JsonShape::Object, schema, true) {
+            Ok(Some(mut value)) => {
+                let field = |key: &str| value.get(key).and_then(Value::as_str);
+                let minimum_shape = match path {
+                    "input/diff-context.json" => field("base").is_some() && field("head").is_some(),
+                    "review/gate_outcome.json" => field("gate_result").is_some(),
+                    "sensors/ripr/ub-review-sensor-status.json" => {
+                        field("sensor") == Some("ripr") && field("status").is_some()
+                    }
+                    "sensors/ripr/exposure-gaps.json" => field("status").is_some(),
+                    _ => true,
+                };
+                if !minimum_shape {
+                    packet.mark_unavailable("invalid_diagnostic_receipt", path);
+                    continue;
+                }
+                // The diff patch can dominate context; keep identity and flags,
+                // and explicitly mark the omitted patch below.
+                if path == "input/diff-context.json"
+                    && let Value::Object(ref mut object) = value
+                {
+                    object.remove("patch");
+                }
+                if path.ends_with("gate-decision.json")
+                    && (value.get("schema_version").and_then(Value::as_str) != Some("0.6")
+                        || value.get("kind").and_then(Value::as_str) != Some("ripr"))
+                {
+                    packet.mark_unavailable("unsupported_ripr_badge", path);
+                    continue;
+                }
+                let encoded = canonical_json(&value)?;
+                documents.insert(path, String::from_utf8(encoded)?);
+            }
+            Ok(None) => packet.mark_unavailable("missing_required_reader_input", path),
+            Err(_) => {}
+        }
+    }
+    let unavailable = packet.input_unavailable();
+    let report = json!({
+        "schema":"ub-review.gate_diagnostic_index.v1", "authority":"reader-only-shadow",
+        "role":role, "reader_status": if unavailable {"input_unavailable"} else {"inputs_read"},
+        "documents_json":documents, "source_artifacts":packet.sources().values().collect::<Vec<_>>(),
+        "coverage":packet.coverage(), "issues":packet.issues(), "issues_truncated":packet.issues_overflow(),
+        "bytes_observed":packet.total_bytes(), "reconciliation":"not_performed",
+        "validation":"strict JSON, object shape and named schemas only; unversioned receipt fields and cross-file identity are unverified",
+        "omitted": ["input/diff-context.json#/patch", "sensors/ripr/exposure-gaps.ripr.stdout", "sensors/ripr/exposure-gaps.ripr.stderr"],
+        "native_stdout": {"read":false, "sha256":null, "document_complete":"unverified", "limited_findings_bound":"unverified"},
+        "packet_custody":"packet_must_remain_immutable; concurrent_path_replacement_not_excluded"
+    });
+    let bytes = canonical(&report)?;
+    if bytes.len() > MAX_REPORT_BYTES {
+        let fallback = json!({"schema":"ub-review.gate_diagnostic_index.v1", "authority":"reader-only-shadow", "role":role,
+            "reader_status":"input_unavailable", "reconciliation":"not_performed", "issues":[{"code":"reader_report_budget"}],
+            "documents_omitted":true, "native_stdout":{"read":false,"sha256":null,"document_complete":"unverified","limited_findings_bound":"unverified"},
+            "packet_custody":"packet_must_remain_immutable; concurrent_path_replacement_not_excluded"});
+        io::stdout().lock().write_all(&canonical(&fallback)?)?;
+        return Ok(2);
+    }
+    io::stdout().lock().write_all(&bytes)?;
+    Ok(if unavailable { 2 } else { 0 })
 }
 
 fn inspect_collections(packet: &mut PacketReader, path: &str, document: &Value) {

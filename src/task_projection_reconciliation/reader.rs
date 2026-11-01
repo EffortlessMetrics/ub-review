@@ -864,8 +864,7 @@ impl NativeDecoder<'_> {
     }
 }
 
-#[cfg(test)]
-fn canonical_json(value: &Value) -> PacketResult<Vec<u8>> {
+pub(crate) fn canonical_json(value: &Value) -> PacketResult<Vec<u8>> {
     fn write(value: &Value, output: &mut Vec<u8>) -> PacketResult<()> {
         match value {
             Value::Null => output.extend_from_slice(b"null"),
