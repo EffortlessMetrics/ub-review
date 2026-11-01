@@ -45786,3 +45786,13 @@ kind = "exposure_gap"
 finding_id = "probe:tests_common_currentness_1067.rs:match_arm:44fa44bc"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1430; probe let currentness = match index { 0 | 1 => \"base_deleted\", 2 => \"moved_or_renamed\", _ => \"candidate_current\" };: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_internal_audit_retains_no_evidence_semantics, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to tests/common/currentness_1067.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:field_construction:ec72394e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe admitted_revision: revision_digest.map(planner_revision),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by agreeing_duplicate_observations_preserve_terminal_results, artifact_bound_to_other_run_is_missing_artifact, artifact_only_run_with_no_usable_lane_is_not_proven. Re-verify after any edit to src/gate.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_currentness_1067.rs:predicate:ac751076"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1430; probe .filter(|row| row[\"classification\"] == *class): Strong oracle found: exact value or pattern assertion. Reached by absent_internal_audit_retains_no_evidence_semantics, accepts_flag_like_output_path, accepts_workflow_tag_shapes. Re-verify after any edit to tests/common/currentness_1067.rs."
