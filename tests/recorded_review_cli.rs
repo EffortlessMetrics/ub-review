@@ -157,6 +157,9 @@ fn rejected(output: Output, message: &str) {
     );
 }
 
+#[path = "recorded_review_cli/boundaries.rs"]
+mod boundaries;
+
 #[path = "recorded_review_cli/diff_identity.rs"]
 mod diff_identity;
 
