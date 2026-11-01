@@ -2841,6 +2841,9 @@ struct SensorEvidenceIssue {
     sensor: String,
     status: String,
     reason: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exit_code: Option<i32>,
+    timed_out: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -6063,8 +6066,8 @@ fn write_review_artifacts(
         &compiler_inline_comments,
         &compiler_summary_only_findings,
     );
-    let compiler_reconciliation =
-        match build_compiler_reconciliation_receipt(CompilerReconciliationInput {
+    let compiler_reconciliation_result =
+        build_compiler_reconciliation_receipt(CompilerReconciliationInput {
             head_sha: &diff.head,
             observations: &compiler_observations,
             review_inline_comments: &review.inline_comments,
@@ -6074,21 +6077,14 @@ fn write_review_artifacts(
             final_inline_comments: &compiler_inline_comments,
             final_summary_only_findings: &compiler_summary_only_findings,
             graph: &pre_compile_claim_graph,
-        }) {
-            Ok(receipt) => receipt,
-            Err(error) => {
-                review
-                    .missing_or_failed_sensor_evidence
-                    .push(SensorEvidenceIssue {
-                        sensor: "compiler-reconciliation".to_owned(),
-                        status: "failed".to_owned(),
-                        reason: format!("final compiler reconciliation failed: {error:#}"),
-                    });
-                compiler_inline_comments.clear();
-                compiler_summary_only_findings.clear();
-                compiler_reconciliation_failure(&diff.head, format!("{error:#}"))
-            }
-        };
+        });
+    let compiler_reconciliation = finalize_compiler_reconciliation(
+        compiler_reconciliation_result,
+        &diff.head,
+        &mut review.missing_or_failed_sensor_evidence,
+        &mut compiler_inline_comments,
+        &mut compiler_summary_only_findings,
+    );
     pre_compile_claim_graph.revision = revision.cloned();
     write_claim_graph(out, &pre_compile_claim_graph)?;
     artifact_writers::write_compiler_reconciliation_artifact(out, &compiler_reconciliation)?;
@@ -15427,6 +15423,8 @@ UB_REVIEW_HTTP_STATUS:429
                 sensor: "ripr".to_owned(),
                 status: "missing".to_owned(),
                 reason: "command not found".to_owned(),
+                exit_code: None,
+                timed_out: false,
             }],
             &[ModelEvidenceIssue {
                 lane: "ub-memory-lifetime".to_owned(),
@@ -15607,6 +15605,8 @@ UB_REVIEW_HTTP_STATUS:429
             sensor: "actionlint".to_owned(),
             status: "skipped".to_owned(),
             reason: "disabled by config".to_owned(),
+            exit_code: None,
+            timed_out: false,
         }];
 
         let state = build_review_terminal_state(TerminalStateInput {
@@ -23861,6 +23861,8 @@ index 1111111..2222222 100644
                 sensor: "ripr".to_owned(),
                 status: "missing".to_owned(),
                 reason: "command not found".to_owned(),
+                exit_code: None,
+                timed_out: false,
             }],
             missing_or_failed_model_evidence: vec![
                 ModelEvidenceIssue {
@@ -24719,6 +24721,8 @@ index 1111111..2222222 100644
                 sensor: "unsafe-review".to_owned(),
                 status: "missing".to_owned(),
                 reason: long_text.clone(),
+                exit_code: None,
+                timed_out: false,
             }],
             &[] as &[ModelEvidenceIssue],
             &[] as &[ReviewInlineComment],
