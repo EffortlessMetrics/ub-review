@@ -770,3 +770,64 @@ fn local_failure_receipts_and_nested_confirmation_fields_are_bound() -> Result<(
     }
     Ok(())
 }
+
+#[test]
+fn recorded_payload_body_and_comment_byte_boundaries() -> Result<()> {
+    for size in [6000, 6001] {
+        let body = "x".repeat(size);
+        let empty: Vec<PlannedDelivery> = vec![];
+        let payload = serde_json::to_vec(&json!({"event":"COMMENT","body":body,"comments":[]}))?;
+        let result = payload_matches_inline(&payload, &empty);
+        if size == 6000 {
+            result?;
+        } else {
+            assert!(
+                result
+                    .err()
+                    .is_some_and(|e| e.to_string().contains("unsupported recorded payload"))
+            );
+        }
+        let f = Fixture::new()?;
+        let planned = PlannedDelivery::new(
+            &f.delivery.head_sha,
+            "A",
+            DeliveryAction::Inline,
+            DeliveryLocation::new("src/lib.rs", 1, "RIGHT"),
+            None,
+            sha256_hex(body.as_bytes()),
+        )?;
+        let payload = serde_json::to_vec(
+            &json!({"event":"COMMENT","body":"","comments":[{"path":"src/lib.rs","line":1,"side":"RIGHT","body":body}]}),
+        )?;
+        let result = payload_matches_inline(&payload, &[planned]);
+        if size == 6000 {
+            result?;
+        } else {
+            assert!(
+                result
+                    .err()
+                    .is_some_and(|e| e.to_string().contains("payload body limit"))
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn recorded_stream_byte_boundary_accepts_valid_json_and_rejects_overflow() -> Result<()> {
+    let f = Fixture::new()?;
+    let payload = f.payload()?;
+    let mut s = f.stream(&payload)?;
+    append(&mut s, "delivery-1", prepared())?;
+    let wm = watermark(&s, 1, "latest")?;
+    let mut bytes = serde_json::to_vec(&s)?;
+    assert!(bytes.len() < BYTE_LIMIT);
+    bytes.resize(BYTE_LIMIT, b' ');
+    invoke_bytes(&f, &bytes, &payload, &wm, "latest")?;
+    bytes.push(b' ');
+    let error = invoke_bytes(&f, &bytes, &payload, &wm, "latest")
+        .err()
+        .ok_or_else(|| anyhow::anyhow!("oversized valid stream admitted"))?;
+    assert!(error.to_string().contains("recorded byte limit"));
+    Ok(())
+}
