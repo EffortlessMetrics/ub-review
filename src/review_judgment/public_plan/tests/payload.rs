@@ -14,8 +14,19 @@ fn case(
     f: &Fixture,
     materials: &[RecordedMaterial<'_>],
     anchors: &[RecordedAnchor<'_>],
+    review: Value,
+    edit: impl FnOnce(&mut Value, &mut Value, &mut JudgmentSubject, &mut DeliverySubject, &mut &[u8]),
+) -> Result<PreparedPayloadBinding> {
+    case_sized(f, materials, anchors, review, edit, None)
+}
+
+fn case_sized(
+    f: &Fixture,
+    materials: &[RecordedMaterial<'_>],
+    anchors: &[RecordedAnchor<'_>],
     mut review: Value,
     edit: impl FnOnce(&mut Value, &mut Value, &mut JudgmentSubject, &mut DeliverySubject, &mut &[u8]),
+    size: Option<usize>,
 ) -> Result<PreparedPayloadBinding> {
     let evidence = [RecordedEvidence {
         reference: "fact#1",
@@ -41,7 +52,11 @@ fn case(
     );
     let plan = serde_json::to_vec(&plan)?;
     let plan_digest = sha256_hex(&plan);
-    let review = serde_json::to_vec(&review)?;
+    let mut review = serde_json::to_vec(&review)?;
+    if let Some(size) = size {
+        assert!(review.len() <= size);
+        review.resize(size, b' ');
+    }
     let review_digest = sha256_hex(&review);
     let revision = f.identity.revision_ref();
     let payload = RecordedPreparedPayload {
@@ -324,5 +339,174 @@ fn all_withheld_empty_payload_is_rejected_but_inline_only_remains_valid() -> Res
     let value = serde_json::to_value(binding)?;
     assert!(value["whole_body_claim"].is_null());
     assert_eq!(value["inline_claims"], json!(["A"]));
+    Ok(())
+}
+
+#[test]
+fn prepared_payload_one_mib_boundary_uses_valid_pinned_json() -> Result<()> {
+    let f = Fixture::new()?;
+    let materials = f.materials();
+    let anchors = f.anchors();
+    for size in [1024 * 1024, 1024 * 1024 + 1] {
+        let result = case_sized(
+            &f,
+            &materials,
+            &anchors,
+            mixed_review(),
+            |_, _, _, _, _| {},
+            Some(size),
+        );
+        if size == 1024 * 1024 {
+            result?;
+        } else {
+            assert!(result.err().is_some_and(|e| {
+                e.to_string()
+                    .contains("prepared payload exceeds byte limit")
+            }));
+        }
+    }
+    Ok(())
+}
+
+fn many_inline_payload(count: usize) -> Result<PreparedPayloadBinding> {
+    let mut f = Fixture::new()?;
+    let patch = format!(
+        "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -0,0 +1,128 @@\n{}",
+        "+danger();\n".repeat(128)
+    );
+    let head = CommitTree::new("head", &"a".repeat(40), &"b".repeat(40))?;
+    f.identity = RevisionIdentity::new(
+        CommitTree::new("base", &"c".repeat(40), &"d".repeat(40))?,
+        head.clone(),
+        head,
+        None,
+        ReviewSemantics::CandidateHead,
+        &RevisionIdentity::changed_paths_digest(["src/lib.rs"]),
+        &RevisionIdentity::diff_digest(patch.as_bytes()),
+    )?;
+    f.canonical = f.identity.canonical_form();
+    f.graph.revision = Some(f.identity.revision_ref());
+    let template = f.graph.claims[0].clone();
+    let ids: Vec<String> = (0..128).map(|i| format!("claim-{i}")).collect();
+    f.graph.claims = ids
+        .iter()
+        .map(|id| {
+            let mut c = template.clone();
+            c.id = id.clone();
+            c
+        })
+        .collect();
+    let refs: Vec<String> = (0..128).map(|i| format!("body-{i}")).collect();
+    let anchor_refs: Vec<String> = (0..128).map(|i| format!("anchor-{i}")).collect();
+    let materials: Vec<_> = (0..128)
+        .map(|i| RecordedMaterial {
+            claim_id: &ids[i],
+            body_ref: &refs[i],
+            body_digest: &f.body_a_digest,
+            class: MaterialClass::Public,
+            body: BODY_A,
+        })
+        .collect();
+    let anchors: Vec<_> = (0..128)
+        .map(|i| RecordedAnchor {
+            reference: &anchor_refs[i],
+            claim_id: &ids[i],
+            path: "src/lib.rs",
+            line: (i + 1) as u32,
+            line_digest: &f.line_digest,
+        })
+        .collect();
+    let evidence = [RecordedEvidence {
+        reference: "fact#1",
+        digest: &f.evidence_digest,
+        bytes: b"source citation",
+    }];
+    let source = f.source(&evidence);
+    let source_digest = source_manifest_digest(&source)?;
+    let diff_digest = RevisionIdentity::diff_digest(patch.as_bytes());
+    let public = RecordedPublicSource {
+        delivery_subject: &f.delivery,
+        diff_digest: &diff_digest,
+        diff_patch: patch.as_bytes(),
+        materials: &materials,
+        anchors: &anchors,
+    };
+    let public_digest = public_source_digest(&public)?;
+    let selections: Vec<_> = ids
+        .iter()
+        .map(|id| json!({"claim_id":id,"evidence_refs":["fact#1"]}))
+        .collect();
+    let answer = serde_json::to_vec(
+        &json!({"schema":"ub-review.recorded-judgment.v1","subject":f.subject,"revision":f.identity.revision_ref(),"source_manifest_digest":source_digest,"review_result":"findings","selections":selections}),
+    )?;
+    let answer_digest = sha256_hex(&answer);
+    let mut items = Vec::new();
+    for i in 0..128 {
+        let delivery = PlannedDelivery::new(
+            &f.delivery.head_sha,
+            &ids[i],
+            DeliveryAction::Inline,
+            DeliveryLocation::new("src/lib.rs", (i + 1) as u32, "RIGHT"),
+            None,
+            &f.body_a_digest,
+        )?;
+        items.push(json!({"claim_id":ids[i],"disposition":{"kind":"inline","body_ref":refs[i],"anchor_ref":anchor_refs[i],"delivery":delivery}}));
+    }
+    let plan = serde_json::to_vec(
+        &json!({"schema":SCHEMA,"judgment_digest":answer_digest,"revision":f.identity.revision_ref(),"subject":f.subject,"delivery_subject":f.delivery,"public_source_digest":public_digest,"quiet":false,"items":items}),
+    )?;
+    let plan_digest = sha256_hex(&plan);
+    let mut comments: Vec<_> = (0..128).map(|i| json!({"path":"src/lib.rs","line":i+1,"side":"RIGHT","body":String::from_utf8_lossy(BODY_A)})).collect();
+    if count == 129 {
+        comments.push(comments[0].clone());
+    }
+    let bytes = serde_json::to_vec(&json!({"event":"COMMENT","body":"","comments":comments}))?;
+    let digest = sha256_hex(&bytes);
+    let revision = f.identity.revision_ref();
+    let payload = RecordedPreparedPayload {
+        subject: &f.subject,
+        delivery_subject: &f.delivery,
+        revision: &revision,
+        judgment_digest: &answer_digest,
+        public_plan_digest: &plan_digest,
+        payload_digest: &digest,
+        bytes: &bytes,
+    };
+    let pin = payload_source_digest(&payload)?;
+    validate_prepared_payload(
+        PublicPlanInput {
+            judgment_source: &source,
+            current_revision: &f.identity,
+            expected_source_digest: &source_digest,
+            answer: Some(&answer),
+            expected_answer_digest: Some(&answer_digest),
+            observed_ci: Some(&f.ci),
+            public_source: &public,
+            expected_public_source_digest: &public_digest,
+            plan: Some(&plan),
+            expected_plan_digest: Some(&plan_digest),
+        },
+        &payload,
+        &pin,
+    )
+}
+
+#[test]
+fn prepared_payload_comment_count_accepts_128_and_rejects_129() -> Result<()> {
+    let binding = many_inline_payload(128)?;
+    assert_eq!(
+        serde_json::to_value(binding)?["inline_claims"]
+            .as_array()
+            .map(Vec::len),
+        Some(128)
+    );
+    let error = many_inline_payload(129)
+        .err()
+        .ok_or_else(|| anyhow::anyhow!("129 comments admitted"))?;
+    assert!(
+        error
+            .to_string()
+            .contains("prepared comments exceed row limit")
+    );
     Ok(())
 }
