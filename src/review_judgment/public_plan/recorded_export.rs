@@ -2,11 +2,7 @@
 //! This API consumes admitted typed source objects, not an arbitrary directory,
 //! Markdown, a transport transaction, or a model. It is not the final command
 //! or AgentReviewResult: delivery-event admission and its watermark are absent.
-<<<<<<< HEAD
 pub(crate) mod files;
-=======
-pub(crate) mod files;
->>>>>>> 601505a2 (wip(review): checkpoint recorded file export/replay CLI)
 
 use anyhow::{Result, ensure};
 use serde::Serialize;
