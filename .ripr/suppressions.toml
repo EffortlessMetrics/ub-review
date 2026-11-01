@@ -44476,3 +44476,58 @@ kind = "exposure_gap"
 finding_id = "probe:tests_recorded_review_cli.rs:field_construction:4e3807c5"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1395; probe intake,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_ci_stays_absent_without_a_gate_result, absent_lead_is_distinct_from_declared_missing_or_invalid_lead, accounting_ambiguous_or_unbound_receipts_keep_reservation. Re-verify after any edit to tests/recorded_review_cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_recorded_review_cli_boundaries.rs:call_deletion:01996e92"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1395; probe Ok(f): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by duplicate_intake_field_is_rejected_with_exact_raw_pin, graph_row_boundaries_precede_downstream_checks, intake_and_graph_schema_reject_independently_pinned_changes. Re-verify after any edit to tests/recorded_review_cli/boundaries.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_recorded_review_cli_boundaries.rs:return_value:9787bf6d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1395; probe Ok(f): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by duplicate_intake_field_is_rejected_with_exact_raw_pin, graph_row_boundaries_precede_downstream_checks, intake_and_graph_schema_reject_independently_pinned_changes. Re-verify after any edit to tests/recorded_review_cli/boundaries.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_recorded_review_cli_boundaries.rs:return_value:1783cc48"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1395; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by advisory_result_planes_cannot_override_legacy_gate_enforcement, agreeing_duplicate_observations_preserve_terminal_results, bound_gate_fixture_joins_canonical_admission. Re-verify after any edit to tests/recorded_review_cli/boundaries.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_recorded_review_cli_diff_identity.rs:predicate:44eccf43"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1395; probe } else if state == \"lead_invalid\" {: Strong oracle found: exact value or pattern assertion. Reached by broker_merge_keeps_required_state_local_to_distinct_tasks, claim_state_keys_are_stable, contract_round_trips_each_serialized_shape_and_lifecycle_state. Re-verify after any edit to tests/recorded_review_cli/diff_identity.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_recorded_review_cli_diff_identity.rs:call_deletion:5f25a599"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1395; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by lead_absent_rejects_contradictory_diff, lead_invalid_rejects_contradictory_diff, plan_absent_rejects_contradictory_diff. Re-verify after any edit to tests/recorded_review_cli/diff_identity.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_recorded_review_cli_diff_identity.rs:return_value:e43a61fd"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1395; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by lead_absent_rejects_contradictory_diff, lead_invalid_rejects_contradictory_diff, plan_absent_rejects_contradictory_diff. Re-verify after any edit to tests/recorded_review_cli/diff_identity.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_recorded_review_cli.rs:return_value:3dad1754"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1395; probe Self::with_patch(PATCH): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_ci_stays_absent_without_a_gate_result, absent_lead_is_distinct_from_declared_missing_or_invalid_lead, accounting_ambiguous_or_unbound_receipts_keep_reservation. Re-verify after any edit to tests/recorded_review_cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_recorded_review_cli.rs:call_deletion:f96ce230"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1395; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_lead_is_distinct_from_declared_missing_or_invalid_lead, duplicate_intake_field_is_rejected_with_exact_raw_pin, graph_row_boundaries_precede_downstream_checks. Re-verify after any edit to tests/recorded_review_cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_recorded_review_cli.rs:call_deletion:f96ce230.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1395; probe );: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_lead_is_distinct_from_declared_missing_or_invalid_lead, duplicate_intake_field_is_rejected_with_exact_raw_pin, graph_row_boundaries_precede_downstream_checks. Re-verify after any edit to tests/recorded_review_cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_recorded_review_cli.rs:return_value:b313d437"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1395; probe Ok(Self {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_lead_is_distinct_from_declared_missing_or_invalid_lead, duplicate_intake_field_is_rejected_with_exact_raw_pin, graph_row_boundaries_precede_downstream_checks. Re-verify after any edit to tests/recorded_review_cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_recorded_review_cli.rs:call_deletion:1bdbbdc2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1395; probe }): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_lead_is_distinct_from_declared_missing_or_invalid_lead, duplicate_intake_field_is_rejected_with_exact_raw_pin, graph_row_boundaries_precede_downstream_checks. Re-verify after any edit to tests/recorded_review_cli.rs."
