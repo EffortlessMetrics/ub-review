@@ -30,28 +30,6 @@ pub(crate) fn git_tree_sha(root: &Path, rev: &str) -> Result<String> {
     Ok(tree)
 }
 
-pub(crate) fn command_version(command: &str) -> Option<String> {
-    if !command_on_path(command) {
-        return None;
-    }
-    let output = ProcessCommand::new(command)
-        .arg("--version")
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let text = if output.stdout.is_empty() {
-        String::from_utf8_lossy(&output.stderr).to_string()
-    } else {
-        String::from_utf8_lossy(&output.stdout).to_string()
-    };
-    text.lines()
-        .map(str::trim)
-        .find(|line| !line.is_empty())
-        .map(|line| line.chars().take(160).collect())
-}
-
 pub(crate) fn command_on_path(command: &str) -> bool {
     command_path(command).is_some()
 }

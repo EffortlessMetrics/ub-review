@@ -22,7 +22,7 @@ use crate::gate_truth::{
 use crate::{
     ModelEvidenceIssue, Plan, ProofReceipt, ProofRequest, ReviewTerminalState, RunArgs,
     RunCompletion, RunMode, SensorEvidenceIssue, SensorPlan, ToolGateOutcomeEntry,
-    proof_command_status, sensor_issue_is_required,
+    proof_command_status, proof_receipt_has_contradictory_completion, sensor_issue_is_required,
 };
 
 /// Minimal read view of `review/gate_outcome.json` for enforcement. The full
@@ -883,6 +883,19 @@ pub(crate) fn proof_request_is_gate_required(request: &ProofRequest) -> bool {
 }
 
 pub(crate) fn required_proof_receipt_class(receipt: &ProofReceipt) -> RequiredProofClass {
+    // Keep the legacy Required-timeout policy, even when an aggregate falsely
+    // claims completion. This is a failed requirement, not code-failure proof.
+    if receipt.commands.iter().any(|command| {
+        matches!(command.side.as_str(), "head" | "base-plus-tests")
+            && (command.timed_out || command.status == "timed_out")
+    }) {
+        return RequiredProofClass::Failed;
+    }
+    if proof_receipt_has_contradictory_completion(receipt) {
+        // Invalid completion metadata must not weaken Required enforcement.
+        return RequiredProofClass::Failed;
+    }
+
     match receipt.result.as_str() {
         "head_passed" | "discriminating" => RequiredProofClass::Passed,
         "head_failed" | "timed_out" => RequiredProofClass::Failed,
@@ -2548,6 +2561,202 @@ mod tests {
         Ok(())
     }
 
+    fn check_loaded_tool_gate_fallback(id: &str) -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("config.toml");
+        // Built-in RIPR has no default gate; repository configuration opts
+        // into its threshold. An empty override is still distinct from None.
+        let fallback = None;
+        // Expected gates are literal consumer contracts, not derived from the
+        // sanitizer or from another loaded configuration.
+        let cases = [
+            (
+                "unsupported scope",
+                Some("scope = 'repo-wide'"),
+                fallback,
+                vec![".scope"],
+            ),
+            (
+                "bad scope and threshold",
+                Some("scope = 'repo-wide'\nmax_new_unsuppressed = 'bad'"),
+                fallback,
+                vec!["", ".scope"],
+            ),
+            (
+                "bad scope and unknown key",
+                Some("scope = 'repo-wide'\nunknown = true"),
+                fallback,
+                vec!["", ".scope"],
+            ),
+            (
+                "invalid types",
+                Some("scope = 7\nmax_new_unsuppressed = 'bad'"),
+                fallback,
+                vec!["", ""],
+            ),
+            (
+                "valid threshold",
+                Some("scope = 'repo-wide'\nmax_new_unsuppressed = 4"),
+                Some((None, Some(4))),
+                vec![".scope"],
+            ),
+            (
+                "valid scope",
+                Some("scope = 'on-diff'\nmax_new_unsuppressed = 'bad'"),
+                Some((Some("on-diff"), None)),
+                vec![""],
+            ),
+            ("explicit empty", Some(""), Some((None, None)), vec![]),
+            ("omitted", None, fallback, vec![]),
+            (
+                "zero with unknown sibling",
+                Some("scope = 'on-diff'\nmax_new_unsuppressed = 0\nunknown = true"),
+                Some((Some("on-diff"), Some(0))),
+                vec![""],
+            ),
+            (
+                "nonzero with unknown sibling",
+                Some("max_new_unsuppressed = 5\nunknown = true"),
+                Some((None, Some(5))),
+                vec![""],
+            ),
+        ];
+        for (name, fields, expected_gate, error_suffixes) in cases {
+            let mut text = format!("[tools.{id}]\nenabled = true\n");
+            if let Some(fields) = fields {
+                text.push_str(&format!("[tools.{id}.gate]\n{fields}\n"));
+            }
+            std::fs::write(&path, text)?;
+            let config = Config::load_or_default(&path, Some("gh-runner"))?;
+            let policy = config
+                .tools
+                .get(id)
+                .ok_or_else(|| anyhow::anyhow!("missing {id}"))?;
+            if id == "ripr" {
+                assert_eq!(policy.id, "ripr");
+                assert_eq!(policy.command, "ripr");
+                assert_eq!(policy.timeout_sec, 240);
+                assert_eq!(policy.weight, 3);
+            }
+            assert_eq!(
+                policy
+                    .gate
+                    .as_ref()
+                    .map(|gate| (gate.scope.as_deref(), gate.max_new_unsuppressed)),
+                expected_gate,
+                "{id}: {name}"
+            );
+            let expected_sections = error_suffixes
+                .iter()
+                .map(|suffix| format!("tools.{id}.gate{suffix}"))
+                .collect::<Vec<_>>();
+            let mut actual_sections = config
+                .policy_errors
+                .iter()
+                .map(|error| error.section.clone())
+                .collect::<Vec<_>>();
+            actual_sections.sort();
+            assert_eq!(actual_sections, expected_sections, "{id}: {name}");
+
+            let args = test_run_args(temp.path().join("out"));
+            let plan = test_plan(Vec::new());
+            let terminal_state = test_terminal_state("sufficient");
+            let gate = build_gate_outcome(GateOutcomeInput {
+                args: &args,
+                config: &config,
+                plan: &plan,
+                terminal_state: &terminal_state,
+                proof_requests: &[],
+                proof_receipts: &[],
+                tool_gate_outcomes: &[],
+                missing_or_failed_sensor_evidence: &[],
+                missing_or_failed_model_evidence: &[],
+                reporter_gate: crate::ReporterGateInput::Absent,
+                planner_portfolio: None,
+                revision_digest: None,
+            });
+            let invalid = !expected_sections.is_empty();
+            // Keep this a policy-only control: unrelated advisory evidence
+            // must not silently enter the fixture while its verdict stays put.
+            assert_eq!(gate.evidence_gaps_blocking, 0, "{id}: {name}");
+            assert_eq!(gate.evidence_gaps_advisory, 0, "{id}: {name}");
+            assert_eq!(gate.tool_gates.evaluated, 0, "{id}: {name}");
+            assert_eq!(gate.tool_gates.passed, 0, "{id}: {name}");
+            assert_eq!(gate.tool_gates.failed, 0, "{id}: {name}");
+            assert!(gate.planner_required_proofs.is_none(), "{id}: {name}");
+            assert_eq!(
+                gate.conclusion,
+                if invalid { "fail" } else { "pass" },
+                "{id}: {name}"
+            );
+            assert_eq!(gate.reasons.len(), expected_sections.len(), "{id}: {name}");
+            for (reason, error) in gate.reasons.iter().zip(&config.policy_errors) {
+                assert_eq!(reason.kind, "policy");
+                assert_eq!(reason.id, error.section);
+                assert_eq!(reason.detail, error.detail);
+                assert_eq!(reason.receipt, "effective-config.json");
+            }
+            let completion = RunCompletion {
+                gate_conclusion: gate.conclusion,
+                fail_on_gate: true,
+                run_dir: temp.path().join("out"),
+            };
+            assert_eq!(
+                run_gate_failure_message(&completion).is_some(),
+                invalid,
+                "{id}: {name}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn loaded_tool_gate_fallback_custom() -> Result<()> {
+        check_loaded_tool_gate_fallback("custom")
+    }
+
+    #[test]
+    fn loaded_tool_gate_fallback_ripr() -> Result<()> {
+        check_loaded_tool_gate_fallback("ripr")
+    }
+
+    #[test]
+    fn invalid_sensor_phase_fails_gate_with_policy_diagnostic() -> anyhow::Result<()> {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        for value in ["\"phase-sentinel\"", "{ token = \"phase-sentinel\" }"] {
+            let config = Config::from_toml_with_policy_receipts(&format!(
+                "[tools.cargo-fmt]\nclass = \"build\"\nphase = {value}\n",
+            ))?;
+            let terminal_state = test_terminal_state("sufficient");
+            let gate = build_gate_outcome(GateOutcomeInput {
+                args: &args,
+                config: &config,
+                plan: &plan,
+                terminal_state: &terminal_state,
+                proof_requests: &[],
+                proof_receipts: &[],
+                tool_gate_outcomes: &[],
+                missing_or_failed_sensor_evidence: &[],
+                missing_or_failed_model_evidence: &[],
+                reporter_gate: crate::ReporterGateInput::Absent,
+                planner_portfolio: None,
+                revision_digest: None,
+            });
+            anyhow::ensure!(config.policy_errors.len() == 1);
+            anyhow::ensure!(gate.conclusion == "fail");
+            anyhow::ensure!(gate.reasons.len() == 1);
+            let reason = &gate.reasons[0];
+            anyhow::ensure!(reason.kind == "policy");
+            anyhow::ensure!(reason.id == "tools.cargo-fmt.phase");
+            anyhow::ensure!(reason.detail == config.policy_errors[0].detail);
+            anyhow::ensure!(reason.detail.contains("expected `fast` or `late`"));
+            anyhow::ensure!(!reason.detail.contains("phase-sentinel"));
+            anyhow::ensure!(reason.receipt == "effective-config.json");
+        }
+        Ok(())
+    }
+
     #[test]
     fn gate_outcome_blocks_unproven_required_proof_only_when_policy_opts_in() {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
@@ -3000,6 +3209,7 @@ mod tests {
             out.join("review/gate_outcome.json"),
             serde_json::to_vec_pretty(&gate)?,
         )?;
+        crate::summary_render::bind_gate_fixture(out)?;
         let mut summary = String::new();
         crate::render_review_efficiency_section(&mut summary, out);
         assert!(

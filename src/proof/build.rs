@@ -38,7 +38,7 @@ where
     let mut receipts = Vec::new();
     let mut leases = Vec::new();
     let mut executed_tasks = 0_usize;
-    let mut estimated_seconds = 0_u64;
+    let mut spent_seconds = 0_u64;
     let lease_budget = proof_lease_budget(profile)?;
     for task in tasks {
         let task_timeout_sec = focused_build_task_command_timeout(&task, budget);
@@ -92,7 +92,7 @@ where
         }
         if !focused_build_budget_allows_next(
             executed_tasks,
-            estimated_seconds,
+            spent_seconds,
             task_timeout_sec,
             budget,
         ) {
@@ -145,16 +145,13 @@ where
             _ => "skipped_profile",
         };
         let reason = format!("HEAD build proof {}: {}", head.status, head.reason);
-        receipts.push(focused_build_receipt(
-            diff,
-            &task,
-            vec![head],
-            result.to_owned(),
-            reason,
-        ));
+        let receipt = focused_build_receipt(diff, &task, vec![head], result.to_owned(), reason);
+        spent_seconds = spent_seconds.saturating_add(
+            focused_proof_receipt_spent_seconds(&receipt).unwrap_or(lease.timeout_sec),
+        );
+        receipts.push(receipt);
         leases.push(lease);
         executed_tasks += 1;
-        estimated_seconds = estimated_seconds.saturating_add(task_timeout_sec);
     }
     Ok(ProofBrokerResult {
         proof_receipts: receipts,
@@ -164,12 +161,12 @@ where
 
 fn focused_build_budget_allows_next(
     current_tasks: usize,
-    estimated_seconds: u64,
+    spent_seconds: u64,
     next_timeout_sec: u64,
     budget: ProofBudget,
 ) -> bool {
     current_tasks < budget.max_focused_tests
-        && estimated_seconds.saturating_add(next_timeout_sec) <= budget.max_total_seconds
+        && spent_seconds.saturating_add(next_timeout_sec) <= budget.max_total_seconds
 }
 
 #[cfg(test)]
@@ -183,6 +180,90 @@ mod tests {
     use crate::test_parse::command_display_with_env;
     use crate::tests::{test_diff, test_run_args};
     use crate::*;
+
+    #[test]
+    fn elapsed_budget_admits_second_build_only_when_actual_time_fits() -> Result<()> {
+        for (first_duration_ms, expected_executions, second_result) in
+            [(200, 2, "head_passed"), (3_001, 1, "skipped_budget")]
+        {
+            let temp = tempfile::tempdir()?;
+            let out = temp.path().join("out");
+            let requests = [
+                "cargo check --workspace --all-targets --locked",
+                "cargo check --locked --package fixture",
+            ]
+            .into_iter()
+            .enumerate()
+            .map(|(i, command)| ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: format!("elapsed-build-{i}"),
+                lane: "tests-oracle".to_owned(),
+                requested_by: vec!["tests-oracle".to_owned()],
+                command: command.to_owned(),
+                reason: "Bound sequential builds by actual elapsed time.".to_owned(),
+                cost: "focused-build".to_owned(),
+                timeout_sec: 4,
+                required: true,
+                status: "requested".to_owned(),
+            })
+            .collect::<Vec<_>>();
+            let tasks = focused_build_candidates_from_requests(&requests);
+            assert_eq!(tasks.len(), 2);
+            let expected_commands = tasks
+                .iter()
+                .map(|task| task.command.clone())
+                .collect::<Vec<_>>();
+            let profile = Profile {
+                limits: Limits {
+                    builds: 2,
+                    ..Limits::default()
+                },
+                ..Profile::default()
+            };
+            let mut commands = Vec::new();
+            let result = super::run_focused_build_proof_tasks_with_runner(
+                temp.path(),
+                &out,
+                &test_diff(),
+                &profile,
+                &test_run_args(out.clone()),
+                ProofBudget {
+                    max_focused_test_files: 2,
+                    max_focused_tests: 2,
+                    per_command_timeout_sec: 4,
+                    max_total_seconds: 6,
+                },
+                tasks,
+                None,
+                ProofExecutionPhase::ModelRequest,
+                |_root, argv, env, timeout, stdout, stderr, _observe_process| {
+                    commands.push(command_display_with_env(env, argv));
+                    assert_eq!(timeout, 4);
+                    fs::write(stdout, b"build fixture\n")?;
+                    fs::write(stderr, b"")?;
+                    Ok(CommandStatus {
+                        exit_code: Some(0),
+                        timed_out: false,
+                        success: true,
+                        reason: "deterministic elapsed-time fixture".to_owned(),
+                        duration_ms: if commands.len() == 1 {
+                            first_duration_ms
+                        } else {
+                            200
+                        },
+                    })
+                },
+            )?;
+            assert_eq!(commands.len(), expected_executions);
+            assert_eq!(commands, expected_commands[..expected_executions]);
+            assert_eq!(result.proof_receipts.len(), 2);
+            assert_eq!(result.proof_receipts[0].result, "head_passed");
+            assert_eq!(result.proof_receipts[1].result, second_result);
+            assert_eq!(result.resource_leases[0].timeout_sec, 4);
+            assert_eq!(result.resource_leases[1].timeout_sec, 4);
+        }
+        Ok(())
+    }
 
     #[test]
     fn proof_broker_v0_executes_allowlisted_focused_build_request() -> Result<()> {
