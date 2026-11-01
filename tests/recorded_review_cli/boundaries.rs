@@ -175,3 +175,31 @@ fn intake_and_graph_schema_reject_independently_pinned_changes() -> Result<()> {
     )?;
     Ok(())
 }
+
+#[test]
+fn duplicate_intake_field_is_rejected_with_exact_raw_pin() -> Result<()> {
+    let f = Fixture::new()?;
+    let valid = serde_json::to_vec(&f.intake)?;
+    fs::write(f.root.path().join("intake.json"), &valid)?;
+    let positive = f.invoke_pin("export", &hash(&valid), &[])?;
+    assert!(
+        positive.status.success(),
+        "{}",
+        String::from_utf8_lossy(&positive.stderr)
+    );
+    let mut duplicate = valid.clone();
+    duplicate.splice(
+        1..1,
+        br#""schema":"ub-review.recorded-file-input.v1","#.iter().copied(),
+    );
+    assert_ne!(hash(&valid), hash(&duplicate));
+    fs::write(f.root.path().join("intake.json"), &duplicate)?;
+    let negative = f.invoke_pin("export", &hash(&duplicate), &[])?;
+    assert!(
+        !negative.status.success(),
+        "duplicate intake field admitted"
+    );
+    assert!(negative.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&negative.stderr).contains("invalid intake JSON"));
+    Ok(())
+}
