@@ -213,4 +213,8 @@ gate passed or that the evidence is complete. Preserve the full packet separatel
 
 As with the existing reader, the packet must remain immutable during inspection;
 concurrent replacement of the root path is not excluded by its path checks. This
-mode is local inspection and does not publish a separate CI artifact.
+mode can also be used for local inspection. The self-dogfood gate uploads the
+candidate index separately as `ub-review-gate-diagnostic` when preparation
+succeeds. Preparation and upload are auxiliary and do not alter the gate or the
+full `ub-review-gate` archive. A missing diagnostic upload is not evidence of a
+passing gate. Baseline packets require an independent invocation and identity.

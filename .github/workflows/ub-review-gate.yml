@@ -115,6 +115,32 @@ jobs:
           python scripts/reconcile-publication-boundaries.py target/ub-review
           --write-report
 
+      # Keep this auxiliary artifact independent of the authoritative packet
+      # and gate. Reuse the source bootstrap target's compiled dependencies.
+      - name: Prepare compact gate diagnostic
+        id: gate-diagnostic
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          cargo build --locked --release -p xtask --target-dir "$RUNNER_TEMP/ub-review-bootstrap-target"
+          diagnostic="$RUNNER_TEMP/ub-review-gate-diagnostic.json"
+          status=0
+          "$RUNNER_TEMP/ub-review-bootstrap-target/release/xtask" task-projection-reader target/ub-review --kind gate-diagnostic --role candidate > "$diagnostic" || status=$?
+          if [[ "$status" != 0 && "$status" != 2 ]]; then exit "$status"; fi
+          python3 -c 'import json, pathlib, sys; p=pathlib.Path(sys.argv[1]); b=p.read_bytes(); assert len(b)<=524288; d=json.loads(b); assert d.get("schema")=="ub-review.gate_diagnostic_index.v1" and d.get("reader_status")==("inputs_read" if sys.argv[2]=="0" else "input_unavailable")' "$diagnostic" "$status"
+          echo 'available=true' >> "$GITHUB_OUTPUT"
+
+      - name: Upload compact gate diagnostic
+        uses: actions/upload-artifact@v7
+        if: always() && steps.gate-diagnostic.outputs.available == 'true'
+        continue-on-error: true
+        with:
+          name: ub-review-gate-diagnostic
+          path: ${{ runner.temp }}/ub-review-gate-diagnostic.json
+          if-no-files-found: error
+
       - uses: actions/upload-artifact@v7
         if: always()
         with:
