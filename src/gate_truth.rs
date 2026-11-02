@@ -65,7 +65,9 @@ impl GateSensorCoverage {
     }
 }
 
-/// Model-lane coverage. `budget_exhausted` is recorded explicitly (#839) but is
+/// Coverage of model lanes that owed evidence. Configured lanes deliberately
+/// disabled by model mode remain diagnostic receipts, outside this denominator.
+/// `budget_exhausted` is recorded explicitly (#839) but is
 /// deliberately not blocking on its own: it reduces coverage, and only matters
 /// for the verdict where it starved a required investigation.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
@@ -215,6 +217,9 @@ pub(crate) fn build_model_coverage(
     terminal_state: &ReviewTerminalState,
     issues: &[ModelEvidenceIssue],
 ) -> GateModelCoverage {
+    if terminal_state.model_mode == "off" {
+        return GateModelCoverage::default();
+    }
     let budget_exhausted_lanes = issues
         .iter()
         .filter(|issue| model_issue_is_budget_exhaustion(issue))
@@ -288,8 +293,9 @@ pub(crate) fn build_gate_truth(input: GateTruthInput<'_>) -> GateTruth {
     }
     // A model fleet that was launched and produced nothing usable proves
     // nothing, even when the terminal state stayed `artifact-only` (a dry run
-    // or a provider outage under a smoke diff). `model_mode = off` plans no
-    // lanes at all, so opting out of model review never trips this.
+    // or a provider outage under a smoke diff). Disabled configured lanes are
+    // retained as diagnostics but owe no model evidence, so opting out never
+    // trips this.
     if model_coverage.lanes_total > 0 && model_coverage.lanes_usable == 0 {
         not_proven_reasons.push(format!(
             "model-coverage: 0 of {} model lanes produced usable output",
@@ -440,6 +446,37 @@ mod tests {
             exit_code: (status == "failed").then_some(1),
             timed_out: false,
         }
+    }
+
+    #[test]
+    fn disabled_model_review_owes_no_lane_evidence() {
+        let mut terminal = test_terminal_state("artifact-only");
+        terminal.model_mode = "off".to_owned();
+        terminal.model_lanes = 8;
+        terminal.usable_model_lanes = 0;
+        let issues = [model_issue(
+            "tests",
+            "skipped",
+            "model call budget reached before lane execution",
+        )];
+
+        assert_eq!(
+            build_model_coverage(&terminal, &issues),
+            GateModelCoverage::default()
+        );
+        // Configured-lane diagnostics remain separate from applicable coverage.
+        assert_eq!(terminal.model_lanes, 8);
+
+        terminal.model_mode = "auto".to_owned();
+        assert_eq!(
+            build_model_coverage(&terminal, &issues),
+            GateModelCoverage {
+                lanes_total: 8,
+                lanes_usable: 0,
+                budget_exhausted_lanes: 1,
+                budget_exhausted: true,
+            }
+        );
     }
 
     fn truth(
