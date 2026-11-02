@@ -583,7 +583,7 @@ mod tests {
                 error.to_string(),
                 format!(
                     "read {}; missing calibration artifact; select an existing completed run with `ub-review status --run-dir <RUN_DIR>`",
-                    run_dir.join("review/calibration.json").display()
+                    run_dir.join("review").join("calibration.json").display()
                 )
             );
             assert_eq!(
@@ -770,8 +770,12 @@ mod tests {
     #[test]
     fn collect_calibrations_rejects_unknown_schema_in_mixed_history() -> Result<()> {
         let temp = tempfile::tempdir()?;
-        let valid_dir = temp.path().join("supported/review");
-        let unknown_dir = temp.path().join("nested/unsupported/review");
+        let valid_dir = temp.path().join("supported").join("review");
+        let unknown_dir = temp
+            .path()
+            .join("nested")
+            .join("unsupported")
+            .join("review");
         fs::create_dir_all(&valid_dir)?;
         fs::create_dir_all(&unknown_dir)?;
         fs::write(
