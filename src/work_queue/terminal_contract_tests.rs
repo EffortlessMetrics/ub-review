@@ -180,14 +180,18 @@ fn sensor_projection_distinguishes_missing_defaulted_and_unreadable_receipts() -
         .err()
         .context("planned sensor without a receipt path was accepted")?;
     assert_eq!(error.to_string(), "planned sensor has no receipt path");
-    fs::remove_file(out.join(path))?;
-    fs::create_dir(out.join(path))?;
+    let receipt_path = out
+        .join("sensors")
+        .join("alpha")
+        .join("ub-review-sensor-status.json");
+    fs::remove_file(&receipt_path)?;
+    fs::create_dir(&receipt_path)?;
     let error = terminalize_sensor(out, "sensor-alpha", "planned", Some(path), &mut sources)
         .err()
         .context("sensor receipt directory was accepted")?;
     assert_eq!(
         error.to_string(),
-        format!("read sensor receipt {}", out.join(path).display())
+        format!("read sensor receipt {}", receipt_path.display())
     );
     sources.clear();
     assert_eq!(
