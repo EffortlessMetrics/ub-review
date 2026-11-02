@@ -376,6 +376,96 @@ fn summary_hydration_preserves_recorded_degraded_evidence_and_legacy_fallback() 
 }
 
 #[test]
+fn summary_hydration_excludes_only_legacy_disabled_lane_evidence() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let root = temp.path().join("repo");
+    repository(&root)?;
+    let out = temp.path().join("summary-packet");
+    hydrate(
+        &root,
+        &out,
+        serve(vec![
+            (200, "[]".to_owned()),
+            (200, "[]".to_owned()),
+            (200, "[]".to_owned()),
+        ])?,
+        8192,
+    )?;
+
+    let disabled = json!({"lane":"legacy-off", "provider":"fixture", "model":"fixture-model", "endpoint_kind":"openai-chat", "status":"skipped", "reason":"model-mode off"});
+    let failed = json!({"lane":"real-failure", "provider":"fixture", "model":"fixture-model", "endpoint_kind":"openai-chat", "status":"failed", "reason":"explicit-failure"});
+    let contradictory = json!({"lane":"failed-off", "provider":"fixture", "model":"fixture-model", "endpoint_kind":"openai-chat", "status":"failed", "reason":"model-mode off"});
+    let budget = json!({"lane":"budget-gap", "provider":"fixture", "model":"fixture-model", "endpoint_kind":"openai-chat", "status":"skipped", "reason":"model call budget reached before lane execution"});
+    let preflight = json!({"lane":"provider-preflight", "provider":"fixture", "model":"fixture-model", "endpoint_kind":"openai-chat", "status":"failed", "reason":"explicit-preflight-failure"});
+    let ambiguous_preflight = json!({"lane":"provider-preflight", "provider":"other-fixture", "model":"fixture-model", "endpoint_kind":"openai-chat", "status":"skipped", "reason":"model-mode off"});
+    let empty_lane = json!({"lane":"", "provider":"empty-lane-fixture", "model":"fixture-model", "endpoint_kind":"openai-chat", "status":"skipped", "reason":"model-mode off"});
+    let mut receipt = json!({"model_mode":"off", "model_lanes":[disabled.clone()], "missing_or_failed_model_evidence":[disabled.clone(), failed, contradictory, budget, preflight, ambiguous_preflight, empty_lane]});
+    let summary = regenerate_summary(&out, &receipt)?;
+    ensure!(
+        summary.contains("| `legacy-off` |"),
+        "disabled lane diagnostics disappeared"
+    );
+    let missing = summary
+        .split_once("## Missing or failed model evidence\n")
+        .context("missing model evidence section")?
+        .1
+        .split("\n## ")
+        .next()
+        .context("model evidence section")?;
+    ensure!(
+        !missing.contains("Lane `legacy-off`"),
+        "disabled lane was wrongly reported missing: {missing}"
+    );
+    ensure!(
+        missing.contains("explicit-failure")
+            && missing.contains("failed-off")
+            && missing.contains("budget-gap")
+            && missing.contains("explicit-preflight-failure")
+            && missing.contains("other-fixture")
+            && missing.contains("empty-lane-fixture"),
+        "recorded failures disappeared: {missing}"
+    );
+
+    receipt["missing_or_failed_model_evidence"] = json!([disabled.clone()]);
+    let off_summary = regenerate_summary(&out, &receipt)?;
+    ensure!(off_summary.contains("No planned model evidence is currently missing or failed."));
+
+    // Without explicit Off mode, preserve even anomalous recorded evidence.
+    receipt["model_mode"] = json!("auto");
+    let auto_summary = regenerate_summary(&out, &receipt)?;
+    let auto_missing = auto_summary
+        .split_once("## Missing or failed model evidence\n")
+        .context("missing model evidence section")?
+        .1;
+    ensure!(
+        auto_missing.contains("Lane `legacy-off`"),
+        "Auto recorded issue disappeared"
+    );
+    receipt["model_mode"] = json!("");
+    let unknown_summary = regenerate_summary(&out, &receipt)?;
+    let unknown_missing = unknown_summary
+        .split_once("## Missing or failed model evidence\n")
+        .context("missing model evidence section")?
+        .1;
+    ensure!(
+        unknown_missing.contains("Lane `legacy-off`"),
+        "unknown-mode issue disappeared"
+    );
+
+    // Invalid explicit evidence must remain an incomplete receipt, never a clean result.
+    receipt["model_mode"] = json!("off");
+    receipt["missing_or_failed_model_evidence"] = json!([{"lane": 42}]);
+    let invalid_summary = regenerate_summary(&out, &receipt)?;
+    ensure!(
+        invalid_summary.contains("Review evidence is incomplete")
+            && !invalid_summary
+                .contains("No planned model evidence is currently missing or failed."),
+        "invalid evidence was hidden"
+    );
+    Ok(())
+}
+
+#[test]
 fn partial_failure_preserves_source_records_and_recovers_on_next_run() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let root = temp.path().join("repo");

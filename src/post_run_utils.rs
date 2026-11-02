@@ -110,6 +110,17 @@ pub(crate) fn model_status_evidence_issues(review: &ReviewSummaryReceipt) -> Vec
         }
     }
     for receipt in &review.missing_or_failed_model_evidence {
+        // Older packets may have recorded deliberately disabled lanes as gaps.
+        // Keep every other explicit issue, including actual failures and
+        // ambiguous preflight records.
+        if review.model_mode == "off"
+            && receipt.lane != "provider-preflight"
+            && !receipt.lane.trim().is_empty()
+            && receipt.status == "skipped"
+            && receipt.reason == "model-mode off"
+        {
+            continue;
+        }
         let issue = if receipt.lane == "provider-preflight" {
             format!(
                 "Provider preflight `{}` model `{}` endpoint `{}`: `{}` - {}",
