@@ -1862,6 +1862,39 @@ mod tests {
         Ok(())
     }
 
+    // Deterministic exit fixtures for the real subprocess runner; the shell
+    // spelling follows the platform rather than asserting Unix paths.
+    fn exit_fixture_argv(code: u8) -> Vec<String> {
+        #[cfg(unix)]
+        let argv = vec![
+            "/bin/sh".to_owned(),
+            "-c".to_owned(),
+            format!("exit {code}"),
+        ];
+        #[cfg(windows)]
+        let argv = vec![
+            std::env::var("COMSPEC").unwrap_or_else(|_| "cmd".to_owned()),
+            "/C".to_owned(),
+            format!("exit {code}"),
+        ];
+        argv
+    }
+
+    fn hanging_fixture_argv() -> Vec<String> {
+        #[cfg(unix)]
+        let argv = vec!["/bin/sleep".to_owned(), "10".to_owned()];
+        // A single sleeper process: cmd's timeout builtin refuses redirected
+        // consoles, and a nested ping would outlive the direct-child kill.
+        #[cfg(windows)]
+        let argv = vec![
+            "powershell".to_owned(),
+            "-NoProfile".to_owned(),
+            "-Command".to_owned(),
+            "Start-Sleep -Seconds 10".to_owned(),
+        ];
+        argv
+    }
+
     #[test]
     fn accounting_matrix_releases_early_commands_before_required_build() -> Result<()> {
         let mut failures = Vec::new();
@@ -1925,7 +1958,7 @@ mod tests {
                     // The real subprocess runner executes these deterministic fixtures;
                     // the injected seam does not change the broker command allowlist.
                     let fixture = match (case, base) {
-                        ("timeout", _) => vec!["/bin/sleep".to_owned(), "10".to_owned()],
+                        ("timeout", _) => hanging_fixture_argv(),
                         ("setup_failure", _) => {
                             std::thread::sleep(std::time::Duration::from_millis(20));
                             vec![
@@ -1934,11 +1967,9 @@ mod tests {
                                     .to_string(),
                             ]
                         }
-                        ("cancellation", _) => vec!["/bin/sleep".to_owned(), "0.05".to_owned()],
-                        ("failure", _) | (_, true) => {
-                            vec!["/bin/sh".to_owned(), "-c".to_owned(), "exit 7".to_owned()]
-                        }
-                        _ => vec!["/bin/sh".to_owned(), "-c".to_owned(), "exit 0".to_owned()],
+                        ("cancellation", _) => exit_fixture_argv(0),
+                        ("failure", _) | (_, true) => exit_fixture_argv(7),
+                        _ => exit_fixture_argv(0),
                     };
                     let status = run_command_to_files_with_spawn_observer(
                         root, &fixture, env, timeout, stdout, stderr, observer,
@@ -1964,9 +1995,10 @@ mod tests {
                     ensure!(timeout == 4);
                     builds += 1;
                     build_started_ns = Some(started.elapsed().as_nanos());
+                    let build_fixture = exit_fixture_argv(0);
                     run_command_to_files_with_spawn_observer(
                         root,
-                        &["/bin/sh".to_owned(), "-c".to_owned(), "exit 0".to_owned()],
+                        &build_fixture,
                         env,
                         timeout,
                         stdout,
