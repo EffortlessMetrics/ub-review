@@ -45601,3 +45601,73 @@ kind = "exposure_gap"
 finding_id = "probe:tests_recorded_review_cli.rs:return_value:dc3d58c5"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1623; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_lead_is_distinct_from_declared_missing_or_invalid_lead, bounded_pipe_capture_kills_and_reaps_timed_out_child, duplicate_intake_field_is_rejected_with_exact_raw_pin. Re-verify after any edit to tests/recorded_review_cli.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_api.rs:match_arm:b3c41737"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1635; probe None => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by child_output_file_wait_reports_timeout_and_cleans_temp_files, every_provider_endpoint_serializes_the_output_budget, output_child_fixture. Re-verify after any edit to src/model_api.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_api.rs:return_value:55cb546c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1635; probe None => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by child_output_file_wait_reports_timeout_and_cleans_temp_files, every_provider_endpoint_serializes_the_output_budget, output_child_fixture. Re-verify after any edit to src/model_api.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_api.rs:match_arm:222fea7b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1635; probe Ok(Some(status)) => status,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, both_status_marker_cases_survive_wrapped_errors, candidate_plan_artifacts_preserve_identity_and_budget_status. Re-verify after any edit to src/model_api.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_api.rs:match_arm:a78b6651"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1635; probe Ok(None) => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by child_output_file_wait_reports_timeout_and_cleans_temp_files, every_provider_endpoint_serializes_the_output_budget, output_child_fixture. Re-verify after any edit to src/model_api.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_api.rs:match_arm:8206a1dd"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1635; probe Err(error) => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by both_status_marker_cases_survive_wrapped_errors, bounded_file_missing_remains_an_error, child_cleanup_waits_for_confirmed_exit_even_when_kill_reports_an_error. Re-verify after any edit to src/model_api.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_api.rs:match_arm:82d33a18"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1635; probe Ok(_) => Ok(true),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by every_provider_endpoint_serializes_the_output_budget, output_child_fixture, output_read_failure_cleans_stderr_after_completion_and_timeout. Re-verify after any edit to src/model_api.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_api.rs:return_value:b996a0a6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1635; probe Ok(_) => Ok(true),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by every_provider_endpoint_serializes_the_output_budget, output_child_fixture, output_read_failure_cleans_stderr_after_completion_and_timeout. Re-verify after any edit to src/model_api.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_api.rs:match_arm:b0dc2778"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1635; probe Err(error) => Err(error),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by both_status_marker_cases_survive_wrapped_errors, bounded_file_missing_remains_an_error, child_cleanup_waits_for_confirmed_exit_even_when_kill_reports_an_error. Re-verify after any edit to src/model_api.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_api.rs:field_construction:ab681b42"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1635; probe maximum: limits.maximum,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by coverage_summary_accepts_representable_count_limits, every_provider_endpoint_serializes_the_output_budget, model_lane_scheduler_fills_wave_across_provider_limits. Re-verify after any edit to src/model_api.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_api.rs:return_value:f4613fd7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1635; probe maximum: limits.maximum,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by coverage_summary_accepts_representable_count_limits, every_provider_endpoint_serializes_the_output_budget, model_lane_scheduler_fills_wave_across_provider_limits. Re-verify after any edit to src/model_api.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_api.rs:return_value:d225aa76"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1635; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by every_provider_endpoint_serializes_the_output_budget, output_child_fixture, output_read_failure_cleans_stderr_after_completion_and_timeout. Re-verify after any edit to src/model_api.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_api.rs:return_value:41d6d567"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1635; probe ): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by every_provider_endpoint_serializes_the_output_budget, output_child_fixture, output_read_failure_cleans_stderr_after_completion_and_timeout. Re-verify after any edit to src/model_api.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_api.rs:predicate:bf3fa59d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1635; probe if leaked.len() >= 8192 {: Strong oracle found: exact value or pattern assertion. Reached by broker_merges_equivalent_focused_test_commands_and_request_ids, byte_tamper_source_staleness_and_ci_missingness_fail_before_lead, clean_case_stays_silent. Re-verify after any edit to src/model_api.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_model_api.rs:return_value:c7370d06"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1635; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by every_provider_endpoint_serializes_the_output_budget, output_child_fixture, output_read_failure_cleans_stderr_after_completion_and_timeout. Re-verify after any edit to src/model_api.rs."
