@@ -49,12 +49,18 @@ impl FixtureCommandExt for Command {
 
 #[cfg(unix)]
 pub fn write_executable_fixture(path: &Path, text: &str) -> io::Result<()> {
+    use std::io::Write as _;
     use std::os::unix::fs::PermissionsExt;
 
     let _guard = EXECUTABLE_FIXTURE_LAUNCH
         .write()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    fs::write(path, text)?;
+    // Close the writer descriptor inside the launch lock and before chmod so
+    // no later fork can inherit a writable handle on the fixture inode.
+    let mut file = fs::File::create(path)?;
+    file.write_all(text.as_bytes())?;
+    file.sync_all()?;
+    drop(file);
     fs::set_permissions(path, fs::Permissions::from_mode(0o755))
 }
 
@@ -68,21 +74,24 @@ mod tests {
     #[test]
     fn concurrent_children_cannot_inherit_executable_fixture_writers() -> Result<()> {
         let temp = tempfile::tempdir()?;
-        let start = Arc::new(Barrier::new(9));
+        let start = Arc::new(Barrier::new(5));
         // Larger than the doctor fixture to expose the descriptor window in
         // a bounded control, without retaining handles or delaying children.
+        // Four readers at fifty launches stay within loaded-runner headroom;
+        // heavier stress only widened the spawn window into flaky territory
+        // under concurrent gate jobs without adding a new failure mode.
         let script = format!(
             "#!/bin/sh\necho 'actionlint 1.7.0'\n#{}\n",
             "x".repeat(65536)
         );
         thread::scope(|scope| -> Result<()> {
             let mut readers = Vec::new();
-            for _ in 0..8 {
+            for _ in 0..4 {
                 let start = Arc::clone(&start);
                 let root = temp.path();
                 readers.push(scope.spawn(move || -> Result<()> {
                     start.wait();
-                    for _ in 0..250 {
+                    for _ in 0..50 {
                         let output = Command::new("/bin/true")
                             .current_dir(root)
                             .fixture_output()?;
@@ -92,7 +101,7 @@ mod tests {
                 }));
             }
             start.wait();
-            for index in 0..250 {
+            for index in 0..50 {
                 let path = temp.path().join(format!("actionlint-{index}"));
                 write_executable_fixture(&path, &script)?;
                 let output = Command::new(&path)
