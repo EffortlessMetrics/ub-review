@@ -448,13 +448,20 @@ pub(crate) fn wait_for_child_output_files(
     stderr_path: &Path,
     timeout_sec: u64,
 ) -> Result<FileCommandOutput> {
-    let status = match child.wait_timeout(Duration::from_secs(timeout_sec))? {
-        Some(status) => status,
-        None => {
+    let status = match child.wait_timeout(Duration::from_secs(timeout_sec)) {
+        Ok(Some(status)) => status,
+        Ok(None) => {
             let _ = child.kill();
             let _ = child.wait();
             let _ = read_and_remove_output_files(stdout_path, stderr_path)?;
             bail!("process timed out after {timeout_sec}s; output omitted from diagnostic");
+        }
+        Err(error) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            remove_output_files(stdout_path, stderr_path);
+            return Err(error)
+                .context("child wait failed; attempted child termination and output cleanup");
         }
     };
     let (stdout, stderr) = read_and_remove_output_files(stdout_path, stderr_path)?;
@@ -769,6 +776,200 @@ mod provider_session_tests {
                 .to_string()
                 .contains("canonicalize model conversation")
         );
+        Ok(())
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod wait_failure_tests {
+    use super::*;
+
+    const PROBE_ENV: &str = "UB_REVIEW_WAIT_FAILURE_PROBE";
+    const PROBE_LIVE_CHILD: &str = "live-child";
+
+    fn fixture_command() -> Result<ProcessCommand> {
+        let mut command = ProcessCommand::new(std::env::current_exe()?);
+        command.env_remove("UB_REVIEW_OUTPUT_CHILD_SLEEP");
+        command.env_remove(PROBE_ENV);
+        command.args([
+            "--exact",
+            "model_api::output_file_tests::output_child_fixture",
+        ]);
+        Ok(command)
+    }
+
+    fn proc_entry_exists(pid: u32) -> std::io::Result<bool> {
+        match fs::metadata(format!("/proc/{pid}")) {
+            Ok(_) => Ok(true),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+            Err(error) => Err(error),
+        }
+    }
+
+    #[test]
+    fn wait_failure_after_child_exit_preserves_error_and_removes_outputs() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let stdout_path = temp.path().join("wait-failure.stdout");
+        let stderr_path = temp.path().join("wait-failure.stderr");
+        let mut command = fixture_command()?;
+        command.stdout(Stdio::from(fs::File::create(&stdout_path)?));
+        command.stderr(Stdio::from(fs::File::create(&stderr_path)?));
+        let child = command.spawn().context("spawn fixture child")?;
+
+        // Reap through rustix so std keeps treating the child as waitable;
+        // the wait-timeout crate's internal waitpid then reports ECHILD.
+        let pid = rustix::process::Pid::from_raw(child.id() as i32)
+            .context("fixture pid must be representable")?;
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            match rustix::process::waitpid(Some(pid), rustix::process::WaitOptions::NOHANG) {
+                Ok(Some(_)) => break,
+                Ok(None) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Ok(None) => bail!("fixture child did not exit within 2s"),
+                Err(errno) => return Err(errno).context("rustix waitpid failed"),
+            }
+        }
+
+        let error = wait_for_child_output_files(child, &stdout_path, &stderr_path, 10)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("wait must fail after external reap"))?;
+        assert_eq!(
+            error.to_string(),
+            "child wait failed; attempted child termination and output cleanup"
+        );
+        assert_eq!(
+            error
+                .downcast_ref::<std::io::Error>()
+                .map(std::io::Error::raw_os_error),
+            Some(Some(rustix::io::Errno::CHILD.raw_os_error()))
+        );
+        assert!(!stdout_path.exists(), "stdout survived wait failure");
+        assert!(!stderr_path.exists(), "stderr survived wait failure");
+        Ok(())
+    }
+
+    #[test]
+    fn wait_failure_with_live_child_terminates_it_and_removes_outputs() -> Result<()> {
+        // The descriptor-ceiling change is process-global, so the exhaustive
+        // probe runs in an isolated single-test process.
+        if std::env::var(PROBE_ENV).is_ok_and(|mode| mode == PROBE_LIVE_CHILD) {
+            return live_child_probe();
+        }
+        let mut command = ProcessCommand::new(std::env::current_exe()?);
+        command.env(PROBE_ENV, PROBE_LIVE_CHILD);
+        command.env_remove("UB_REVIEW_OUTPUT_CHILD_SLEEP");
+        command.args([
+            "--test-threads=1",
+            "--exact",
+            "model_api::wait_failure_tests::wait_failure_with_live_child_terminates_it_and_removes_outputs",
+        ]);
+        let output = command.output().context("spawn isolated probe process")?;
+        assert!(
+            output.status.success(),
+            "isolated probe failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(())
+    }
+
+    fn live_child_probe() -> Result<()> {
+        // Warm the wait-timeout crate's global init and confirm the helper's
+        // happy path before constraining descriptors.
+        let warm = tempfile::tempdir()?;
+        let warm_stdout = warm.path().join("warm.stdout");
+        let warm_stderr = warm.path().join("warm.stderr");
+        let mut warm_command = fixture_command()?;
+        warm_command.stdout(Stdio::from(fs::File::create(&warm_stdout)?));
+        warm_command.stderr(Stdio::from(fs::File::create(&warm_stderr)?));
+        let warm_child = warm_command.spawn().context("spawn warm fixture child")?;
+        let warm_output = wait_for_child_output_files(warm_child, &warm_stdout, &warm_stderr, 10)
+            .context("warm helper call must succeed")?;
+        assert!(
+            warm_output.status.success(),
+            "warm fixture child must succeed"
+        );
+
+        let temp = tempfile::tempdir()?;
+        let stdout_path = temp.path().join("wait-failure.stdout");
+        let stderr_path = temp.path().join("wait-failure.stderr");
+        fs::write(&stdout_path, b"stdout")?;
+        fs::write(&stderr_path, b"stderr")?;
+        let mut command = fixture_command()?;
+        command.env("UB_REVIEW_OUTPUT_CHILD_SLEEP", "1");
+        command.stdout(Stdio::from(fs::File::create(&stdout_path)?));
+        command.stderr(Stdio::from(fs::File::create(&stderr_path)?));
+        let child = command.spawn().context("spawn sleeping fixture child")?;
+        let raw_pid = child.id();
+        let mut alive = false;
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while std::time::Instant::now() < deadline {
+            alive = proc_entry_exists(raw_pid)?;
+            if alive {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            alive,
+            "sleeping fixture child must be observable before the wait failure"
+        );
+
+        // Constrain and exhaust descriptors so the wait-timeout crate's
+        // per-call socketpair fails while the child is still alive.
+        let limits = rustix::process::getrlimit(rustix::process::Resource::Nofile);
+        let ceiling = limits.maximum.unwrap_or(64).min(64);
+        rustix::process::setrlimit(
+            rustix::process::Resource::Nofile,
+            rustix::process::Rlimit {
+                current: Some(ceiling),
+                maximum: limits.maximum,
+            },
+        )
+        .context("lower the descriptor ceiling")?;
+        let mut leaked = Vec::new();
+        while let Ok(file) = fs::File::open("/dev/null") {
+            leaked.push(file);
+            if leaked.len() >= 8192 {
+                bail!("descriptor ceiling was not reached within 8192 opens");
+            }
+        }
+        let exhaust_error = fs::File::open("/dev/null")
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("descriptor exhaustion must leave an error"))?;
+        assert_eq!(
+            exhaust_error.raw_os_error(),
+            Some(rustix::io::Errno::MFILE.raw_os_error())
+        );
+
+        let error = wait_for_child_output_files(child, &stdout_path, &stderr_path, 10)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("wait must fail under descriptor exhaustion"))?;
+        assert_eq!(
+            error.to_string(),
+            "child wait failed; attempted child termination and output cleanup"
+        );
+        assert_eq!(
+            error
+                .downcast_ref::<std::io::Error>()
+                .map(std::io::Error::raw_os_error),
+            Some(Some(rustix::io::Errno::MFILE.raw_os_error()))
+        );
+
+        drop(leaked);
+        assert!(!stdout_path.exists(), "stdout survived wait failure");
+        assert!(!stderr_path.exists(), "stderr survived wait failure");
+        let mut terminated = false;
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while std::time::Instant::now() < deadline {
+            terminated = !proc_entry_exists(raw_pid)?;
+            if terminated {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(terminated, "live child must not survive the wait failure");
         Ok(())
     }
 }
