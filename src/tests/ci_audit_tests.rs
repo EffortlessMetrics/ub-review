@@ -2751,11 +2751,11 @@ fn ci_repair_pagination_uses_raw_page_not_decoded_population() -> Result<()> {
             listener,
             8,
             "ci repair pagination",
-            Duration::from_secs(2),
+            super::FAKE_HTTP_IDLE_DEADLINE,
             |_idx, mut stream| {
                 stream.set_nonblocking(false)?;
-                stream.set_read_timeout(Some(Duration::from_secs(2)))?;
-                stream.set_write_timeout(Some(Duration::from_secs(2)))?;
+                stream.set_read_timeout(Some(super::FAKE_HTTP_STREAM_TIMEOUT))?;
+                stream.set_write_timeout(Some(super::FAKE_HTTP_STREAM_TIMEOUT))?;
                 let mut reader = BufReader::new(stream.try_clone()?);
                 let mut headers = String::new();
                 loop {
