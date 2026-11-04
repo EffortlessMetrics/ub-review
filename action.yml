@@ -810,18 +810,25 @@ runs:
       id: paths
       if: always()
       shell: bash
+      env:
+        UB_REVIEW_OUT_DIR: ${{ inputs.out }}
       run: |
-        echo "summary-path=${{ inputs.out }}/running-summary.md" >> "$GITHUB_OUTPUT"
-        echo "events-path=${{ inputs.out }}/events.ndjson" >> "$GITHUB_OUTPUT"
-        echo "review-json-path=${{ inputs.out }}/review/review.json" >> "$GITHUB_OUTPUT"
-        echo "metrics-json-path=${{ inputs.out }}/review/metrics.json" >> "$GITHUB_OUTPUT"
-        echo "github-review-path=${{ inputs.out }}/review/github-review.json" >> "$GITHUB_OUTPUT"
-        echo "post-result-path=${{ inputs.out }}/review/post-result.json" >> "$GITHUB_OUTPUT"
-        echo "post-error-path=${{ inputs.out }}/review/post-error.json" >> "$GITHUB_OUTPUT"
-        echo "post-payload-path=${{ inputs.out }}/review/github-review-post-payload.json" >> "$GITHUB_OUTPUT"
-        echo "post-stdout-path=${{ inputs.out }}/review/post-stdout.json" >> "$GITHUB_OUTPUT"
-        echo "post-stderr-path=${{ inputs.out }}/review/post-stderr.txt" >> "$GITHUB_OUTPUT"
-        echo "gate-outcome-path=${{ inputs.out }}/review/gate_outcome.json" >> "$GITHUB_OUTPUT"
+        # The out input travels as env data, never as script text, and CR/LF
+        # are stripped so each key emits exactly one GITHUB_OUTPUT record.
+        emit_path() {
+          printf '%s\n' "$1=$(printf '%s' "$2" | tr -d '\r\n')" >> "$GITHUB_OUTPUT"
+        }
+        emit_path summary-path "$UB_REVIEW_OUT_DIR/running-summary.md"
+        emit_path events-path "$UB_REVIEW_OUT_DIR/events.ndjson"
+        emit_path review-json-path "$UB_REVIEW_OUT_DIR/review/review.json"
+        emit_path metrics-json-path "$UB_REVIEW_OUT_DIR/review/metrics.json"
+        emit_path github-review-path "$UB_REVIEW_OUT_DIR/review/github-review.json"
+        emit_path post-result-path "$UB_REVIEW_OUT_DIR/review/post-result.json"
+        emit_path post-error-path "$UB_REVIEW_OUT_DIR/review/post-error.json"
+        emit_path post-payload-path "$UB_REVIEW_OUT_DIR/review/github-review-post-payload.json"
+        emit_path post-stdout-path "$UB_REVIEW_OUT_DIR/review/post-stdout.json"
+        emit_path post-stderr-path "$UB_REVIEW_OUT_DIR/review/post-stderr.txt"
+        emit_path gate-outcome-path "$UB_REVIEW_OUT_DIR/review/gate_outcome.json"
 
     # #839: expose the separated results as structured outputs so a consumer
     # workflow branches on values, never on prose. Reads the recorded artifact
