@@ -29,7 +29,11 @@ pub(crate) fn prepare_plan(
         let (diff, revision) = if let Some(admission) = trusted_admission {
             admission
         } else {
-            let diff = DiffContext::from_git(&args.root, &args.base, &args.head)?;
+            let diff = if args.merge_group {
+                crate::revision_admission::merge_group_diff(&args.root, &args.base, &args.head)?
+            } else {
+                DiffContext::from_git(&args.root, &args.base, &args.head)?
+            };
             // A1.2 (#949): admit the exact reviewed revision next to the diff so the
             // digests bind to the same changed-file set and patch. Ambiguity here is
             // an explicit evidence failure, never a relabeled identity. Hosted

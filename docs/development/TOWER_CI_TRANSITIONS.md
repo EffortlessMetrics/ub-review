@@ -141,7 +141,12 @@ existing helper and evidence while joining the following actual gaps:
   explicit H admission/G qualification aggregate and coordinated protection.
 - `revision_admission.rs` now admits an explicit `merge_group` subject with exact
   B/G commits, actual B-to-G diff, a clean G checkout and no PR head. Canonical
-  artifact validation preserves that identity and PR delivery refuses it. This
+  artifact validation preserves that identity and PR delivery refuses it. Actual-G
+  reads and diff construction disable replacement objects and isolate inherited
+  Git repository/index/configuration variables. A fresh private index from G
+  checks working bytes without inheriting assume-unchanged, skip-worktree or sparse
+  flags, and leaves the caller index unchanged; canonical readers require exact LF
+  normalization, including when a forged digest is recomputed. This
   object proof does not itself establish native queue membership or authority.
 - The independent baseline obtains its fixed command authority from protected
   `pull_request_target` source. Moving its event to `merge_group` alone would make
@@ -163,6 +168,9 @@ The staged final catalog has one native `merge_group: checks_requested` caller,
 `queue-qualification.yml`, and no ordinary PR/push/review/comment/label roots.
 It joins the complete contained model-off gate, the immutable seven-population
 baseline at `bf077a0178c3fe159927a6ea39ee274050a92e10`, and the bootstrap contract.
+The contained gate definition is also pinned to that reviewed preparation SHA:
+G code cannot move the telemetry OIDC permission into candidate execution before
+the publisher checks source generation. Its checkout and analysis still use G.
 The internal Actions `ub-review/gate` finalizer requires every family to succeed;
 missing, skipped, cancelled and failed results cannot pass. `xtask policy-check`
 rejects all reintroduced ordinary roots, including cheap or skipped wrappers.

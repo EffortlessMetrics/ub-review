@@ -456,6 +456,156 @@ pub(crate) fn admit_revision(
     })
 }
 
+/// Actual-G reads must not inherit a different repository/index/configuration
+/// or honor replacement objects. Ordinary PR admission keeps its existing path.
+fn isolate_group_git_environment(command: &mut ProcessCommand) {
+    let inherited = std::env::vars_os().map(|(key, _)| key);
+    let explicit = command
+        .get_envs()
+        .map(|(key, _)| key.to_owned())
+        .collect::<Vec<_>>();
+    for key in inherited.chain(explicit) {
+        if key
+            .to_string_lossy()
+            .to_ascii_uppercase()
+            .starts_with("GIT_")
+        {
+            command.env_remove(key);
+        }
+    }
+    let null = if cfg!(windows) { "NUL" } else { "/dev/null" };
+    command
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", null)
+        .env("GIT_GRAFT_FILE", null)
+        .env("GIT_NO_REPLACE_OBJECTS", "1");
+}
+
+fn group_git_command(root: &Path, args: &[&str]) -> Result<ProcessCommand> {
+    let root = root
+        .canonicalize()
+        .context("resolve actual-G repository root")?;
+    let mut command = ProcessCommand::new("git");
+    command
+        .arg("--no-replace-objects")
+        .args(["-c", "core.fsmonitor=false", "-c", "color.ui=false"])
+        .arg("-C")
+        .arg(&root)
+        .arg("--work-tree")
+        .arg(&root)
+        .args(args);
+    isolate_group_git_environment(&mut command);
+    Ok(command)
+}
+
+fn group_git_text(root: &Path, args: &[&str]) -> Result<String> {
+    group_git_output(group_git_command(root, args)?)
+}
+
+fn group_git_output(mut command: ProcessCommand) -> Result<String> {
+    let output = command.output().context("read actual-G Git objects")?;
+    if !output.status.success() {
+        bail!(
+            "actual-G Git read failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    String::from_utf8(output.stdout).context("actual-G Git read must be UTF-8")
+}
+
+fn group_worktree_status(root: &Path, group: &str) -> Result<String> {
+    let scratch = AdmissionScratch::create()?;
+    let mut read = group_git_command(
+        root,
+        &[
+            "-c",
+            "core.sparseCheckout=false",
+            "-c",
+            "index.sparse=false",
+            "read-tree",
+            "--no-sparse-checkout",
+            group,
+        ],
+    )?;
+    // This index is exclusively owned scratch, bound after ambient Git_* input
+    // removal. Never import or update the caller's index flags/stat cache.
+    read.env("GIT_INDEX_FILE", &scratch.index);
+    group_git_output(read)?;
+    let mut status = group_git_command(
+        root,
+        &[
+            "-c",
+            "core.sparseCheckout=false",
+            "-c",
+            "index.sparse=false",
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+            "--ignore-submodules=none",
+        ],
+    )?;
+    status.env("GIT_INDEX_FILE", &scratch.index);
+    group_git_output(status)
+}
+
+fn resolve_group_pair(root: &Path, label: &str, rev: &str) -> Result<CommitTree> {
+    let commit = group_git_text(
+        root,
+        &["rev-parse", "--verify", &format!("{rev}^{{commit}}")],
+    )?;
+    let tree = group_git_text(root, &["show", "-s", "--format=%T", commit.trim()])?;
+    CommitTree::new(label, commit.trim(), tree.trim())
+}
+
+pub(crate) fn merge_group_diff(root: &Path, base: &str, group: &str) -> Result<crate::DiffContext> {
+    // Shape-check before passing a caller value to Git. Symbolic names and
+    // option-like refs are not an integration identity.
+    CommitTree::new("integration ids", base, group)?;
+    let names = group_git_text(
+        root,
+        &[
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--no-renames",
+            "--ignore-submodules=none",
+            "--name-only",
+            "-z",
+            base,
+            group,
+            "--",
+        ],
+    )?;
+    let changed_files = names
+        .split_terminator('\0')
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    let patch = group_git_text(
+        root,
+        &[
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--no-renames",
+            "--ignore-submodules=none",
+            "--patch",
+            base,
+            group,
+            "--",
+        ],
+    )?;
+    let flags = crate::classify_diff(&changed_files, &patch);
+    let diff_class = crate::classify_diff_class(&changed_files, &flags);
+    Ok(crate::DiffContext {
+        base: base.to_owned(),
+        head: group.to_owned(),
+        changed_files,
+        patch,
+        flags,
+        diff_class,
+    })
+}
+
 /// Admit exact integration B/G without interpreting G's parents as PR identity.
 /// Queue membership, H authorization and workflow authority remain external
 /// joins. The reviewed artifact covers the actual B-to-G delta only.
@@ -466,43 +616,21 @@ pub(crate) fn admit_merge_group_revision(
     changed_files: &[String],
     patch: &str,
 ) -> Result<RevisionAdmission> {
-    let base = resolve_pair(root, "integration base", base_sha)?;
-    let group = resolve_pair(root, "integration group", group_sha)?;
+    CommitTree::new("integration ids", base_sha, group_sha)?;
+    let base = resolve_group_pair(root, "integration base", base_sha)?;
+    let group = resolve_group_pair(root, "integration group", group_sha)?;
     if base.commit_oid() != base_sha || group.commit_oid() != group_sha || base_sha == group_sha {
         bail!("merge-group admission requires distinct exact B/G commit ids");
     }
-    git_text(root, &["merge-base", "--is-ancestor", base_sha, group_sha])
+    group_git_text(root, &["merge-base", "--is-ancestor", base_sha, group_sha])
         .context("integration base B must be an ancestor of G")?;
-    if resolve_pair(root, "checkout", "HEAD")? != group
-        || !git_lines(root, &["status", "--porcelain"])?.is_empty()
+    if resolve_group_pair(root, "checkout", "HEAD")? != group
+        || !group_worktree_status(root, group_sha)?.is_empty()
     {
         bail!("merge-group admission requires a clean checkout at exact G");
     }
-    let observed_files = git_lines(
-        root,
-        &[
-            "diff",
-            "--no-ext-diff",
-            "--no-textconv",
-            "--ignore-submodules=none",
-            "--name-only",
-            base_sha,
-            group_sha,
-        ],
-    )?;
-    let observed_patch = git_text(
-        root,
-        &[
-            "diff",
-            "--no-ext-diff",
-            "--no-textconv",
-            "--ignore-submodules=none",
-            "--patch",
-            base_sha,
-            group_sha,
-        ],
-    )?;
-    if observed_files != changed_files || observed_patch != patch {
+    let observed = merge_group_diff(root, base_sha, group_sha)?;
+    if observed.changed_files != changed_files || observed.patch != patch {
         bail!("merge-group review inputs differ from the exact B-to-G delta");
     }
     let identity = RevisionIdentity::new(
@@ -689,7 +817,7 @@ mod tests {
         )?;
         for group in [&merged, squashed.trim()] {
             git(&repo, &["checkout", "--detach", group])?;
-            let diff = crate::DiffContext::from_git(repo.root(), &base, group)?;
+            let diff = merge_group_diff(repo.root(), &base, group)?;
             let admission = admit_merge_group_revision(
                 repo.root(),
                 &base,
@@ -727,7 +855,7 @@ mod tests {
         let (base, head) = divergent_commits(&repo)?;
         let group = synthetic_merge(&repo, &base, &head)?;
         git(&repo, &["checkout", "--detach", &group])?;
-        let diff = crate::DiffContext::from_git(repo.root(), &base, &group)?;
+        let diff = merge_group_diff(repo.root(), &base, &group)?;
         let admit = |b: &str, g: &str, paths: &[String], patch: &str| {
             admit_merge_group_revision(repo.root(), b, g, paths, patch)
         };
@@ -746,6 +874,182 @@ mod tests {
         admission.pr_head_commit = None;
         admission.semantics = "candidate_head".to_owned();
         assert!(admission.validate().is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn merge_group_ignores_replacement_objects_and_rejects_their_checkout() -> Result<()> {
+        let repo = init_repo()?;
+        let (base, head) = divergent_commits(&repo)?;
+        let group = synthetic_merge(&repo, &base, &head)?;
+        let actual_tree = git(&repo, &["show", "-s", "--format=%T", &group])?;
+        let base_tree = git(&repo, &["show", "-s", "--format=%T", &base])?;
+        let replacement = git(
+            &repo,
+            &[
+                "commit-tree",
+                base_tree.trim(),
+                "-p",
+                &base,
+                "-m",
+                "replacement hides candidate",
+            ],
+        )?;
+        git(&repo, &["checkout", "--detach", &group])?;
+        git(&repo, &["replace", &group, replacement.trim()])?;
+        git(&repo, &["reset", "--hard", &group])?;
+        let forged = crate::DiffContext::from_git(repo.root(), &base, &group)?;
+        assert!(forged.changed_files.is_empty());
+        assert!(git(&repo, &["status", "--porcelain"])?.is_empty());
+        assert!(
+            admit_merge_group_revision(
+                repo.root(),
+                &base,
+                &group,
+                &forged.changed_files,
+                &forged.patch
+            )
+            .is_err()
+        );
+        let actual = merge_group_diff(repo.root(), &base, &group)?;
+        assert_eq!(actual.changed_files, ["src/a.rs"]);
+        assert_eq!(
+            resolve_group_pair(repo.root(), "actual G", &group)?.tree_oid(),
+            actual_tree.trim()
+        );
+        assert!(
+            admit_merge_group_revision(
+                repo.root(),
+                &base,
+                &group,
+                &actual.changed_files,
+                &actual.patch
+            )
+            .is_err()
+        );
+        git(&repo, &["--no-replace-objects", "reset", "--hard", &group])?;
+        let admitted = admit_merge_group_revision(
+            repo.root(),
+            &base,
+            &group,
+            &actual.changed_files,
+            &actual.patch,
+        )?;
+        admitted.validate()?;
+        Ok(())
+    }
+
+    #[test]
+    fn merge_group_rejects_drift_hidden_by_local_index_flags() -> Result<()> {
+        let repo = init_repo()?;
+        let (base, head) = divergent_commits(&repo)?;
+        let group = synthetic_merge(&repo, &base, &head)?;
+        git(&repo, &["checkout", "--detach", &group])?;
+        let diff = merge_group_diff(repo.root(), &base, &group)?;
+        for flag in ["--assume-unchanged", "--skip-worktree"] {
+            git(&repo, &["update-index", flag, "src/a.rs"])?;
+            fs::write(repo.root().join("src/a.rs"), "different analyzed bytes")?;
+            assert!(git(&repo, &["status", "--porcelain"])?.is_empty());
+            let index_before = fs::read(repo.root().join(".git/index"))?;
+            let flags_before = git(
+                &repo,
+                &[
+                    "-c",
+                    "core.sparseCheckout=false",
+                    "-c",
+                    "index.sparse=false",
+                    "ls-files",
+                    "-v",
+                ],
+            )?;
+            git(&repo, &["config", "core.sparseCheckout", "true"])?;
+            git(&repo, &["config", "index.sparse", "true"])?;
+            fs::create_dir_all(repo.root().join(".git/info"))?;
+            fs::write(
+                repo.root().join(".git/info/sparse-checkout"),
+                "/src/main.txt\n",
+            )?;
+            assert!(
+                admit_merge_group_revision(
+                    repo.root(),
+                    &base,
+                    &group,
+                    &diff.changed_files,
+                    &diff.patch
+                )
+                .is_err(),
+                "{flag}"
+            );
+            assert_eq!(fs::read(repo.root().join(".git/index"))?, index_before);
+            assert_eq!(
+                git(
+                    &repo,
+                    &[
+                        "-c",
+                        "core.sparseCheckout=false",
+                        "-c",
+                        "index.sparse=false",
+                        "ls-files",
+                        "-v"
+                    ]
+                )?,
+                flags_before
+            );
+            git(&repo, &["config", "core.sparseCheckout", "false"])?;
+            git(&repo, &["config", "index.sparse", "false"])?;
+            git(
+                &repo,
+                &[
+                    "update-index",
+                    "--no-assume-unchanged",
+                    "--no-skip-worktree",
+                    "src/a.rs",
+                ],
+            )?;
+            git(&repo, &["reset", "--hard", &group])?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn merge_group_git_removes_alternate_repository_index_and_config_environment() -> Result<()> {
+        let repo = init_repo()?;
+        let other = init_repo()?;
+        commit_file(&repo, "actual.txt", "actual", "actual repository")?;
+        commit_file(&other, "alternate.txt", "alternate", "alternate repository")?;
+        let actual = git(&repo, &["rev-parse", "HEAD"])?;
+        let alternate = git(&other, &["rev-parse", "HEAD"])?;
+        assert_ne!(actual, alternate);
+        let mut command = group_git_command(repo.root(), &["rev-parse", "HEAD"])?;
+        command
+            .env("GIT_DIR", other.root().join(".git"))
+            .env("GIT_COMMON_DIR", other.root().join(".git"))
+            .env("GIT_WORK_TREE", other.root())
+            .env("GIT_INDEX_FILE", other.root().join(".git/index"))
+            .env("GIT_OBJECT_DIRECTORY", other.root().join(".git/objects"))
+            .env(
+                "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+                other.root().join(".git/objects"),
+            )
+            .env("GIT_CONFIG_COUNT", "1")
+            .env("GIT_CONFIG_KEY_0", "core.worktree")
+            .env("GIT_CONFIG_VALUE_0", other.root());
+        let hostile = command.output()?;
+        assert!(hostile.status.success());
+        assert_eq!(String::from_utf8(hostile.stdout)?.trim(), alternate.trim());
+        isolate_group_git_environment(&mut command);
+        let isolated = command.output()?;
+        assert!(isolated.status.success());
+        assert_eq!(String::from_utf8(isolated.stdout)?.trim(), actual.trim());
+        fs::write(repo.root().join("actual.txt"), "dirty actual repository")?;
+        let mut status = group_git_command(repo.root(), &["status", "--porcelain"])?;
+        status
+            .env("GIT_DIR", other.root().join(".git"))
+            .env("GIT_INDEX_FILE", other.root().join(".git/index"));
+        isolate_group_git_environment(&mut status);
+        let output = status.output()?;
+        assert!(output.status.success());
+        assert!(String::from_utf8(output.stdout)?.contains("actual.txt"));
         Ok(())
     }
 

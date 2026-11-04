@@ -14,7 +14,9 @@ concurrency:
 
 jobs:
   candidate:
-    uses: ./.github/workflows/ub-review-gate.yml
+    # Pin the permission boundary before any G code executes. Only this reviewed
+    # definition can assign OIDC to the separate no-checkout telemetry job.
+    uses: EffortlessMetrics/ub-review/.github/workflows/ub-review-gate.yml@bf077a0178c3fe159927a6ea39ee274050a92e10
     permissions:
       contents: read
       actions: read

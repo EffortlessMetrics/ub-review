@@ -2018,7 +2018,7 @@ def load_revision_binding(root: pathlib.Path) -> "dict | None":
     if semantics_line == "merge_group":
         lines = canonical.splitlines()
         keys = ["semantics", "base", "head", "reviewed", "merge", "changed_paths", "diff"]
-        if not canonical.endswith("\n") or len(lines) != 8 or [line.partition("=")[0] for line in lines[1:]] != keys:
+        if canonical != "\n".join(lines) + "\n" or len(lines) != 8 or [line.partition("=")[0] for line in lines[1:]] != keys:
             fail("[semantics_mismatch] malformed merge-group identity")
         fields = dict(line.split("=", 1) for line in lines[1:])
         pairs = [fields[key].split(" ") for key in ("base", "head", "reviewed", "merge")]
@@ -15781,6 +15781,11 @@ def self_test_revision_binding_enforcement() -> None:
     ):
         write_self_test_json(admission_path, {**admission, **change})
         expect_self_test_failure(label, "[semantics_mismatch]", lambda: load_revision_binding(group))
+    for separator in ("\r\n", "\r", "\u2028"):
+        noncanonical = group_canonical.replace("\nhead=", separator + "head=", 1)
+        write_self_test_json(admission_path, {**admission, "identity_canonical": noncanonical,
+                                             "identity_digest": _recompute_identity_digest(noncanonical)})
+        expect_self_test_failure("non-LF G canonical form", "[semantics_mismatch]", lambda: load_revision_binding(group))
     contradictory = group_canonical.replace("merge=" + "3" * 40, "merge=" + "5" * 40)
     write_self_test_json(admission_path, {**admission, "identity_canonical": contradictory,
                                         "identity_digest": _recompute_identity_digest(contradictory)})

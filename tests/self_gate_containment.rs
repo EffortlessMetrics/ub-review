@@ -27,6 +27,10 @@ fn candidate_gate_job_is_model_off_artifact_only_and_without_privileged_inputs()
         WORKFLOW.contains("permissions: {}"),
         "workflow defaults must grant no token permissions"
     );
+    ensure!(
+        QUEUE_WORKFLOW.contains("uses: EffortlessMetrics/ub-review/.github/workflows/ub-review-gate.yml@bf077a0178c3fe159927a6ea39ee274050a92e10"),
+        "G must not redefine the workflow that allocates telemetry OIDC authority"
+    );
     let gate = job_section(WORKFLOW, "gate", Some("coverage-upload"))?;
 
     for required in [

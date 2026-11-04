@@ -147,6 +147,8 @@ class QueuePortfolio(unittest.TestCase):
         expected = 'bf077a0178c3fe159927a6ea39ee274050a92e10'
         self.assertIn('uses: EffortlessMetrics/ub-review/.github/workflows/independent-baseline.yml@' + expected, self.workflow)
         self.assertIn('definition_sha: ' + expected, self.workflow)
+        self.assertIn('uses: EffortlessMetrics/ub-review/.github/workflows/ub-review-gate.yml@' + expected, self.workflow)
+        self.assertNotIn('uses: ./.github/workflows/ub-review-gate.yml', self.workflow)
         result = self.workflow.split('\n  result:', 1)[1]
         self.assertIn('needs: [candidate, baseline, bootstrap]', result)
         self.assertIn('if: ${{ always() }}', result)
