@@ -1135,6 +1135,18 @@ fn sanitize_impact_section(table: &mut toml::value::Table, errors: &mut Vec<Poli
     }
 }
 
+/// Shape of a rejected provider value: the TOML type, plus length for sized
+/// kinds. `PolicyError` receipts serialize into `effective-config.json` and
+/// gate reasons, so the detail must never carry the rejected payload text.
+fn rejected_value_shape(value: &toml::Value) -> String {
+    match value {
+        toml::Value::String(text) => format!("string of length {}", text.len()),
+        toml::Value::Array(items) => format!("array of length {}", items.len()),
+        toml::Value::Table(items) => format!("table of {} keys", items.len()),
+        other => other.type_str().to_owned(),
+    }
+}
+
 /// Validate consumed `[providers]` keys. `policy` must name a provider policy
 /// the CLI enum knows (`auto`, `minimax-primary`, `primary-with-fallback`,
 /// `minimax-only`, `opencode-go-canary`, `opencode-go-wide`).
@@ -1143,7 +1155,8 @@ fn sanitize_impact_section(table: &mut toml::value::Table, errors: &mut Vec<Poli
 /// cache mode (`explicit-anthropic` or `off`). `[providers.opencode]` has no
 /// cache mode yet, so any `prompt_cache` value there is rejected. Bad values
 /// are stripped with `PolicyError` receipts so the run cannot silently fall
-/// back while looking configured.
+/// back while looking configured. Receipt details describe the rejected
+/// value's shape, never its text (#1427).
 fn sanitize_providers_section(table: &mut toml::value::Table, errors: &mut Vec<PolicyError>) {
     if let Some(value) = table.get("providers")
         && value.as_table().is_none()
@@ -1151,7 +1164,8 @@ fn sanitize_providers_section(table: &mut toml::value::Table, errors: &mut Vec<P
         errors.push(PolicyError {
             section: "providers".to_owned(),
             detail: format!(
-                "invalid [providers] value {value}; expected a table with `policy`, `minimax`, and `opencode` keys"
+                "invalid [providers] value {}; expected a table with `policy`, `minimax`, and `opencode` keys",
+                rejected_value_shape(value)
             ),
         });
         table.remove("providers");
@@ -1171,9 +1185,10 @@ fn sanitize_providers_section(table: &mut toml::value::Table, errors: &mut Vec<P
             errors.push(PolicyError {
                 section: "providers".to_owned(),
                 detail: format!(
-                    "invalid [providers] policy value {policy}; expected one of: auto, \
+                    "invalid [providers] policy value {}; expected one of: auto, \
                      minimax-primary, primary-with-fallback, minimax-only, \
-                     opencode-go-canary, opencode-go-wide"
+                     opencode-go-canary, opencode-go-wide",
+                    rejected_value_shape(policy)
                 ),
             });
             providers.remove("policy");
@@ -1185,7 +1200,10 @@ fn sanitize_providers_section(table: &mut toml::value::Table, errors: &mut Vec<P
         {
             errors.push(PolicyError {
                 section: format!("providers.{provider}"),
-                detail: format!("invalid [providers.{provider}] value {value}; expected a table"),
+                detail: format!(
+                    "invalid [providers.{provider}] value {}; expected a table",
+                    rejected_value_shape(value)
+                ),
             });
             providers.remove(provider);
             continue;
@@ -1202,8 +1220,9 @@ fn sanitize_providers_section(table: &mut toml::value::Table, errors: &mut Vec<P
                 errors.push(PolicyError {
                     section: format!("providers.{provider}.max_concurrency"),
                     detail: format!(
-                        "invalid [providers.{provider}] max_concurrency value {max_concurrency}; \
-                         expected a positive integer"
+                        "invalid [providers.{provider}] max_concurrency value {}; \
+                         expected a positive integer",
+                        rejected_value_shape(max_concurrency)
                     ),
                 });
                 provider_table.remove("max_concurrency");
@@ -1220,13 +1239,15 @@ fn sanitize_providers_section(table: &mut toml::value::Table, errors: &mut Vec<P
         if !valid {
             let detail = if provider == "minimax" {
                 format!(
-                    "invalid [providers.minimax] prompt_cache value {prompt_cache}; \
-                     expected one of: explicit-anthropic, off"
+                    "invalid [providers.minimax] prompt_cache value {}; \
+                     expected one of: explicit-anthropic, off",
+                    rejected_value_shape(prompt_cache)
                 )
             } else {
                 format!(
-                    "unsupported [providers.opencode] prompt_cache value {prompt_cache}; \
-                     OpenCode prompt caching is not implemented"
+                    "unsupported [providers.opencode] prompt_cache value {}; \
+                     OpenCode prompt caching is not implemented",
+                    rejected_value_shape(prompt_cache)
                 )
             };
             errors.push(PolicyError {
@@ -2059,13 +2080,13 @@ unknown = true
         let mut value: toml::Value = toml::from_str("[providers]\npolicy = \"minimax-primry\"\n")?;
         let errors = sanitize_policy_sections(&mut value);
         // Exact oracle on the receipt push: exactly one error, exact
-        // section, and a detail that names both the rejected value and the
-        // accepted vocabulary.
+        // section, and a detail that names the rejected value's shape and
+        // the accepted vocabulary without carrying the value itself (#1427).
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].section, "providers");
         assert_eq!(
             errors[0].detail,
-            "invalid [providers] policy value \"minimax-primry\"; expected one of: auto, \
+            "invalid [providers] policy value string of length 14; expected one of: auto, \
              minimax-primary, primary-with-fallback, minimax-only, \
              opencode-go-canary, opencode-go-wide"
         );
@@ -2096,7 +2117,7 @@ unknown = true
         assert_eq!(malformed.policy_errors[0].section, "providers");
         assert_eq!(
             malformed.policy_errors[0].detail,
-            "invalid [providers] value \"disabled\"; expected a table with `policy`, `minimax`, and `opencode` keys"
+            "invalid [providers] value string of length 8; expected a table with `policy`, `minimax`, and `opencode` keys"
         );
         assert_eq!(malformed.providers.policy, "");
         assert_eq!(malformed.impact.resolved_mode(), "active");
@@ -2109,6 +2130,62 @@ unknown = true
         assert_eq!(malformed.providers.policy, "minimax-only");
         assert_eq!(malformed.providers.minimax.max_concurrency, None);
         assert_eq!(malformed.providers.opencode.max_concurrency, Some(2));
+        Ok(())
+    }
+
+    #[test]
+    fn provider_receipts_describe_shape_and_omit_rejected_payload() -> anyhow::Result<()> {
+        let canary = "sk-SYNTHETIC-PRIVATE-CANARY";
+        // Top-level scalar [providers]: the receipt names the field and the
+        // observed shape, and the sentinel survives neither the detail nor
+        // the serialized effective-config.json.
+        let scalar = Config::from_toml_with_policy_receipts(&format!(
+            "providers = \"{canary}\"\n[impact]\nmode = \"active\"\n"
+        ))?;
+        assert_eq!(scalar.policy_errors.len(), 1);
+        assert_eq!(scalar.policy_errors[0].section, "providers");
+        let detail = &scalar.policy_errors[0].detail;
+        assert!(detail.contains("[providers]"), "{detail}");
+        assert!(detail.contains("string of length 27"), "{detail}");
+        assert_eq!(scalar.impact.resolved_mode(), "active");
+        assert!(!serde_json::to_string(&scalar)?.contains(canary));
+
+        // Non-table provider arrays for both named providers: one receipt
+        // per provider, valid-sibling policy retained, sentinel redacted.
+        let arrays = Config::from_toml_with_policy_receipts(&format!(
+            "[providers]\npolicy = \"minimax-only\"\nminimax = [{{ private_payload = \"{canary}\" }}]\nopencode = [{{ private_payload = \"{canary}\" }}]\n"
+        ))?;
+        assert_eq!(arrays.policy_errors.len(), 2);
+        for (error, provider) in arrays.policy_errors.iter().zip(["minimax", "opencode"]) {
+            assert_eq!(error.section, format!("providers.{provider}"));
+            assert!(
+                error.detail.contains(&format!("[providers.{provider}]")),
+                "{}",
+                error.detail
+            );
+            assert!(
+                error.detail.contains("array of length 1"),
+                "{}",
+                error.detail
+            );
+            assert!(!error.detail.contains(canary), "{}", error.detail);
+        }
+        assert_eq!(arrays.providers.policy, "minimax-only");
+        assert!(!serde_json::to_string(&arrays)?.contains(canary));
+
+        // A pasted key under [providers].policy is the misplacement this
+        // redaction exists for: the field stays named, the value never
+        // reaches the receipt text or the serialized config.
+        let policy = Config::from_toml_with_policy_receipts(&format!(
+            "[providers]\npolicy = \"{canary}\"\n"
+        ))?;
+        assert_eq!(policy.policy_errors.len(), 1);
+        assert_eq!(policy.policy_errors[0].section, "providers");
+        let detail = &policy.policy_errors[0].detail;
+        assert!(detail.contains("policy"), "{detail}");
+        assert!(detail.contains("string of length 27"), "{detail}");
+        assert!(!detail.contains(canary), "{detail}");
+        assert!(!serde_json::to_string(&policy)?.contains(canary));
         Ok(())
     }
 
@@ -2131,12 +2208,12 @@ unknown = true
         assert_eq!(errors[0].section, "providers.minimax.max_concurrency");
         assert_eq!(
             errors[0].detail,
-            "invalid [providers.minimax] max_concurrency value 0; expected a positive integer"
+            "invalid [providers.minimax] max_concurrency value integer; expected a positive integer"
         );
         assert_eq!(errors[1].section, "providers.opencode.max_concurrency");
         assert_eq!(
             errors[1].detail,
-            "invalid [providers.opencode] max_concurrency value \"many\"; expected a positive integer"
+            "invalid [providers.opencode] max_concurrency value string of length 4; expected a positive integer"
         );
         let Some(providers) = value.get("providers").and_then(toml::Value::as_table) else {
             anyhow::bail!("providers table should remain after sanitization");
@@ -2210,13 +2287,13 @@ unknown = true
         assert_eq!(errors[0].section, "providers.minimax.prompt_cache");
         assert_eq!(
             errors[0].detail,
-            "invalid [providers.minimax] prompt_cache value \"anthropic-explicit\"; \
+            "invalid [providers.minimax] prompt_cache value string of length 18; \
              expected one of: explicit-anthropic, off"
         );
         assert_eq!(errors[1].section, "providers.opencode.prompt_cache");
         assert_eq!(
             errors[1].detail,
-            "unsupported [providers.opencode] prompt_cache value \"explicit-anthropic\"; \
+            "unsupported [providers.opencode] prompt_cache value string of length 18; \
              OpenCode prompt caching is not implemented"
         );
         let Some(providers) = value.get("providers").and_then(toml::Value::as_table) else {
