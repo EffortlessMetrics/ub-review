@@ -46286,3 +46286,8 @@ kind = "exposure_gap"
 finding_id = "probe:src_config.rs:match_arm:8558e22f"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1644; probe other => other.type_str().to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by active_graph_keeps_unresolved_conflict_when_another_lane_lacks_evidence, artifact_bound_to_other_run_is_missing_artifact, contradictory_completion_fields_cannot_override_each_other. Re-verify after any edit to src/config.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_post_run_utils.rs:match_arm:05799a30"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1642; probe \"ast-grep\" => format!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by actionlint_sensor_uses_json_template_format, actual_gnu_producer_format_is_accepted, ast_grep_bootstrap_identity_is_pinned_across_installers_and_doctor. Re-verify after any edit to src/post_run_utils.rs."

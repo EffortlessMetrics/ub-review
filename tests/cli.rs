@@ -3700,7 +3700,7 @@ fn doctor_rejects_failed_version_probe_even_when_it_prints_the_pin() -> Result<(
         ("cargo-allow", "0.1.8"),
         ("ripr", "0.10.0"),
         ("unsafe-review", "0.3.4"),
-        ("ast-grep", "0.0.0"),
+        ("ast-grep", "0.51.1"),
         ("actionlint", "1.7.12"),
     ] {
         let executable = temp.path().join(tool);
