@@ -43,11 +43,17 @@ may proceed concurrently, with one writer per candidate.
 
 For an authorized implementation goal, the same useful lead normally continues
 through the CI wait, complete review/Conversation inventory, actual result inspection,
-separate current-repository judgment, protected merge and landing readback. An
+conditional landing judgment before native enqueue, actual-G qualification,
+protected landing and readback. An
 explicit Draft-only or read-only assignment still stops at its named boundary.
 A real interruption uses an exact continuation record, not a duplicate CI request.
 Read deliver-change for the complete finish path. The existing #1465 admission
-cutover remains separate; this guidance does not claim live triggers changed.
+cutover remains separate from source preparation. The selected steady state has
+zero Actions allocations for Draft, Ready, ordinary update, review, comment and
+label events. Required product proof runs on the actual queue composition, while
+development checks and substantive review stay in the owning session. Retain the
+installed gate and independent baseline until their replacement and queue-only
+enforcement are demonstrated; this guidance does not claim live cutover.
 
 Run the cheapest relevant proof first. Escalate to deep proof when the changed
 surface buys signal from it. `ripr` is static mutation-exposure analysis: it

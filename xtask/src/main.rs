@@ -1,3 +1,5 @@
+mod workflow_lifecycle;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
@@ -4088,6 +4090,7 @@ fn check_policy(root: &Path) -> Result<PolicyReport> {
     validate_ci_lanes(&policy_dir.join("ci-lanes.toml"), &mut report)?;
     validate_ci_risk_packs(&policy_dir.join("ci-risk-packs.toml"), &mut report)?;
     validate_bun_gate_pin(root)?;
+    workflow_lifecycle::validate(root)?;
     validate_ripr_suppressions(root)?;
 
     Ok(report)

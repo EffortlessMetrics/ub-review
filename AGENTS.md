@@ -36,15 +36,30 @@ defines the boundary and the separate route for executable evidence.
 - Do not use bare `#[allow]`; use `#[expect(..., reason = "...")]` and add an owned receipt when the suppression is durable.
 - Work review-fast: one coherent proof obligation per PR, with exact validation and known gaps.
 - Run the cheapest relevant proof first, then deeper proof where it buys signal.
-- Select the candidate intended to land before expensive CI; use the actual installed request path and preserve required checks during the late-qualification cutover.
+- Implement, check, review and repair in the warm owning session. Select the exact
+  candidate intended to land before expensive integration qualification.
+- The selected normal route is conditional landing authorization for exact H,
+  native enqueue, complete proof on actual G, protected landing M and readback by
+  the same owner. Draft, Ready, ordinary updates, comments, reviews and labels start
+  no Actions workflow in the verified target, including cheap or skipped wrappers.
+- Source preparation is not installed enforcement. Preserve the current gate and
+  independent baseline until #1465 qualifies their actual-G producers, trusted
+  H/G publisher, App bindings and queue-only settings. Do not turn an arbitrary
+  App check into an Actions-bound result or leave direct landing able to consume
+  cheap H admission.
 - Treat `ripr` as static mutation-exposure analysis: earlier and cheaper mutation-like weak-oracle signal, with runtime mutation as the slower backstop.
 - Treat `unsafe-review` as unsafe/native reviewability: safety contract, guard, reach, and witness route.
 - Use `xtask` for repo-local orchestration and aggregation; do not reimplement `cargo-allow`, `ripr`, or `unsafe-review` in it.
 - CI cost discipline exists so the project can afford more verification, not less.
 
 For an implementation goal authorized through integration, the owning lead stays
-with the selected candidate through ordinary CI waiting, complete review and
-result inspection, final current-repository judgment, protected merge and landing
-readback. Draft publication and green CI are checkpoints, not default endpoints.
+with the selected candidate through complete review, conditional authorization,
+ordinary queue/CI waiting, result inspection, protected landing and readback.
+Draft publication and green CI are checkpoints, not default endpoints.
 A separate judgment does not require a separate agent or another routine human
 approval. Explicit review-only, Draft-only and release boundaries still apply.
+
+Do not replay product CI after every main merge or on a routine main-health timer.
+Actual release publication and the named quality-telemetry backfill keep their
+separate purposes. Measure complete setup, proof and finalization; queue delay is
+separate, and a configured timeout is not evidence of the <=20-minute target.

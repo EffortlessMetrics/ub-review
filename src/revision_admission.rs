@@ -28,7 +28,7 @@ pub(crate) struct RevisionAdmission {
     pub(crate) identity_canonical: String,
     /// Domain-separated digest over [`Self::identity_canonical`].
     pub(crate) identity_digest: String,
-    /// `"candidate_head"` or `"merge_result"`, mirroring the canonical form.
+    /// Explicit review semantics, mirroring the canonical form.
     pub(crate) semantics: String,
     /// Exact git commit object the run reviewed (the identity's reviewed
     /// pair), for consumers that bind to real objects such as delivery
@@ -456,6 +456,75 @@ pub(crate) fn admit_revision(
     })
 }
 
+/// Admit exact integration B/G without interpreting G's parents as PR identity.
+/// Queue membership, H authorization and workflow authority remain external
+/// joins. The reviewed artifact covers the actual B-to-G delta only.
+pub(crate) fn admit_merge_group_revision(
+    root: &Path,
+    base_sha: &str,
+    group_sha: &str,
+    changed_files: &[String],
+    patch: &str,
+) -> Result<RevisionAdmission> {
+    let base = resolve_pair(root, "integration base", base_sha)?;
+    let group = resolve_pair(root, "integration group", group_sha)?;
+    if base.commit_oid() != base_sha || group.commit_oid() != group_sha || base_sha == group_sha {
+        bail!("merge-group admission requires distinct exact B/G commit ids");
+    }
+    git_text(root, &["merge-base", "--is-ancestor", base_sha, group_sha])
+        .context("integration base B must be an ancestor of G")?;
+    if resolve_pair(root, "checkout", "HEAD")? != group
+        || !git_lines(root, &["status", "--porcelain"])?.is_empty()
+    {
+        bail!("merge-group admission requires a clean checkout at exact G");
+    }
+    let observed_files = git_lines(
+        root,
+        &[
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--ignore-submodules=none",
+            "--name-only",
+            base_sha,
+            group_sha,
+        ],
+    )?;
+    let observed_patch = git_text(
+        root,
+        &[
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--ignore-submodules=none",
+            "--patch",
+            base_sha,
+            group_sha,
+        ],
+    )?;
+    if observed_files != changed_files || observed_patch != patch {
+        bail!("merge-group review inputs differ from the exact B-to-G delta");
+    }
+    let identity = RevisionIdentity::new(
+        base,
+        group.clone(),
+        group.clone(),
+        Some(group.clone()),
+        ReviewSemantics::MergeGroup,
+        &RevisionIdentity::changed_paths_digest(changed_files),
+        &RevisionIdentity::diff_digest(patch.as_bytes()),
+    )?;
+    Ok(RevisionAdmission {
+        schema: REVISION_ADMISSION_SCHEMA.to_owned(),
+        identity_canonical: identity.canonical_form(),
+        identity_digest: identity.identity_digest(),
+        semantics: ReviewSemantics::MergeGroup.as_str().to_owned(),
+        reviewed_commit_oid: group.commit_oid().to_owned(),
+        pr_head_commit: None,
+        worktree_dirty: false,
+    })
+}
+
 impl RevisionAdmission {
     /// Re-validates the stored canonical identity on read paths.
     pub(crate) fn validate(&self) -> Result<()> {
@@ -468,6 +537,15 @@ impl RevisionAdmission {
         }
         if parsed.canonical_form() != self.identity_canonical {
             bail!("revision admission canonical form is not normalized");
+        }
+        if (self.semantics == "merge_group" || parsed.revision_ref().semantics == "merge_group")
+            && (self.pr_head_commit.is_some()
+                || self.worktree_dirty
+                || parsed.revision_ref() != crate::RevisionRef::from_admission(self))
+        {
+            bail!(
+                "merge-group admission cannot substitute a PR head, dirty checkout or another revision"
+            );
         }
         Ok(())
     }
@@ -590,6 +668,86 @@ mod tests {
     }
 
     const SAMPLE_FILES: &[&str] = &["src/a.rs"];
+
+    #[test]
+    fn merge_group_admits_actual_merge_and_single_parent_squash_without_pr_identity() -> Result<()>
+    {
+        let repo = init_repo()?;
+        let (base, head) = divergent_commits(&repo)?;
+        let merged = synthetic_merge(&repo, &base, &head)?;
+        let tree = git(&repo, &["rev-parse", &format!("{merged}^{{tree}}")])?;
+        let squashed = git(
+            &repo,
+            &[
+                "commit-tree",
+                tree.trim(),
+                "-p",
+                &base,
+                "-m",
+                "native squash group",
+            ],
+        )?;
+        for group in [&merged, squashed.trim()] {
+            git(&repo, &["checkout", "--detach", group])?;
+            let diff = crate::DiffContext::from_git(repo.root(), &base, group)?;
+            let admission = admit_merge_group_revision(
+                repo.root(),
+                &base,
+                group,
+                &diff.changed_files,
+                &diff.patch,
+            )?;
+            admission.validate()?;
+            assert_eq!(admission.semantics, "merge_group");
+            assert_eq!(admission.reviewed_commit_oid, group);
+            assert_eq!(admission.pr_head_commit, None);
+            let identity = RevisionIdentity::from_canonical(&admission.identity_canonical)?;
+            assert!(identity.candidate_head_commit().is_err());
+            assert!(identity.merge_delivery_sides().is_err());
+            assert_eq!(diff.changed_files, ["src/a.rs"]);
+            assert!(!diff.patch.contains("src/main.txt"));
+        }
+        assert!(
+            admit_revision(
+                repo.root(),
+                &base,
+                &merged,
+                None,
+                &files_vec(),
+                &sample_patch()
+            )
+            .is_err()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn merge_group_refuses_symbolic_stale_dirty_and_substituted_subjects() -> Result<()> {
+        let repo = init_repo()?;
+        let (base, head) = divergent_commits(&repo)?;
+        let group = synthetic_merge(&repo, &base, &head)?;
+        git(&repo, &["checkout", "--detach", &group])?;
+        let diff = crate::DiffContext::from_git(repo.root(), &base, &group)?;
+        let admit = |b: &str, g: &str, paths: &[String], patch: &str| {
+            admit_merge_group_revision(repo.root(), b, g, paths, patch)
+        };
+        assert!(admit("main", &group, &diff.changed_files, &diff.patch).is_err());
+        assert!(admit(&base, "HEAD", &diff.changed_files, &diff.patch).is_err());
+        assert!(admit(&base, &base, &diff.changed_files, &diff.patch).is_err());
+        assert!(admit(&base, &head, &diff.changed_files, &diff.patch).is_err());
+        assert!(admit(&base, &group, &[], &diff.patch).is_err());
+        assert!(admit(&base, &group, &diff.changed_files, "").is_err());
+        fs::write(repo.root().join("untracked-input"), "not committed")?;
+        assert!(admit(&base, &group, &diff.changed_files, &diff.patch).is_err());
+        fs::remove_file(repo.root().join("untracked-input"))?;
+        let mut admission = admit(&base, &group, &diff.changed_files, &diff.patch)?;
+        admission.pr_head_commit = Some(head);
+        assert!(admission.validate().is_err());
+        admission.pr_head_commit = None;
+        admission.semantics = "candidate_head".to_owned();
+        assert!(admission.validate().is_err());
+        Ok(())
+    }
 
     fn sample_patch() -> String {
         "@@ -1 +1 @@\n-a\n+b\n".to_owned()

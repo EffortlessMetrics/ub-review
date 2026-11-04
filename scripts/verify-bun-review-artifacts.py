@@ -1972,7 +1972,7 @@ def _require_revision_ref(value, label: str) -> None:
         or any(c not in "0123456789abcdef" for c in digest)
     ):
         fail(f"{label} revision digest must be 64 lowercase hex chars")
-    if value.get("semantics") not in {"candidate_head", "merge_result"}:
+    if value.get("semantics") not in {"candidate_head", "merge_result", "merge_group"}:
         fail(f"{label} revision semantics is invalid: {value.get('semantics')!r}")
     commit = value.get("reviewed_commit")
     if not isinstance(commit, str) or len(commit) not in (40, 64):
@@ -1982,7 +1982,7 @@ def _require_revision_ref(value, label: str) -> None:
 REVISION_ADMISSION_SCHEMA = "ub-review.revision_admission.v1"
 _REVISION_CANONICAL_VERSION = "ub-review.revision-identity.v1"
 _REVISION_DIGEST_DOMAIN = b"ub-review.revision-identity.digest.v1"
-_REVISION_SEMANTICS = {"candidate_head", "merge_result"}
+_REVISION_SEMANTICS = {"candidate_head", "merge_result", "merge_group"}
 
 
 def load_revision_binding(root: pathlib.Path) -> "dict | None":
@@ -2015,6 +2015,24 @@ def load_revision_binding(root: pathlib.Path) -> "dict | None":
             semantics_line = line[len("semantics=") :]
     if semantics_line not in _REVISION_SEMANTICS:
         fail("[semantics_mismatch] canonical form carries invalid semantics")
+    if semantics_line == "merge_group":
+        lines = canonical.splitlines()
+        keys = ["semantics", "base", "head", "reviewed", "merge", "changed_paths", "diff"]
+        if not canonical.endswith("\n") or len(lines) != 8 or [line.partition("=")[0] for line in lines[1:]] != keys:
+            fail("[semantics_mismatch] malformed merge-group identity")
+        fields = dict(line.split("=", 1) for line in lines[1:])
+        pairs = [fields[key].split(" ") for key in ("base", "head", "reviewed", "merge")]
+        if (any(len(pair) != 2 for pair in pairs)
+                or any(len(value) not in (40, 64) or set(value) == {"0"}
+                       or any(c not in "0123456789abcdef" for c in value)
+                       for pair in pairs for value in pair)
+                or len({len(value) for pair in pairs for value in pair}) != 1):
+            fail("[semantics_mismatch] malformed merge-group object pair")
+        if (fields["head"] != fields["reviewed"] or fields["merge"] != fields["reviewed"]
+                or pairs[0][0] == pairs[2][0] or fields["merge"] == "-"
+                or admission.get("semantics") != "merge_group"
+                or admission.get("pr_head_commit") is not None or admission.get("worktree_dirty") is not False):
+            fail("[semantics_mismatch] merge-group identity cannot substitute a PR head or dirty revision")
     for field in ("changed_paths=", "diff="):
         start = canonical.find(field)
         value = canonical[start + len(field) :].split("\n")[0] if start >= 0 else ""
@@ -15741,6 +15759,32 @@ def self_test_revision_binding_enforcement() -> None:
             )
         ),
     )
+
+    group = base_root(claimed=digest_a)
+    admission_path = group / "input/revision-admission.json"
+    admission = load_json(admission_path)
+    group_canonical = canonical().replace("semantics=candidate_head", "semantics=merge_group").replace(
+        "merge=-", "merge=" + "3" * 40 + " " + "4" * 40
+    )
+    admission.update(identity_canonical=group_canonical,
+                     identity_digest=_recompute_identity_digest(group_canonical),
+                     semantics="merge_group", pr_head_commit=None, worktree_dirty=False)
+    write_self_test_json(admission_path, admission)
+    binding = load_revision_binding(group)
+    if binding["semantics"] != "merge_group" or binding["reviewed_commit"] != commit:
+        fail("merge-group binding lost the actual G semantics")
+    require_joined_revision(binding, "native group", binding)
+    for label, change in (
+        ("invented PR head", {"pr_head_commit": "5" * 40}),
+        ("dirty G", {"worktree_dirty": True}),
+        ("relabeled H", {"semantics": "candidate_head"}),
+    ):
+        write_self_test_json(admission_path, {**admission, **change})
+        expect_self_test_failure(label, "[semantics_mismatch]", lambda: load_revision_binding(group))
+    contradictory = group_canonical.replace("merge=" + "3" * 40, "merge=" + "5" * 40)
+    write_self_test_json(admission_path, {**admission, "identity_canonical": contradictory,
+                                        "identity_digest": _recompute_identity_digest(contradictory)})
+    expect_self_test_failure("contradictory G object", "[semantics_mismatch]", lambda: load_revision_binding(group))
 
 
 def _recompute_identity_digest(canonical: str) -> str:

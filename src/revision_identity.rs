@@ -21,6 +21,9 @@ pub(crate) enum ReviewSemantics {
     CandidateHead,
     /// A synthetic merge of the head into its base was reviewed.
     MergeResult,
+    /// The exact integration commit G was reviewed against its ancestor B.
+    /// This identity does not identify a constituent PR head or authorize delivery.
+    MergeGroup,
 }
 
 impl ReviewSemantics {
@@ -28,6 +31,7 @@ impl ReviewSemantics {
         match self {
             ReviewSemantics::CandidateHead => "candidate_head",
             ReviewSemantics::MergeResult => "merge_result",
+            ReviewSemantics::MergeGroup => "merge_group",
         }
     }
 
@@ -35,6 +39,7 @@ impl ReviewSemantics {
         match value {
             "candidate_head" => Ok(ReviewSemantics::CandidateHead),
             "merge_result" => Ok(ReviewSemantics::MergeResult),
+            "merge_group" => Ok(ReviewSemantics::MergeGroup),
             other => bail!("unknown review semantics `{other}`"),
         }
     }
@@ -156,9 +161,7 @@ impl RevisionRef {
     /// makes malformed refs visible.
     pub(crate) fn validate(&self) -> Result<()> {
         validate_sha256(&self.digest, "revision digest")?;
-        if self.semantics != "candidate_head" && self.semantics != "merge_result" {
-            bail!("unknown revision ref semantics `{}`", self.semantics);
-        }
+        ReviewSemantics::parse(&self.semantics)?;
         let parsed = Oid::parse(&self.reviewed_commit)?;
         if parsed.is_null() {
             bail!("revision ref reviewed_commit is a null object id");
@@ -178,8 +181,11 @@ const DIFF_DIGEST_DOMAIN: &str = "ub-review.revision-identity.diff.v1";
 
 impl RevisionIdentity {
     /// Delivery names the candidate head even when the reviewed object is a merge.
-    pub(crate) fn candidate_head_commit(&self) -> &str {
-        self.head.commit_oid()
+    pub(crate) fn candidate_head_commit(&self) -> Result<&str> {
+        if self.semantics == ReviewSemantics::MergeGroup {
+            bail!("merge-group evidence has no single PR delivery head");
+        }
+        Ok(self.head.commit_oid())
     }
 
     /// Independently bind recorded anchor text to this identity's diff bytes.
@@ -250,6 +256,16 @@ impl RevisionIdentity {
                 if reviewed != *m {
                     bail!(
                         "contradictory semantics: merge_result must review the synthetic merge exactly"
+                    );
+                }
+            }
+            ReviewSemantics::MergeGroup => {
+                if reviewed != head
+                    || merge.as_ref() != Some(&reviewed)
+                    || base.commit == reviewed.commit
+                {
+                    bail!(
+                        "contradictory semantics: merge_group must bind distinct B and exact G in head, reviewed and merge"
                     );
                 }
             }

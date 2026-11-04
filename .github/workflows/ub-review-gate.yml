@@ -6,6 +6,16 @@ name: ub-review/gate
 # It runs model-off and artifact-only. This is not independent gate authority;
 # #947 and the later #876/#814 trust boundary own that progression.
 on:
+  workflow_call:
+    inputs:
+      base_sha:
+        description: Exact native integration base B.
+        type: string
+        required: true
+      group_sha:
+        description: Exact native merge-group G.
+        type: string
+        required: true
   pull_request:
     types: [opened, reopened, ready_for_review, synchronize]
   workflow_dispatch:
@@ -17,7 +27,7 @@ permissions: {}
 
 concurrency:
   group: ub-review-gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   gate:
@@ -29,8 +39,25 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          ref: ${{ github.event_name == 'merge_group' && inputs.group_sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Bind actual integration subject before candidate execution
+        if: github.event_name == 'merge_group'
+        shell: bash
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          GROUP_SHA: ${{ inputs.group_sha }}
+          EVENT_BASE: ${{ github.event.merge_group.base_sha }}
+          EVENT_GROUP: ${{ github.event.merge_group.head_sha }}
+          CALLER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ && "$GROUP_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$BASE_SHA" == "$EVENT_BASE" && "$GROUP_SHA" == "$EVENT_GROUP" && "$GROUP_SHA" == "$CALLER_SHA" && "$BASE_SHA" != "$GROUP_SHA" ]]
+          [[ "$(git rev-parse HEAD)" == "$GROUP_SHA" ]]
+          git merge-base --is-ancestor "$BASE_SHA" "$GROUP_SHA"
 
       - name: Verify task projection regressions
         timeout-minutes: 2
@@ -78,7 +105,9 @@ jobs:
           # Lease the heavy witness classes so the enabled coverage sensor runs.
           allow-heavy: 'true'
           root: .
-          base: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.event.pull_request.base.ref) || 'origin/main' }}
+          base: ${{ github.event_name == 'merge_group' && inputs.base_sha || github.event_name == 'pull_request' && format('origin/{0}', github.event.pull_request.base.ref) || 'origin/main' }}
+          head: ${{ github.event_name == 'merge_group' && inputs.group_sha || 'HEAD' }}
+          merge-group: ${{ github.event_name == 'merge_group' && 'true' || 'false' }}
           # A1.2 (#949): exact PR-head metadata so the synthetic merge checkout
           # is admitted as merge_result instead of failing as ambiguous.
           pr-head-sha: ${{ github.event.pull_request.head.sha }}

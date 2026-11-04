@@ -112,11 +112,16 @@ Ready interceptor, late-CI command or operated Tower service. #1465 owns dormant
 native admission; #987 owns Required scheduler migration; #1015 owns enforcement
 migration. Keep those implementations and their qualification with their owners.
 
-## Proposed SDLC: keep preparation separate from qualification
+## Selected lifecycle and the source-to-installed boundary
 
-The proposed sequence is focused local development and review, followed by
-explicit late qualification of the reviewed candidate. It is not evidence that
-current workflows implement that sequence or meet a normally <=20-minute target.
+The selected sequence is implementation, checks and substantive review in the warm
+owning session, conditional landing authorization for exact H, native enqueue,
+qualification of actual G, protected landing M and readback. Draft, Ready,
+ordinary updates, labels, reviews and comments allocate no Actions workflow in
+the target; a cheap wrapper or skipped job does not satisfy that condition.
+There is no routine main replay or second approval after a successful G. Current
+source and settings must establish each claim; selection does not prove activation
+or the normally <=20-minute complete execution target.
 
 At main `3dbcc2be9768b082c0896dc2360e950ffbd56a65` (2026-10-15 observation),
 [gate](../../.github/workflows/ub-review-gate.yml) runs on opened, reopened,
@@ -126,11 +131,41 @@ Neither trigger excludes drafts. Opening a draft can start broad proof during
 development; pushing a repair to an existing PR can do the same and cancel
 predecessor work. Refresh these files before every publication decision.
 
-[#1465](https://github.com/EffortlessMetrics/ub-review/issues/1465) owns a
-**dormant** native admission candidate: fresh merge-ready intent, material
-readiness, cheap observations, qualification and invalidation. Do not copy its
-implementation, activate templates, add labels, change permissions/protections,
-retire checks or substitute it for current enforcement from this guide.
+[#1465](https://github.com/EffortlessMetrics/ub-review/issues/1465) owns the
+existing admission work. Its former label-driven, hosted-observation design is
+historical preparation; it is not the selected steady-state front door. Keep the
+existing helper and evidence while joining the following actual gaps:
+
+- `ub-review/gate` requires Actions App 15368. A different App's same-name H check
+  cannot satisfy that binding. Qualify the existing trusted publisher's phase-
+  explicit H admission/G qualification aggregate and coordinated protection.
+- `revision_admission.rs` now admits an explicit `merge_group` subject with exact
+  B/G commits, actual B-to-G diff, a clean G checkout and no PR head. Canonical
+  artifact validation preserves that identity and PR delivery refuses it. This
+  object proof does not itself establish native queue membership or authority.
+- The independent baseline obtains its fixed command authority from protected
+  `pull_request_target` source. Moving its event to `merge_group` alone would make
+  that definition candidate-owned. Prepare and qualify an immutable protected
+  reusable definition before the caller changes, retaining all seven populations.
+  The additive callable path accepts exact event-bound B/G and records its pinned
+  definition separately from caller G. Its fresh no-checkout finalizer reads the
+  exact native run/attempt and reusable reference with an Actions-read token.
+  The native run-level reference alone does not establish job-source custody: the
+  publisher must also bind the reviewed caller and its complete producer closure.
+- Preserve the complete contained model-off gate and independent baseline. Their
+  apparent overlap is not receipt equivalence and does not justify proof removal.
+- Native acceptance must show zero development allocations, stale-H refusal,
+  complete actual-G proof, a failed required obligation blocking landing, duplicate
+  request reconciliation and M custody. Rollback restores full PR qualification
+  before queue-only enforcement is removed.
+
+The quality-bootstrap contract has callable and queue entries instead of a PR event. That
+small preparation does not claim the two expensive protected routes have migrated.
+`xtask policy-check` rejects new development subscribers and permits only the two
+explicit legacy roots until the coordinated cutover retires them. The release-tag
+workflow and daily quality telemetry retain their named, separately measured work.
+Do not copy a second admission implementation, activate dormant templates, broaden
+permissions or substitute a source-only result for current enforcement.
 If an active user hold keeps expensive qualification out of development and
 current PR creation would trigger it, retain the reviewed branch/evidence and
 report the blocked PR step to the coordinating owner. Draft status alone is

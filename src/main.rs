@@ -25266,6 +25266,7 @@ index 1111111..2222222 100644
                 base: "HEAD~1".to_owned(),
                 head: "HEAD".to_owned(),
                 pr_head_sha: None,
+                merge_group: false,
                 trusted_base_tree: None,
                 trusted_head_sha: None,
                 trusted_changed_files: None,

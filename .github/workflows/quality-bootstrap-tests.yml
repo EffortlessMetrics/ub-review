@@ -1,13 +1,12 @@
 name: quality/bootstrap-contract
 
-# Owner release/ci, #1345. Offline tests only; no GitHub collection on PRs.
+# Owner release/ci, #1345/#1465. Session checks are local; the actual proposed
+# integration receives this offline contract. No development event allocates it.
 on:
-  pull_request:
-    paths:
-      - '.github/workflows/quality-backfill.yml'
-      - '.github/workflows/quality-bootstrap-tests.yml'
-      - 'scripts/quality-bootstrap.py'
-      - 'scripts/test-quality-bootstrap.py'
+  workflow_call:
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -18,4 +17,6 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           persist-credentials: false
-      - run: python3 scripts/test-quality-bootstrap.py -v
+      - run: |
+          python3 scripts/test-quality-bootstrap.py -v
+          python3 scripts/test-integration-workflows.py -v

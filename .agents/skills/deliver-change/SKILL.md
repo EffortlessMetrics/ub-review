@@ -50,15 +50,15 @@ against the final candidate. Scope relevant base drift before integration.
 
 Compare alternative candidates with focused development proof and review before
 PR publication while opening even a Draft still triggers hosted qualification.
-After the explicit-request cutover, alternative Draft PRs may remain cheap.
-Select the candidate intended to land before expensive pre-merge qualification;
+After verified queue-only cutover, alternative Draft PRs allocate no Actions.
+Select the candidate intended to land before expensive integration qualification;
 unselected alternatives do not each get a full CI run. Selection is per objective,
 not a repository-wide max-one queue. Independent objectives may proceed in parallel.
 A lead may delegate bounded implementation and review while retaining integration
 ownership; one writer mutates each candidate at a time.
 
-Read the actual workflows and the transition guide before publishing or requesting
-CI. The late explicit-request path remains subject to #1465 cutover; this skill does
+Read the actual workflows and the transition guide before publishing or enqueueing
+CI. The native queue path remains subject to #1465 cutover; this skill does
 not activate it, rename a label or weaken the installed gate. Where ordinary PR
 publication still triggers CI, publish the selected converged candidate rather
 than using broad hosted runs to debug each alternative. Do not claim Draft itself
@@ -114,16 +114,21 @@ failed or wrong-revision evidence is not green. An independent baseline pass doe
 not replace `ub-review/gate`. Classify red evidence and repair its cause or route
 a precise upstream issue; do not rerun an unchanged failure to fish for green.
 
-Make the final judgment against the live head, substantive findings, applicable
-proof, current integration state and product objective. Main advancing alone does
-not require a full restack; refresh affected evidence for actual semantic changes.
-If the task delegates ordinary integration and conditions pass, perform the normal
-protected expected-head merge and read GitHub back to verify the landing. Do not
-stop at green to seek an unrequired approval. No auto-merge or merge queue is added.
+Determine the installed route from effective protection and native acceptance.
+The selected target is exact-H conditional landing authorization followed by
+native enqueue, actual-G proof and protected M. Judge product fit, source, current
+findings and applicable session evidence before authorizing that H; enqueue with
+the expected head, inspect the complete actual-G result, then read back native
+landing. Do not add a routine second post-green approval or a direct merge call.
+Main advancing alone does not require a full restack; refresh affected evidence
+for actual semantic changes. Until the coordinated #1465 cutover is verified,
+preserve the installed full protected route and its existing authority; a source
+branch or a passing dormant fixture does not establish queue-only enforcement.
 
 Reconcile the landed result with the controlling issue and residual acceptance.
-Do not repeat the full CI suite after every merge; incident, periodic main-health
-and release proof have their own owners. Keep explicit Draft-only/review-only holds,
+Do not repeat the full CI suite after every merge or schedule routine main-health
+replay. Named incident, deep, telemetry and release work retain their separate
+owners and purpose. Keep explicit Draft-only/review-only holds,
 required-check failures, unavailable access and reserved release/settings/credential
 authority intact. A genuine blocker names its evidence, owner and resume condition.
 Keep live task status and permissions in the native PR, never in this reusable skill.

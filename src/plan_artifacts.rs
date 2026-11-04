@@ -2,6 +2,7 @@
 //! (cleanup train step 59, pure code motion).
 
 use crate::*;
+use anyhow::ensure;
 
 pub(crate) fn prepare_plan(
     args: &ReviewArgs,
@@ -39,14 +40,28 @@ pub(crate) fn prepare_plan(
                 .as_deref()
                 .map(str::trim)
                 .filter(|sha| !sha.is_empty());
-            let revision = admit_revision(
-                &args.root,
-                &args.base,
-                &args.head,
-                pr_head_sha,
-                &diff.changed_files,
-                &diff.patch,
-            )?;
+            let revision = if args.merge_group {
+                ensure!(
+                    pr_head_sha.is_none(),
+                    "merge-group admission cannot carry a single PR head"
+                );
+                admit_merge_group_revision(
+                    &args.root,
+                    &args.base,
+                    &args.head,
+                    &diff.changed_files,
+                    &diff.patch,
+                )?
+            } else {
+                admit_revision(
+                    &args.root,
+                    &args.base,
+                    &args.head,
+                    pr_head_sha,
+                    &diff.changed_files,
+                    &diff.patch,
+                )?
+            };
             (diff, revision)
         };
         revision.validate()?;
@@ -75,6 +90,10 @@ pub(crate) fn trusted_diff_inputs(args: &ReviewArgs) -> Result<Option<TrustedDif
     ) {
         (None, None, None, None) => Ok(None),
         (Some(base_tree), Some(head_sha), Some(changed_files), Some(diff_patch)) => {
+            ensure!(
+                !args.merge_group,
+                "merge-group admission requires actual B/G Git objects, not trusted-diff head labels"
+            );
             Ok(Some(TrustedDiffInputs {
                 base_tree: base_tree.clone(),
                 head_sha: head_sha.clone(),

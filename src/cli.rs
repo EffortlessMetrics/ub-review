@@ -476,6 +476,10 @@ pub(crate) struct ReviewArgs {
     /// two-parent reviewed commit is an explicit admission failure.
     #[arg(long, env = "UB_REVIEW_PR_HEAD_SHA")]
     pub(crate) pr_head_sha: Option<String>,
+    /// Review exact integration B/G with merge-group semantics. This records
+    /// reviewed objects; native queue membership and landing authority are separate.
+    #[arg(long, env = "UB_REVIEW_MERGE_GROUP", default_value_t = false)]
+    pub(crate) merge_group: bool,
     /// Trusted-base admission: exact tree object for the clean base-owned
     /// checkout. All four trusted-diff inputs must be supplied together.
     #[arg(long, env = "UB_REVIEW_TRUSTED_BASE_TREE")]

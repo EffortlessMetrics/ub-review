@@ -97,6 +97,10 @@ inputs:
     description: 'Pull-request head SHA from hosted event metadata (github.event.pull_request.head.sha). Required to admit a GitHub-style synthetic merge checkout as merge_result; without it a two-parent reviewed checkout fails admission instead of being relabeled.'
     default: ''
     required: false
+  merge-group:
+    description: 'Review actual integration B/G with explicit merge-group semantics. B and G must be exact commits and B an ancestor of G. This does not establish queue membership or PR delivery authority.'
+    default: 'false'
+    required: false
   trusted-base-tree:
     description: 'Trusted-base admission tree SHA for the clean base-owned root. Requires trusted-head-sha, trusted-changed-files, and trusted-diff-patch.'
     default: ''
@@ -688,6 +692,7 @@ runs:
         UB_REVIEW_OPENCODE_API_URL: ${{ inputs['opencode-api-url'] }}
         UB_REVIEW_GITHUB_EVENT_ACTION: ${{ github.event.action }}
         UB_REVIEW_PR_HEAD_SHA: ${{ inputs['pr-head-sha'] }}
+        UB_REVIEW_MERGE_GROUP: ${{ inputs['merge-group'] }}
         UB_REVIEW_ACTION_GITHUB_TOKEN: ${{ inputs['github-token'] }}
         UB_REVIEW_ACTION_TRUSTED_BASE_TREE: ${{ inputs['trusted-base-tree'] }}
         UB_REVIEW_ACTION_TRUSTED_HEAD_SHA: ${{ inputs['trusted-head-sha'] }}

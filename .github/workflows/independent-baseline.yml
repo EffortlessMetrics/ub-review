@@ -6,6 +6,20 @@ name: ub-review/independent-baseline
 # aggregates GitHub-owned job results, writes the receipt, and enforces the
 # outcome. This is not the full hostile-head-safe coordinator boundary.
 on:
+  workflow_call:
+    inputs:
+      base_sha:
+        description: Exact native integration base B.
+        type: string
+        required: true
+      group_sha:
+        description: Exact native merge-group G.
+        type: string
+        required: true
+      definition_sha:
+        description: Reviewed immutable reusable workflow commit pinned by the caller.
+        type: string
+        required: true
   pull_request_target:
     types: [opened, reopened, ready_for_review, synchronize]
 
@@ -13,8 +27,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ub-review-independent-baseline-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: ub-review-independent-baseline-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: false
 
 jobs:
   evidence:
@@ -28,14 +42,20 @@ jobs:
       matrix:
         check: [fmt, check, clippy, test, doc, policy, verifier]
     env:
-      CANDIDATE_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+      CANDIDATE_REPOSITORY: ${{ github.event_name == 'merge_group' && github.repository || github.event.pull_request.head.repo.full_name }}
+      EVENT_NAME: ${{ github.event_name }}
+      BASE_SHA: ${{ inputs.base_sha }}
+      EVENT_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+      EVENT_GROUP_SHA: ${{ github.event.merge_group.head_sha }}
+      CALLER_SHA: ${{ github.sha }}
+      DEFINITION_SHA: ${{ inputs.definition_sha }}
+      CANDIDATE_SHA: ${{ github.event_name == 'merge_group' && inputs.group_sha || github.event.pull_request.head.sha }}
     steps:
       - name: Checkout exact candidate revision without credentials
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.sha }}
+          repository: ${{ github.event_name == 'merge_group' && github.repository || github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event_name == 'merge_group' && inputs.group_sha || github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -43,6 +63,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [[ "$EVENT_NAME" == merge_group ]]; then
+            [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ && "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ && "$DEFINITION_SHA" =~ ^[0-9a-f]{40}$ ]]
+            [[ "$BASE_SHA" != "$CANDIDATE_SHA" && "$BASE_SHA" == "$EVENT_BASE_SHA" && "$CANDIDATE_SHA" == "$EVENT_GROUP_SHA" && "$CANDIDATE_SHA" == "$CALLER_SHA" ]]
+            git merge-base --is-ancestor "$BASE_SHA" "$CANDIDATE_SHA"
+          elif [[ "$EVENT_NAME" != pull_request_target ]]; then
+            echo "independent baseline requires its native PR target or merge-group subject" >&2
+            exit 1
+          fi
           actual_sha="$(git rev-parse HEAD)"
           if [[ "$actual_sha" != "$CANDIDATE_SHA" ]]; then
             echo "expected candidate $CANDIDATE_SHA, checked out $actual_sha" >&2
@@ -105,48 +133,89 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      actions: read
     env:
-      CANDIDATE_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+      CANDIDATE_REPOSITORY: ${{ github.event_name == 'merge_group' && github.repository || github.event.pull_request.head.repo.full_name }}
+      CANDIDATE_SHA: ${{ github.event_name == 'merge_group' && inputs.group_sha || github.event.pull_request.head.sha }}
       EVIDENCE_RESULT: ${{ needs.evidence.result }}
       TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
+      EVENT_NAME: ${{ github.event_name }}
+      BASE_SHA: ${{ inputs.base_sha }}
+      EVENT_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+      EVENT_GROUP_SHA: ${{ github.event.merge_group.head_sha }}
+      DEFINITION_SHA: ${{ inputs.definition_sha }}
+      RUN_ID: ${{ github.run_id }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+      REPOSITORY: ${{ github.repository }}
     steps:
+      # This job never checks out candidate code. Its read-only token observes
+      # native run metadata; the App must independently bind the reviewed caller
+      # generation and this literal reusable reference before accepting G.
       - name: Write trusted exact-head baseline receipt
         shell: bash
+        env:
+          METADATA_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          receipt_dir="$RUNNER_TEMP/ub-review-independent-baseline"
-          mkdir -p "$receipt_dir"
-          jq -n \
-            --arg schema "ub-review.independent_baseline.v1" \
-            --arg candidate_repository "$CANDIDATE_REPOSITORY" \
-            --arg candidate_sha "$CANDIDATE_SHA" \
-            --arg workflow_sha "$TRUSTED_WORKFLOW_SHA" \
-            --arg evidence_result "$EVIDENCE_RESULT" \
-            '{
-              schema: $schema,
-              candidate_repository: $candidate_repository,
-              candidate_sha: $candidate_sha,
-              trusted_workflow_sha: $workflow_sha,
-              workflow_source: "protected-base",
-              evidence_topology: "isolated-matrix-jobs",
-              evidence_result: $evidence_result,
-              commands: [
-                "cargo fmt --all -- --check",
-                "cargo check --workspace --all-targets --locked",
-                "cargo clippy --workspace --all-targets --locked -- -D warnings",
-                "cargo test --workspace --all-targets --locked",
-                "cargo doc --workspace --no-deps --locked",
-                "cargo run --locked --package xtask -- policy-check",
-                "python scripts/verify-bun-review-artifacts.py --self-test"
-              ]
-            }' > "$receipt_dir/receipt.json"
+          python3 - <<'PY_RECEIPT'
+          import json, os, pathlib, re, urllib.request
+          e = os.environ
+          candidate = e["CANDIDATE_SHA"]
+          definition = e["TRUSTED_WORKFLOW_SHA"]
+          source = "protected-base"
+          group = e["EVENT_NAME"] == "merge_group"
+          reference = None
+          if group:
+              definition = e["DEFINITION_SHA"]
+              if not all(re.fullmatch(r"[0-9a-f]{40}", e[k]) for k in ("BASE_SHA", "CANDIDATE_SHA", "DEFINITION_SHA")):
+                  raise SystemExit("integration subjects and pinned definition must be exact commits")
+              if not (e["BASE_SHA"] == e["EVENT_BASE_SHA"] != candidate == e["EVENT_GROUP_SHA"] == e["TRUSTED_WORKFLOW_SHA"]):
+                  raise SystemExit("integration event identity changed")
+              path = e["REPOSITORY"] + "/.github/workflows/independent-baseline.yml@" + definition
+              url = "https://api.github.com/repos/" + e["REPOSITORY"] + "/actions/runs/" + e["RUN_ID"] + "/attempts/" + e["RUN_ATTEMPT"]
+              request = urllib.request.Request(url, headers={"Authorization": "Bearer " + e["METADATA_TOKEN"], "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  run = json.load(response)
+              if not (run.get("id") == int(e["RUN_ID"]) and run.get("run_attempt") == int(e["RUN_ATTEMPT"]) and run.get("head_sha") == candidate and run.get("event") == "merge_group" and run.get("repository", {}).get("full_name") == e["REPOSITORY"]):
+                  raise SystemExit("native run/attempt is not this integration subject")
+              refs = [w for w in run.get("referenced_workflows", []) if w.get("path") == path and w.get("sha") == definition]
+              if len(refs) != 1:
+                  raise SystemExit("reviewed immutable baseline reference is missing or ambiguous")
+              reference = refs[0]
+              source = "reviewed-immutable-reusable-reference"
+          elif e["EVENT_NAME"] != "pull_request_target":
+              raise SystemExit("unsupported independent baseline origin")
+          receipt = {
+              "schema": "ub-review.independent_baseline.v2" if group else "ub-review.independent_baseline.v1",
+              "candidate_repository": e["CANDIDATE_REPOSITORY"],
+              "candidate_sha": candidate,
+              "trusted_workflow_sha": definition,
+              "workflow_source": source,
+              "evidence_topology": "isolated-matrix-jobs",
+              "evidence_result": e["EVIDENCE_RESULT"],
+              "commands": [
+                  "cargo fmt --all -- --check",
+                  "cargo check --workspace --all-targets --locked",
+                  "cargo clippy --workspace --all-targets --locked -- -D warnings",
+                  "cargo test --workspace --all-targets --locked",
+                  "cargo doc --workspace --no-deps --locked",
+                  "cargo run --locked --package xtask -- policy-check",
+                  "python scripts/verify-bun-review-artifacts.py --self-test",
+              ],
+          }
+          if group:
+              receipt.update(base_sha=e["BASE_SHA"], group_sha=candidate, run_id=int(e["RUN_ID"]), run_attempt=int(e["RUN_ATTEMPT"]), referenced_workflow=reference,
+                             authority_join="requires publisher validation of reviewed caller and producer closure; a run-level reusable reference alone does not prove job-source custody")
+          directory = pathlib.Path(e["RUNNER_TEMP"]) / "ub-review-independent-baseline"
+          directory.mkdir(parents=True, exist_ok=True)
+          (directory / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
+          PY_RECEIPT
 
       - name: Upload independent baseline receipt
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: independent-baseline-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          name: independent-baseline-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.event_name == 'merge_group' && inputs.group_sha || github.event.pull_request.head.sha }}
           path: ${{ runner.temp }}/ub-review-independent-baseline
           if-no-files-found: error
           retention-days: 7

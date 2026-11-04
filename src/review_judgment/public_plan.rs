@@ -335,7 +335,8 @@ pub(crate) fn validate_recorded_public_plan(
         crate::is_valid_repo_slug(&public.delivery_subject.repository)
             && public.delivery_subject.repository == source.subject.repository
             && public.delivery_subject.pull_number > 0
-            && public.delivery_subject.head_sha == input.current_revision.candidate_head_commit(),
+            && public.delivery_subject.head_sha
+                == input.current_revision.candidate_head_commit()?,
         "invalid delivery subject"
     );
     let patch = std::str::from_utf8(public.diff_patch).context("recorded diff is not UTF-8")?;

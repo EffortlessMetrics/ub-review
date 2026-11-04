@@ -252,7 +252,7 @@ def parse_revision_canonical(text: Any) -> dict[str, Any]:
         values[key] = value
 
     semantics = values["semantics"]
-    if semantics not in {"candidate_head", "merge_result"}:
+    if semantics not in {"candidate_head", "merge_result", "merge_group"}:
         raise ValueError("unknown review semantics")
     base = parse_pair(values["base"])
     head = parse_pair(values["head"])
@@ -268,6 +268,9 @@ def parse_revision_canonical(text: Any) -> dict[str, Any]:
     if semantics == "candidate_head":
         if merge is not None or reviewed != head:
             raise ValueError("candidate-head identity is contradictory")
+    elif semantics == "merge_group":
+        if merge != reviewed or head != reviewed or base[0] == reviewed[0]:
+            raise ValueError("merge-group identity is contradictory")
     elif merge is None or reviewed != merge:
         raise ValueError("merge-result identity is contradictory")
 
@@ -309,6 +312,11 @@ def revision_binding(packet: Packet, admission: Any) -> dict[str, str] | None:
         parsed = parse_revision_canonical(admission.get("identity_canonical"))
     except ValueError:
         packet.unavailable("invalid_revision_canonical", path)
+        return None
+    if parsed["semantics"] == "merge_group":
+        # G proves an integration subject. It cannot supply one PR's delivery
+        # head; publication stays unavailable instead of inventing membership.
+        packet.unavailable("merge_group_has_no_pr_delivery_head", path)
         return None
     valid = True
     for code, observed, expected in (

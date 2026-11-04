@@ -508,6 +508,13 @@ fn bind_merge_delivery(
     transport: &mut impl DeliveryTransport,
 ) -> Result<Option<String>> {
     let Some(graph) = graph else { return Ok(None) };
+    ensure!(
+        graph
+            .pointer("/revision/semantics")
+            .and_then(serde_json::Value::as_str)
+            != Some("merge_group"),
+        "merge-group evidence cannot be published as one PR's review"
+    );
     if graph
         .pointer("/revision/semantics")
         .and_then(serde_json::Value::as_str)
@@ -671,8 +678,8 @@ fn read_expected_delivery_head(
         // packets must instead pass the separate admission/object binding.
         if let Some(revision) = graph.get("revision") {
             ensure!(
-                revision["semantics"] != "merge_result",
-                "merge delivery requires admission binding"
+                revision["semantics"] != "merge_result" && revision["semantics"] != "merge_group",
+                "merge delivery requires admission binding; merge-group evidence has no single PR delivery head"
             );
             let commit = revision
                 .get("reviewed_commit")
@@ -1620,6 +1627,16 @@ mod tests {
             }],
         };
         (review, payload)
+    }
+
+    #[test]
+    fn merge_group_evidence_has_no_pr_publication_head() {
+        let (review, _) = delivery_review();
+        let graph = serde_json::json!({
+            "revision": {"semantics": "merge_group", "reviewed_commit": "a".repeat(40), "digest": "b".repeat(64)},
+            "head_sha": "a".repeat(40),
+        });
+        assert!(read_expected_delivery_head(&review, Some(&graph)).is_err());
     }
 
     fn successful_delivery_responses() -> Vec<FakeHttpResponse> {
