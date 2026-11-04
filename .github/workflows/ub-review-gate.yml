@@ -1,7 +1,7 @@
 name: ub-review/gate
 
-# Contained candidate dogfood posture (#946): the pull-request head may still
-# build and execute its own Action so we can inspect exact-head packets, but it
+# Contained candidate proof (#946/#1465): actual G may build and execute its own
+# Action so we can inspect integration packets, but it
 # receives no provider credentials, PR/check write authority, or OIDC authority.
 # It runs model-off and artifact-only. This is not independent gate authority;
 # #947 and the later #876/#814 trust boundary own that progression.
@@ -16,8 +16,6 @@ on:
         description: Exact native merge-group G.
         type: string
         required: true
-  pull_request:
-    types: [opened, reopened, ready_for_review, synchronize]
   workflow_dispatch:
 
 # Every job declares its own minimum token permissions. In particular, the
@@ -31,7 +29,7 @@ concurrency:
 
 jobs:
   gate:
-    name: ub-review/gate
+    name: ub-review candidate evidence
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:

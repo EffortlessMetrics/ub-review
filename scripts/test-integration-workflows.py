@@ -111,5 +111,49 @@ class BaselineReceipt(unittest.TestCase):
         self.assertIn('check: [fmt, check, clippy, test, doc, policy, verifier]', evidence)
 
 
+class QueuePortfolio(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.workflow = (ROOT / '.github/workflows/queue-qualification.yml').read_text()
+        cls.code = textwrap.dedent(cls.workflow.split("python3 - <<'PY_RESULT'\n", 1)[1].split('          PY_RESULT', 1)[0])
+
+    def evaluate(self, needs=None, **changed):
+        env = dict(NEEDS_JSON=json.dumps(needs if needs is not None else {k: {'result': 'success'} for k in ('candidate', 'baseline', 'bootstrap')}),
+                   EVENT_NAME='merge_group', BASE_SHA=B, GROUP_SHA=G, SUBJECT_SHA=G)
+        env.update(changed)
+        with patch.dict(os.environ, env, clear=True), patch('sys.stdout', io.StringIO()):
+            exec(compile(self.code, '<queue result>', 'exec'), {})
+
+    def test_complete_actual_g_portfolio(self):
+        self.evaluate()
+
+    def test_every_missing_skipped_or_failed_family_blocks(self):
+        for family in ['candidate', 'baseline', 'bootstrap']:
+            for result in [None, 'failure', 'skipped', 'cancelled', 'timed_out', 'neutral', '']:
+                needs = {k: {'result': 'success'} for k in ('candidate', 'baseline', 'bootstrap')}
+                if result is None:
+                    del needs[family]
+                else:
+                    needs[family]['result'] = result
+                with self.subTest(family=family, result=result), self.assertRaises(SystemExit):
+                    self.evaluate(needs)
+
+    def test_wrong_or_symbolic_integration_subject_cannot_pass(self):
+        for field, value in [('EVENT_NAME', 'pull_request'), ('BASE_SHA', G), ('BASE_SHA', 'origin/main'), ('GROUP_SHA', B), ('SUBJECT_SHA', P)]:
+            with self.subTest(field=field), self.assertRaises(SystemExit):
+                self.evaluate(**{field: value})
+
+    def test_full_baseline_reference_and_no_candidate_checkout_in_result(self):
+        expected = 'bf077a0178c3fe159927a6ea39ee274050a92e10'
+        self.assertIn('uses: EffortlessMetrics/ub-review/.github/workflows/independent-baseline.yml@' + expected, self.workflow)
+        self.assertIn('definition_sha: ' + expected, self.workflow)
+        result = self.workflow.split('\n  result:', 1)[1]
+        self.assertIn('needs: [candidate, baseline, bootstrap]', result)
+        self.assertIn('if: ${{ always() }}', result)
+        self.assertIn('permissions: {}', result)
+        self.assertNotIn('actions/checkout', result)
+        self.assertNotIn('continue-on-error', result)
+
+
 if __name__ == '__main__':
     unittest.main()

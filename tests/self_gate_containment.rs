@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, ensure};
 
 const WORKFLOW: &str = include_str!("../.github/workflows/ub-review-gate.yml");
+const QUEUE_WORKFLOW: &str = include_str!("../.github/workflows/queue-qualification.yml");
 const INDEPENDENT_WORKFLOW: &str = include_str!("../.github/workflows/independent-baseline.yml");
 
 fn job_section<'a>(workflow: &'a str, job: &str, next_job: Option<&str>) -> Result<&'a str> {
@@ -110,8 +111,10 @@ fn independent_baseline_isolates_candidate_evidence_from_trusted_finalization() 
         "independent check must expose one stable check name"
     );
     ensure!(
-        INDEPENDENT_WORKFLOW.contains("\n  pull_request_target:\n"),
-        "workflow definition must come from the protected base branch"
+        INDEPENDENT_WORKFLOW.contains("\n  workflow_call:\n")
+            && !INDEPENDENT_WORKFLOW.contains("\n  pull_request_target:\n")
+            && QUEUE_WORKFLOW.contains("uses: EffortlessMetrics/ub-review/.github/workflows/independent-baseline.yml@bf077a0178c3fe159927a6ea39ee274050a92e10"),
+        "queue baseline must retain its reviewed immutable definition without an ordinary event root"
     );
     ensure!(
         !INDEPENDENT_WORKFLOW.contains("\n  pull_request:\n"),

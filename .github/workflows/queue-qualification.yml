@@ -1,0 +1,73 @@
+name: Integration qualification
+run-name: Merge queue ${{ github.event.merge_group.head_sha }}
+
+# Activate only with the admitted H/G publisher and coordinated queue-only
+# protection. The internal Actions result preserves the complete portfolio.
+on:
+  merge_group:
+    types: [checks_requested]
+
+permissions: {}
+concurrency:
+  group: ub-review-integration-${{ github.sha }}-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    uses: ./.github/workflows/ub-review-gate.yml
+    permissions:
+      contents: read
+      actions: read
+      # Only the separate no-checkout telemetry job consumes OIDC. The contained
+      # candidate proof explicitly has contents:read only.
+      id-token: write
+    with:
+      base_sha: ${{ github.event.merge_group.base_sha }}
+      group_sha: ${{ github.event.merge_group.head_sha }}
+
+  baseline:
+    # Reviewed immutable preparation. Its seven command populations and fresh
+    # finalizer cannot be changed by the candidate. The publisher must also bind
+    # this caller's generation and native referenced_workflows/run/attempt/jobs.
+    uses: EffortlessMetrics/ub-review/.github/workflows/independent-baseline.yml@bf077a0178c3fe159927a6ea39ee274050a92e10
+    permissions:
+      contents: read
+      actions: read
+    with:
+      base_sha: ${{ github.event.merge_group.base_sha }}
+      group_sha: ${{ github.event.merge_group.head_sha }}
+      definition_sha: bf077a0178c3fe159927a6ea39ee274050a92e10
+
+  bootstrap:
+    uses: ./.github/workflows/quality-bootstrap-tests.yml
+    permissions:
+      contents: read
+
+  result:
+    name: ub-review/gate
+    needs: [candidate, baseline, bootstrap]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    env:
+      NEEDS_JSON: ${{ toJSON(needs) }}
+      EVENT_NAME: ${{ github.event_name }}
+      BASE_SHA: ${{ github.event.merge_group.base_sha }}
+      GROUP_SHA: ${{ github.event.merge_group.head_sha }}
+      SUBJECT_SHA: ${{ github.sha }}
+    steps:
+      - name: Require complete actual-G portfolio
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY_RESULT'
+          import json, os, re
+          e = os.environ
+          needs = json.loads(e["NEEDS_JSON"])
+          if set(needs) != {"candidate", "baseline", "bootstrap"} or any(v.get("result") != "success" for v in needs.values()):
+              raise SystemExit("complete contained proof, independent baseline and bootstrap contract must succeed")
+          if e["EVENT_NAME"] != "merge_group" or not all(re.fullmatch(r"[0-9a-f]{40}", e[k]) for k in ("BASE_SHA", "GROUP_SHA", "SUBJECT_SHA")) or not (e["BASE_SHA"] != e["GROUP_SHA"] == e["SUBJECT_SHA"]):
+              raise SystemExit("native actual-G identity is missing or substituted")
+          print("Complete internal Actions proof succeeded for B=" + e["BASE_SHA"] + " G=" + e["GROUP_SHA"] + "; publisher/current admission and protected M readback remain separate.")
+          PY_RESULT

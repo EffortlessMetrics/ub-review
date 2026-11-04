@@ -1,10 +1,10 @@
 name: ub-review/independent-baseline
 
-# Temporary self-hosting containment (#947). `pull_request_target` loads this
-# workflow from the protected base branch, then checks out the exact candidate
-# SHA only in isolated deterministic evidence jobs. A fresh no-checkout job
-# aggregates GitHub-owned job results, writes the receipt, and enforces the
-# outcome. This is not the full hostile-head-safe coordinator boundary.
+# Independent baseline (#947/#1465). The queue caller uses a reviewed immutable
+# preparation commit containing this callable interface. Each isolated evidence
+# job checks out actual G; a fresh no-checkout finalizer observes native metadata
+# and enforces all seven fixed populations. The protected App also binds caller
+# and producer closure. This file has no ordinary PR/push event root.
 on:
   workflow_call:
     inputs:
@@ -20,8 +20,6 @@ on:
         description: Reviewed immutable reusable workflow commit pinned by the caller.
         type: string
         required: true
-  pull_request_target:
-    types: [opened, reopened, ready_for_review, synchronize]
 
 permissions:
   contents: read

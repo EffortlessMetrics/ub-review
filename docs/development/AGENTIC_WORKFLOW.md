@@ -47,8 +47,8 @@ conditional landing judgment before native enqueue, actual-G qualification,
 protected landing and readback. An
 explicit Draft-only or read-only assignment still stops at its named boundary.
 A real interruption uses an exact continuation record, not a duplicate CI request.
-Read deliver-change for the complete finish path. The existing #1465 admission
-cutover remains separate from source preparation. The selected steady state has
+Read deliver-change for the complete finish path. The #1465 queue caller and immutable-baseline source are prepared;
+installed admission, protection and native acceptance remain separate. The selected steady state has
 zero Actions allocations for Draft, Ready, ordinary update, review, comment and
 label events. Required product proof runs on the actual queue composition, while
 development checks and substantive review stay in the owning session. Retain the

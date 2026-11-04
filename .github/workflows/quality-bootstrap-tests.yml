@@ -4,8 +4,6 @@ name: quality/bootstrap-contract
 # integration receives this offline contract. No development event allocates it.
 on:
   workflow_call:
-  merge_group:
-    types: [checks_requested]
   workflow_dispatch:
 permissions:
   contents: read

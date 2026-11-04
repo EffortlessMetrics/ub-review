@@ -1,7 +1,7 @@
-//! Enforce the bounded source preparation for #1465's queue-only cutover.
+//! Enforce #1465's queue-only workflow catalog after coordinated activation.
 //!
-//! The two protected legacy routes remain explicit until actual-G identity,
-//! immutable baseline authority, publisher and effective protection are joined.
+//! Actual-G identity, immutable baseline authority, publisher and effective
+//! protection remain distinct acceptance obligations.
 //! Job-level skips do not make a subscribed development event allocation-free.
 
 use anyhow::{Context, Result, bail, ensure};
@@ -89,15 +89,6 @@ fn validate_source(name: &str, source: &str) -> Result<()> {
         let allowed = match event.as_str() {
             "workflow_call" | "workflow_dispatch" => true,
             "merge_group" => configuration == ["types: [checks_requested]"],
-            // Installed full proof remains authoritative during preparation.
-            "pull_request" => {
-                name == "ub-review-gate.yml"
-                    && configuration == ["types: [opened, reopened, ready_for_review, synchronize]"]
-            }
-            "pull_request_target" => {
-                name == "independent-baseline.yml"
-                    && configuration == ["types: [opened, reopened, ready_for_review, synchronize]"]
-            }
             "push" => name == "release-binary.yml" && configuration == ["tags:", "- 'v*'"],
             "schedule" => {
                 name == "quality-backfill.yml" && configuration == ["- cron: '17 8 * * *'"]
@@ -106,7 +97,7 @@ fn validate_source(name: &str, source: &str) -> Result<()> {
         };
         ensure!(
             allowed,
-            "{name}: {event} allocates outside the two legacy qualification routes or named release/telemetry purposes; development checks and review belong in the owning session (#1465)"
+            "{name}: {event} allocates outside native integration or named release/telemetry purposes; development checks and review belong in the owning session (#1465)"
         );
     }
     Ok(())
@@ -165,13 +156,13 @@ mod tests {
     }
 
     #[test]
-    fn legacy_routes_cannot_expand_or_move() {
+    fn retired_legacy_routes_cannot_reappear() {
         let fields = "    types: [opened, reopened, ready_for_review, synchronize]\n";
         for (name, event) in [
             ("ub-review-gate.yml", "pull_request"),
             ("independent-baseline.yml", "pull_request_target"),
         ] {
-            assert!(validate_source(name, &workflow(event, fields)).is_ok());
+            assert!(validate_source(name, &workflow(event, fields)).is_err());
             assert!(validate_source("copy.yml", &workflow(event, fields)).is_err());
             assert!(validate_source(name, &workflow(event, "")).is_err());
             assert!(

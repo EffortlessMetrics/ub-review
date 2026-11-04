@@ -159,10 +159,29 @@ existing helper and evidence while joining the following actual gaps:
   request reconciliation and M custody. Rollback restores full PR qualification
   before queue-only enforcement is removed.
 
-The quality-bootstrap contract has callable and queue entries instead of a PR event. That
-small preparation does not claim the two expensive protected routes have migrated.
-`xtask policy-check` rejects new development subscribers and permits only the two
-explicit legacy roots until the coordinated cutover retires them. The release-tag
+The staged final catalog has one native `merge_group: checks_requested` caller,
+`queue-qualification.yml`, and no ordinary PR/push/review/comment/label roots.
+It joins the complete contained model-off gate, the immutable seven-population
+baseline at `bf077a0178c3fe159927a6ea39ee274050a92e10`, and the bootstrap contract.
+The internal Actions `ub-review/gate` finalizer requires every family to succeed;
+missing, skipped, cancelled and failed results cannot pass. `xtask policy-check`
+rejects all reintroduced ordinary roots, including cheap or skipped wrappers.
+The literal preparation SHA is published on `ci/1465-merge-group-source-20261104`;
+its reviewed callable definition must remain reachable. An arbitrary mutable
+branch/tag or a caller-supplied SHA is not an independent definition.
+
+This is coordinated activation source, not installed enforcement. Before landing
+it, qualify the existing Hermes publisher's `CI Lifecycle Qualification` context
+with its actual accepted App ID on H and G, complete native run/attempt/job and
+producer-closure binding, and queue-only enforcement. The currently Actions-bound
+`ub-review/gate` cannot be fulfilled on H by another App copying that name. Leaving
+an obsolete H Actions requirement in place blocks intake; replacing it without
+full G qualification and queue-only enforcement permits underqualified landing.
+Reconcile effective rulesets, classic protection and any settings-app source as
+one controlled cutover. Preserve the old full protected route until that cutover
+is executable, and restore it before disabling queue-only enforcement on rollback.
+No required proof is removed by the new aggregate.
+The release-tag
 workflow and daily quality telemetry retain their named, separately measured work.
 Do not copy a second admission implementation, activate dormant templates, broaden
 permissions or substitute a source-only result for current enforcement.

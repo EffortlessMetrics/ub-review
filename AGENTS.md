@@ -42,8 +42,9 @@ defines the boundary and the separate route for executable evidence.
   native enqueue, complete proof on actual G, protected landing M and readback by
   the same owner. Draft, Ready, ordinary updates, comments, reviews and labels start
   no Actions workflow in the verified target, including cheap or skipped wrappers.
-- Source preparation is not installed enforcement. Preserve the current gate and
-  independent baseline until #1465 qualifies their actual-G producers, trusted
+- Source preparation is not installed enforcement. The staged queue caller preserves
+  the full gate and immutable seven-population baseline; keep the installed route
+  until #1465 qualifies their actual-G producers, trusted
   H/G publisher, App bindings and queue-only settings. Do not turn an arbitrary
   App check into an Actions-bound result or leave direct landing able to consume
   cheap H admission.
