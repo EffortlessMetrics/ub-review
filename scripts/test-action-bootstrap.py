@@ -17,6 +17,20 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 
+DECLARED_PATH_OUTPUTS = {
+    "summary-path": "running-summary.md",
+    "events-path": "events.ndjson",
+    "review-json-path": "review/review.json",
+    "metrics-json-path": "review/metrics.json",
+    "github-review-path": "review/github-review.json",
+    "post-result-path": "review/post-result.json",
+    "post-error-path": "review/post-error.json",
+    "post-payload-path": "review/github-review-post-payload.json",
+    "post-stdout-path": "review/post-stdout.json",
+    "post-stderr-path": "review/post-stderr.txt",
+    "gate-outcome-path": "review/gate_outcome.json",
+}
+
 
 def runner_shell() -> str:
     text = (ROOT / "action.yml").read_text(encoding="utf-8")
@@ -28,6 +42,35 @@ def runner_shell() -> str:
     if any(line and not line.startswith("        ") for line in script.splitlines()):
         raise AssertionError("unexpected shell block indentation")
     return "\n".join(line[8:] if line else "" for line in script.splitlines()) + "\n"
+
+
+def output_paths_step() -> tuple[dict[str, str], str]:
+    text = (ROOT / "action.yml").read_text(encoding="utf-8")
+    marker = "    - name: Set output paths\n"
+    if text.count(marker) != 1:
+        raise AssertionError("expected one output-path step")
+    step = text.split(marker, 1)[1].split("\n    - ", 1)[0]
+    env: dict[str, str] = {}
+    script_lines: list[str] = []
+    section = ""
+    for line in step.splitlines():
+        if line == "      env:":
+            section = "env"
+        elif line == "      run: |":
+            section = "run"
+        elif line.startswith("        ") and section == "env":
+            key, sep, value = line.strip().partition(": ")
+            if not sep:
+                raise AssertionError("unexpected env entry")
+            env[key] = value
+        elif line.startswith("        ") and section == "run":
+            script_lines.append(line[8:])
+        elif line:
+            section = ""
+    script = "\n".join(script_lines) + "\n"
+    if not env or not script:
+        raise AssertionError("expected env and run blocks in the output-path step")
+    return env, script
 
 
 class BootstrapContract(unittest.TestCase):
@@ -233,6 +276,59 @@ if os.environ.get("BOOTSTRAP_TEST_NO_BINARY") != "1":
         action = (ROOT / "action.yml").read_text()
         self.assertIn("  source-target-dir:\n", action)
         self.assertIn("UB_REVIEW_SOURCE_TARGET_DIR: ${{ inputs['source-target-dir'] }}", action)
+
+    def run_paths_step(self, out_value: str) -> list[str]:
+        env, script = output_paths_step()
+        self.assertEqual(env, {"UB_REVIEW_OUT_DIR": "${{ inputs.out }}"})
+        self.assertNotIn("${{", script)
+        self.assertNotIn("inputs.out", script)
+        output = self.root / "path-records"
+        result = subprocess.run(
+            ["bash", "--noprofile", "--norc", "-c", script],
+            cwd=self.caller,
+            env={
+                "PATH": "/usr/bin:/bin",
+                "HOME": str(self.root),
+                "GITHUB_OUTPUT": str(output),
+                "UB_REVIEW_OUT_DIR": out_value,
+            },
+            capture_output=True, text=True, timeout=15, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return output.read_text(encoding="utf-8").splitlines()
+
+    def test_output_paths_pin_documented_single_line_records(self) -> None:
+        records = self.run_paths_step("review output")
+        self.assertEqual(records, [
+            f"{key}=review output/{suffix}"
+            for key, suffix in DECLARED_PATH_OUTPUTS.items()
+        ])
+
+    def test_output_path_input_shell_text_stays_inert_data(self) -> None:
+        payload = '`touch executed-backtick` = $(touch executed-substitution); "q"'
+        records = self.run_paths_step(payload)
+        self.assertEqual(records, [
+            f"{key}={payload}/{suffix}"
+            for key, suffix in DECLARED_PATH_OUTPUTS.items()
+        ])
+        for sentinel in ["executed-backtick", "executed-substitution"]:
+            self.assertFalse((self.caller / sentinel).exists())
+
+    def test_output_path_input_cannot_forge_records_with_lf(self) -> None:
+        records = self.run_paths_step("/tmp/forged\ngate-outcome-path=/tmp/forged")
+        keys = [record.split("=", 1)[0] for record in records]
+        self.assertEqual(len(records), len(DECLARED_PATH_OUTPUTS))
+        self.assertEqual(sorted(keys), sorted(DECLARED_PATH_OUTPUTS))
+        self.assertEqual(len(set(keys)), len(keys))
+        self.assertNotIn("gate-outcome-path=/tmp/forged/review/gate_outcome.json", records)
+
+    def test_output_path_input_cannot_emit_bare_lines_with_crlf(self) -> None:
+        records = self.run_paths_step("/tmp/out\r\nbare-line-without-delimiter")
+        self.assertEqual(len(records), len(DECLARED_PATH_OUTPUTS))
+        for record in records:
+            key, sep, _ = record.partition("=")
+            self.assertTrue(sep)
+            self.assertIn(key, DECLARED_PATH_OUTPUTS)
 
     def test_dogfood_cache_and_bootstrap_use_the_same_isolated_directory(self) -> None:
         workflow = (ROOT / ".github/workflows/ub-review-gate.yml").read_text()
