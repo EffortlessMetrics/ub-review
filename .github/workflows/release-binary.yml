@@ -113,6 +113,19 @@ jobs:
             --tag "v$package_version" --output dist/release-notes.md
           test -s dist/release-notes.md
 
+      - name: Stamp candidate validity window
+        # The packet's retained_until claim MUST be stamped before the bytes
+        # artifact is uploaded: the publish job derives the horizon from that
+        # artifact's GitHub-side expires_at (upload time + retention), and
+        # admission requires the horizon to cover the claim. Stamping after
+        # the upload would make claim > horizon by construction and reject
+        # every legitimate production packet.
+        id: window
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "retained_until=$(date -u -d '+14 days' +%s)" >> "$GITHUB_OUTPUT"
+
       - name: Upload frozen candidate bytes artifact
         id: candidate
         uses: actions/upload-artifact@v7
@@ -133,9 +146,11 @@ jobs:
         shell: bash
         env:
           CANDIDATE_ARTIFACT_ID: ${{ steps.candidate.outputs.artifact-id }}
+          RETAINED_UNTIL: ${{ steps.window.outputs.retained_until }}
         run: |
           set -euo pipefail
           test -n "$CANDIDATE_ARTIFACT_ID"
+          test -n "$RETAINED_UNTIL"
           head_sha="$(git rev-parse 'HEAD^{commit}')"
           tree_sha="$(git rev-parse 'HEAD^{tree}')"
           package_version="$(cargo metadata --locked --no-deps --format-version=1 | jq -r '.packages[] | select(.name == "ub-review") | .version')"
@@ -147,7 +162,6 @@ jobs:
           checksum_asset="$ASSET_NAME.sha256"
           checksum_length="$(wc -c < "dist/$checksum_asset")"
           checksum_sha256="$(sha256sum "dist/$checksum_asset" | awk 'NF >= 1 {print $1}')"
-          retained_until="$(date -u -d '+14 days' +%s)"
           record="release-candidate/$archive_sha256"
           jq -n \
             --arg schema "ub-review.authorized_release.v1" \
@@ -172,7 +186,7 @@ jobs:
             --arg package_version "$package_version" \
             --arg target "x86_64-unknown-linux-gnu" \
             --arg toolchain "$TOOLCHAIN" \
-            --argjson retained_until "$retained_until" \
+            --argjson retained_until "$RETAINED_UNTIL" \
             --arg authorization_record "$record" \
             --arg verifier "trusted-release-verifier/v1" \
             '{schema:$schema,repository:$repository,head_sha:$head_sha,tree_sha:$tree_sha,workflow:$workflow,producer_ref:$producer_ref,run_id:$run_id,run_attempt:$run_attempt,artifact_id:$artifact_id,artifact_name:$artifact_name,proposed_tag:$proposed_tag,peeled_commit:$peeled_commit,asset:$asset,checksum_asset:$checksum_asset,archive_length:$archive_length,checksum_length:$checksum_length,archive_sha256:$archive_sha256,checksum_sha256:$checksum_sha256,binary_version:$binary_version,package_version:$package_version,target:$target,toolchain:$toolchain,retained_until:$retained_until,authorization_record:$authorization_record,verifier:$verifier}' \
@@ -228,6 +242,12 @@ jobs:
           AUTHORIZATION_EXPIRES_AT: ${{ inputs.authorization-expires-at }}
         run: |
           set -euo pipefail
+          # Exact-length hex checks must use a regex quantifier: a bash case
+          # glob of N char-classes matches exactly N characters, so it would
+          # reject every legitimate digest (64) or head sha (40).
+          is_hex() {
+            printf '%s' "$1" | grep -qE "^[0-9a-f]{$2}$"
+          }
           require_id() {
             case "$1" in
               ''|*[!0-9]*) echo "::error::$2 must be a positive integer"; exit 1 ;;
@@ -239,10 +259,7 @@ jobs:
           require_id "$CANDIDATE_ARTIFACT_ID" "candidate-artifact-id"
           require_id "$PACKET_ARTIFACT_ID" "packet-artifact-id"
           require_id "$AUTHORIZATION_EXPIRES_AT" "authorization-expires-at"
-          case "$PACKET_SHA256" in
-            [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
-            *) echo "::error::packet-sha256 must be 64 lowercase hex characters"; exit 1 ;;
-          esac
+          is_hex "$PACKET_SHA256" 64 || { echo "::error::packet-sha256 must be 64 lowercase hex characters"; exit 1; }
           case "$PROPOSED_TAG" in
             v[0-9]*) ;;
             *) echo "::error::proposed-tag must start with v plus a digit"; exit 1 ;;
@@ -286,10 +303,7 @@ jobs:
           workflow_path="$(jq -r '.path' trusted/run.json)"
           test "$workflow_path" = ".github/workflows/release-binary.yml"
           head_sha="$(jq -r '.head_sha' trusted/run.json)"
-          case "$head_sha" in
-            [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
-            *) echo "::error::run API returned a malformed head sha"; exit 1 ;;
-          esac
+          printf '%s' "$head_sha" | grep -qE '^[0-9a-f]{40}$' || { echo "::error::run API returned a malformed head sha"; exit 1; }
           head_branch="$(jq -r '.head_branch' trusted/run.json)"
           # Candidate artifacts: exact immutable ids within that exact run,
           # not expired, with the frozen names.
@@ -336,7 +350,7 @@ jobs:
           fi
           # Independent tree identity at the exact candidate commit.
           tree_sha="$(gh api "repos/$repo/commits/$head_sha" --jq '.commit.tree.sha')"
-          test -n "$tree_sha"
+          printf '%s' "$tree_sha" | grep -qE '^[0-9a-f]{40}$' || { echo "::error::commits API returned a malformed tree sha"; exit 1; }
           {
             echo "workflow_path=$workflow_path"
             echo "head_sha=$head_sha"

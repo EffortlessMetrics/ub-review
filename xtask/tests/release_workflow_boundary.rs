@@ -84,6 +84,62 @@ fn candidate_preparation_only_uploads_frozen_artifacts() -> Result<()> {
 }
 
 #[test]
+fn validity_window_is_stamped_before_the_bytes_upload() -> Result<()> {
+    // Review finding F3: the packet's retained_until claim must be stamped
+    // strictly BEFORE the bytes artifact upload. The publish job derives the
+    // admission horizon from that artifact's GitHub-side expires_at (upload
+    // time + retention); stamping after the upload makes claim > horizon by
+    // construction, so admission would reject every legitimate packet.
+    let text = workflow_text()?;
+    let package = job_section(&text, "package")?;
+    let stamp = package.find("id: window").with_context(
+        || "package job must stamp the validity window in a dedicated `window` step",
+    )?;
+    let upload = package
+        .find("actions/upload-artifact")
+        .with_context(|| "package job must upload artifacts")?;
+    if stamp > upload {
+        bail!(
+            "validity-window stamp (offset {stamp}) must precede the first artifact upload (offset {upload})"
+        );
+    }
+    if !package.contains("steps.window.outputs.retained_until") {
+        bail!("packet step must consume the pre-upload window stamp, not a freshly computed time");
+    }
+    if package.matches("date -u -d '+14 days'").count() != 1 {
+        bail!(
+            "the claim must be stamped exactly once (found {} stamps), before the upload",
+            package.matches("date -u -d '+14 days'").count()
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn exact_length_hex_checks_use_regex_quantifiers() -> Result<()> {
+    // Review findings F1/F2: bash case globs of N char-classes match exactly
+    // N characters, so they rejected every legitimate 64-hex packet digest
+    // and 40-hex head sha. The workflow must validate these with quantified
+    // regexes instead.
+    let text = workflow_text()?;
+    for pattern in [
+        "grep -qE \"^[0-9a-f]{$2}$\"",
+        "'^[0-9a-f]{40}$'",
+        "is_hex \"$PACKET_SHA256\" 64",
+    ] {
+        if !text.contains(pattern) {
+            bail!("workflow must validate hex identity with the quantified regex {pattern}");
+        }
+    }
+    assert_absent(
+        &text,
+        &["[0-9a-f][0-9a-f][0-9a-f]"],
+        "release workflow (case-glob hex classes match only their own length)",
+    )?;
+    Ok(())
+}
+
+#[test]
 fn publish_path_never_rebuilds_or_overwrites() -> Result<()> {
     // Acceptance #1344 items 6 and 7: the publish path never rebuilds a fresh
     // archive, never substitutes a newest artifact, and never clobbers.

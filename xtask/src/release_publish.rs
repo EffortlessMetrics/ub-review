@@ -145,6 +145,7 @@ pub struct ExternalState {
 pub enum PublishStop {
     OccupiedTag {
         refs: Vec<String>,
+        detail: String,
     },
     OccupiedRelease {
         assets: Vec<String>,
@@ -161,6 +162,12 @@ pub enum PublishStop {
     },
     CreateFailed {
         detail: String,
+    },
+    /// The tag ref exists after creation but does not resolve to the admitted
+    /// commit. External state is retained; recovery is a separate decision.
+    TagTargetMismatch {
+        expected: String,
+        observed: String,
     },
 }
 
@@ -179,15 +186,43 @@ pub struct ReleaseRequest {
     pub checksum: Vec<u8>,
 }
 
-/// Publishes admitted bytes. The trait exposes exactly two capabilities:
-/// read-only survey and single-shot create. There is no overwrite, move or
-/// delete capability, so no caller can restore overwrite behavior.
+/// Publishes admitted bytes. The trait exposes exactly one positive
+/// capability — a first publication of the proposed tag — plus read-only
+/// survey. There is no overwrite, move or delete capability, so no caller
+/// can restore overwrite behavior.
 pub trait ReleasePublisher {
     /// Observe current external state for `tag` without side effects.
     fn survey(&mut self, repository: &str, tag: &str) -> Result<ExternalState, PublishStop>;
-    /// Create the tag at `target_commit`, the release, and both assets from
-    /// the captured bytes exactly once, or stop without external mutation.
-    fn publish(&mut self, request: &ReleaseRequest) -> Result<(), PublishStop>;
+    /// Create `refs/tags/<tag>` exactly at `target` atomically. A ref that
+    /// already exists (historical or concurrently created) can only make
+    /// this fail; it is never adopted or moved.
+    fn create_tag(&mut self, repository: &str, tag: &str, target: &str) -> Result<(), PublishStop>;
+    /// Read back the created ref and require it to resolve to `target`.
+    fn verify_tag(&mut self, repository: &str, tag: &str, target: &str) -> Result<(), PublishStop>;
+    /// Create the release for the existing verified tag and upload both
+    /// assets from the captured bytes exactly once.
+    fn create_release(&mut self, request: &ReleaseRequest) -> Result<(), PublishStop>;
+    /// The one authorized publication sequence: refuse occupied state,
+    /// create the tag atomically at the admitted commit, verify its target,
+    /// then create the release with both assets. Any stop leaves external
+    /// state retained and requires a separately authorized recovery.
+    fn publish(&mut self, request: &ReleaseRequest) -> Result<(), PublishStop> {
+        let state = self.survey(&request.repository, &request.tag)?;
+        decide_external_state(
+            &state,
+            &[
+                request.archive_name.as_str(),
+                request.checksum_name.as_str(),
+            ],
+        )?;
+        // The tag ref is created first and verified before any release or
+        // asset exists, so a concurrently created historical tag can only
+        // stop the path (create_tag fails on the existing ref); it is never
+        // silently adopted as the release target.
+        self.create_tag(&request.repository, &request.tag, &request.target_commit)?;
+        self.verify_tag(&request.repository, &request.tag, &request.target_commit)?;
+        self.create_release(request)
+    }
 }
 
 /// Shared refusal policy over an observed external state: any occupied tag or
@@ -199,6 +234,7 @@ pub fn decide_external_state(
     if !state.tag_refs.is_empty() {
         return Err(PublishStop::OccupiedTag {
             refs: state.tag_refs.clone(),
+            detail: "survey observed an occupied tag before any create".into(),
         });
     }
     if let Some(assets) = &state.release_assets {
@@ -233,14 +269,24 @@ fn epoch_nanos() -> Result<u128> {
 
 enum GhFailure {
     NotFound(String),
+    Conflict(String),
     Outage(String),
 }
 
-/// Real publisher over the `gh` CLI. All calls are read-only surveys or one
-/// create; no `--clobber`, no upload-to-existing-release, no deletion.
+/// Real publisher over the `gh` CLI. All calls are read-only surveys, an
+/// atomic tag-ref create, or one release create; no `--clobber`, no
+/// upload-to-existing-release, no deletion.
 pub struct GhPublisher {
     gh: String,
 }
+
+/// Page budget for the release survey. The exact tag-ref lookup catches every
+/// published collision regardless of this bound; the page scan exists to
+/// observe draft releases (which the by-tag endpoint never returns), and a
+/// draft carrying the proposed fresh tag older than the most recent releases
+/// in a repository is not a realistic collision.
+const RELEASE_SURVEY_PAGES: u32 = 10;
+const RELEASE_PAGE_SIZE: u32 = 100;
 
 impl GhPublisher {
     pub fn new() -> Self {
@@ -249,9 +295,9 @@ impl GhPublisher {
         }
     }
 
-    fn api(&self, path_and_query: &str) -> std::result::Result<JsonValue, GhFailure> {
+    fn api_args(&self, args: &[&str]) -> std::result::Result<JsonValue, GhFailure> {
         let output = Command::new(&self.gh)
-            .args(["api", path_and_query])
+            .args(args)
             .output()
             .map_err(|error| GhFailure::Outage(format!("could not invoke gh api: {error}")))?;
         if output.status.success() {
@@ -263,7 +309,24 @@ impl GhPublisher {
         if stderr.contains("HTTP 404") {
             return Err(GhFailure::NotFound(bounded(&stderr)));
         }
+        if stderr.contains("HTTP 422") {
+            return Err(GhFailure::Conflict(bounded(&stderr)));
+        }
         Err(GhFailure::Outage(bounded(&stderr)))
+    }
+
+    fn api(&self, path_and_query: &str) -> std::result::Result<JsonValue, GhFailure> {
+        self.api_args(&["api", path_and_query])
+    }
+
+    fn post_json(
+        &self,
+        path_and_query: &str,
+        fields: &[&str],
+    ) -> std::result::Result<JsonValue, GhFailure> {
+        let mut args = vec!["api", "--method", "POST", path_and_query];
+        args.extend_from_slice(fields);
+        self.api_args(&args)
     }
 
     fn string_field(value: &JsonValue, field: &str) -> String {
@@ -283,53 +346,111 @@ impl Default for GhPublisher {
 
 impl ReleasePublisher for GhPublisher {
     fn survey(&mut self, repository: &str, tag: &str) -> Result<ExternalState, PublishStop> {
+        let outage = |detail: String| PublishStop::ApiOutage { detail };
         let tag_refs = match self.api(&format!("repos/{repository}/git/ref/tags/{tag}")) {
             Ok(value) => vec![Self::string_field(&value, "ref")],
             Err(GhFailure::NotFound(_)) => Vec::new(),
-            Err(GhFailure::Outage(detail)) => return Err(PublishStop::ApiOutage { detail }),
+            Err(GhFailure::Conflict(detail)) => return Err(outage(detail)),
+            Err(GhFailure::Outage(detail)) => return Err(outage(detail)),
         };
-        // The list endpoint (not the by-tag endpoint) also observes draft
-        // releases left behind by a partial create.
-        let releases = match self.api(&format!("repos/{repository}/releases?per_page=100")) {
-            Ok(value) => value,
-            Err(GhFailure::NotFound(detail)) => {
-                return Err(PublishStop::ApiOutage { detail });
+        // Scan release pages for the tag: the list endpoint (unlike the
+        // by-tag endpoint) also observes draft releases left behind by a
+        // partial create. The exact tag-ref lookup above already catches
+        // every published collision; this scan is bounded by the budget
+        // because a proposed tag is always freshly derived from the current
+        // package version.
+        let mut release_assets = None;
+        for page in 1..=RELEASE_SURVEY_PAGES {
+            let releases = match self.api(&format!(
+                "repos/{repository}/releases?per_page={RELEASE_PAGE_SIZE}&page={page}"
+            )) {
+                Ok(value) => value,
+                Err(GhFailure::NotFound(detail)) => return Err(outage(detail)),
+                Err(GhFailure::Conflict(detail)) => return Err(outage(detail)),
+                Err(GhFailure::Outage(detail)) => return Err(outage(detail)),
+            };
+            let Some(list) = releases.as_array() else {
+                return Err(outage("release survey returned a non-array page".into()));
+            };
+            if let Some(release) = list
+                .iter()
+                .find(|release| Self::string_field(release, "tag_name") == tag)
+            {
+                release_assets = Some(
+                    release
+                        .get("assets")
+                        .and_then(JsonValue::as_array)
+                        .map(|assets| {
+                            assets
+                                .iter()
+                                .map(|asset| Self::string_field(asset, "name"))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default(),
+                );
+                break;
             }
-            Err(GhFailure::Outage(detail)) => return Err(PublishStop::ApiOutage { detail }),
-        };
-        let release_assets = releases
-            .as_array()
-            .and_then(|list| {
-                list.iter()
-                    .find(|release| Self::string_field(release, "tag_name") == tag)
-            })
-            .map(|release| {
-                release
-                    .get("assets")
-                    .and_then(JsonValue::as_array)
-                    .map(|assets| {
-                        assets
-                            .iter()
-                            .map(|asset| Self::string_field(asset, "name"))
-                            .collect::<Vec<_>>()
-                    })
-                    .unwrap_or_default()
-            });
+            if list.len() < RELEASE_PAGE_SIZE as usize {
+                break;
+            }
+        }
         Ok(ExternalState {
             tag_refs,
             release_assets,
         })
     }
 
-    fn publish(&mut self, request: &ReleaseRequest) -> Result<(), PublishStop> {
-        let state = self.survey(&request.repository, &request.tag)?;
-        decide_external_state(
-            &state,
+    fn create_tag(&mut self, repository: &str, tag: &str, target: &str) -> Result<(), PublishStop> {
+        match self.post_json(
+            &format!("repos/{repository}/git/refs"),
             &[
-                request.archive_name.as_str(),
-                request.checksum_name.as_str(),
+                "-f",
+                "ref",
+                &format!("refs/tags/{tag}"),
+                "-f",
+                "sha",
+                target,
             ],
-        )?;
+        ) {
+            Ok(_) => Ok(()),
+            // HTTP 422: the ref already exists — a historical or concurrently
+            // created tag. It is never adopted; the path stops.
+            Err(GhFailure::Conflict(detail)) => Err(PublishStop::OccupiedTag {
+                refs: vec![format!("refs/tags/{tag}")],
+                detail,
+            }),
+            Err(GhFailure::NotFound(detail)) => Err(PublishStop::ApiOutage { detail }),
+            Err(GhFailure::Outage(detail)) => Err(PublishStop::ApiOutage { detail }),
+        }
+    }
+
+    fn verify_tag(&mut self, repository: &str, tag: &str, target: &str) -> Result<(), PublishStop> {
+        match self.api(&format!("repos/{repository}/git/ref/tags/{tag}")) {
+            Ok(value) => {
+                let observed = value
+                    .get("object")
+                    .and_then(|object| object.get("sha"))
+                    .and_then(JsonValue::as_str)
+                    .unwrap_or_default()
+                    .to_owned();
+                if observed == target {
+                    Ok(())
+                } else {
+                    Err(PublishStop::TagTargetMismatch {
+                        expected: target.to_owned(),
+                        observed,
+                    })
+                }
+            }
+            Err(GhFailure::NotFound(detail)) => Err(PublishStop::ApiOutage {
+                detail: format!("tag ref vanished immediately after creation: {detail}"),
+            }),
+            Err(GhFailure::Conflict(detail)) => Err(PublishStop::ApiOutage { detail }),
+            Err(GhFailure::Outage(detail)) => Err(PublishStop::ApiOutage { detail }),
+        }
+    }
+
+    fn create_release(&mut self, request: &ReleaseRequest) -> Result<(), PublishStop> {
         let staging = stage_private_bytes(request)?;
         let created = self.create_via_gh(request, &staging);
         let _ = fs::remove_dir_all(&staging.dir);
@@ -409,6 +530,9 @@ impl GhPublisher {
         request: &ReleaseRequest,
         staging: &PrivateStaging,
     ) -> Result<(), PublishStop> {
+        // The tag ref was created and verified by the earlier sequence steps,
+        // so --verify-tag (abort if the tag is missing) guards a concurrent
+        // deletion without ever letting gh create or move a tag itself.
         let output = Command::new(&self.gh)
             .args([
                 "release".to_owned(),
@@ -416,8 +540,7 @@ impl GhPublisher {
                 request.tag.clone(),
                 "--repo".to_owned(),
                 request.repository.clone(),
-                "--target".to_owned(),
-                request.target_commit.clone(),
+                "--verify-tag".to_owned(),
                 "--title".to_owned(),
                 request.title.clone(),
                 "--notes-file".to_owned(),
@@ -898,10 +1021,17 @@ mod tests {
     #[derive(Default)]
     struct RecordingPublisher {
         api_up: bool,
+        /// Simulates a tag ref created concurrently between the survey and
+        /// the atomic create: the survey still reports a clean state.
+        race_tag_created: bool,
+        /// Simulates the created ref not resolving to the admitted commit.
+        wrong_tag_target: bool,
         tag_refs: Vec<String>,
         release_assets: Option<Vec<String>>,
         surveys: Vec<String>,
-        creates: Vec<ReleaseRequest>,
+        create_tags: Vec<(String, String)>,
+        tag_verifies: Vec<(String, String)>,
+        release_creates: Vec<ReleaseRequest>,
     }
 
     impl RecordingPublisher {
@@ -929,16 +1059,40 @@ mod tests {
                 release_assets: self.release_assets.clone(),
             })
         }
-        fn publish(&mut self, request: &ReleaseRequest) -> Result<(), PublishStop> {
-            let state = self.survey(&request.repository, &request.tag)?;
-            decide_external_state(
-                &state,
-                &[
-                    request.archive_name.as_str(),
-                    request.checksum_name.as_str(),
-                ],
-            )?;
-            self.creates.push(request.clone());
+        fn create_tag(
+            &mut self,
+            repository: &str,
+            tag: &str,
+            target: &str,
+        ) -> Result<(), PublishStop> {
+            self.create_tags
+                .push((repository.to_owned(), format!("{tag}@{target}")));
+            if self.race_tag_created {
+                return Err(PublishStop::OccupiedTag {
+                    refs: vec![format!("refs/tags/{tag}")],
+                    detail: "fixture: ref appeared concurrently".into(),
+                });
+            }
+            Ok(())
+        }
+        fn verify_tag(
+            &mut self,
+            repository: &str,
+            tag: &str,
+            target: &str,
+        ) -> Result<(), PublishStop> {
+            self.tag_verifies
+                .push((repository.to_owned(), format!("{tag}@{target}")));
+            if self.wrong_tag_target {
+                return Err(PublishStop::TagTargetMismatch {
+                    expected: target.to_owned(),
+                    observed: "d".repeat(40),
+                });
+            }
+            Ok(())
+        }
+        fn create_release(&mut self, request: &ReleaseRequest) -> Result<(), PublishStop> {
+            self.release_creates.push(request.clone());
             self.release_assets = Some(vec![
                 request.archive_name.clone(),
                 request.checksum_name.clone(),
@@ -949,9 +1103,14 @@ mod tests {
 
     fn assert_zero_side_effects(publisher: &RecordingPublisher) {
         assert!(
-            publisher.creates.is_empty(),
-            "expected zero create/upload calls, got {:?}",
-            publisher.creates
+            publisher.release_creates.is_empty(),
+            "expected zero release-create calls, got {:?}",
+            publisher.release_creates
+        );
+        assert!(
+            publisher.create_tags.is_empty(),
+            "expected zero tag-create calls, got {:?}",
+            publisher.create_tags
         );
     }
 
@@ -967,8 +1126,17 @@ mod tests {
         decide_and_publish(staged, facts, true, &mut publisher)?;
         assert_eq!(publisher.surveys.len(), 1);
         assert_eq!(publisher.surveys[0], "EffortlessMetrics/ub-review#v0.1.3");
-        assert_eq!(publisher.creates.len(), 1);
-        let created = &publisher.creates[0];
+        assert_eq!(publisher.create_tags.len(), 1);
+        assert_eq!(
+            publisher.create_tags[0],
+            (
+                "EffortlessMetrics/ub-review".to_owned(),
+                format!("v0.1.3@{}", fixture.packet.head_sha)
+            )
+        );
+        assert_eq!(publisher.tag_verifies.len(), 1);
+        assert_eq!(publisher.release_creates.len(), 1);
+        let created = &publisher.release_creates[0];
         assert_eq!(created.tag, "v0.1.3");
         assert_eq!(created.title, "v0.1.3");
         assert_eq!(created.target_commit, fixture.packet.head_sha);
@@ -980,7 +1148,7 @@ mod tests {
         assert_eq!(created.notes, fixture.notes);
         // Unauthorized replay of the same authorization after success: the
         // release now exists, so the second attempt stops with zero creates.
-        let replay_request = publisher.creates[0].clone();
+        let replay_request = publisher.release_creates[0].clone();
         let replay = match publisher.publish(&replay_request) {
             Ok(()) => bail!("unauthorized replay must stop on the occupied release"),
             Err(stop) => stop,
@@ -991,7 +1159,8 @@ mod tests {
                 assets: vec![rb::ASSET.to_owned(), rb::CHECKSUM_ASSET.to_owned()]
             }
         );
-        assert_eq!(publisher.creates.len(), 1);
+        assert_eq!(publisher.release_creates.len(), 1);
+        assert_eq!(publisher.create_tags.len(), 1);
         Ok(())
     }
 
@@ -1222,7 +1391,7 @@ mod tests {
             };
         assert_eq!(
             error.to_string(),
-            "publish stopped without overwrite: OccupiedTag { refs: [\"refs/tags/v0.1.3\"] }"
+            "publish stopped without overwrite: OccupiedTag { refs: [\"refs/tags/v0.1.3\"], detail: \"survey observed an occupied tag before any create\" }"
         );
         assert_zero_side_effects(&publisher);
         assert_eq!(publisher.surveys.len(), 1);
@@ -1256,6 +1425,57 @@ mod tests {
             "API outage stopped with `{error:#}`"
         );
         assert_zero_side_effects(&publisher);
+        Ok(())
+    }
+
+    #[test]
+    fn concurrent_tag_creation_is_never_adopted() -> Result<()> {
+        // The survey can be clean while a historical tag ref appears before
+        // the atomic create. The tag-ref create must fail on the existing ref
+        // so nothing is adopted, and no release or asset may exist yet.
+        let fixture = Fixture::new()?;
+        let staged = fixture.staged()?;
+        let facts = clone_facts(&fixture.facts);
+        let mut publisher = RecordingPublisher::authorized();
+        publisher.race_tag_created = true;
+        let error = match decide_and_publish(staged, facts, true, &mut publisher) {
+            Ok(()) => bail!("concurrent tag must stop the publish path"),
+            Err(error) => error,
+        };
+        assert!(
+            error.to_string().contains("OccupiedTag"),
+            "concurrent tag stopped with `{error:#}`"
+        );
+        assert_eq!(publisher.surveys.len(), 1);
+        assert_eq!(publisher.create_tags.len(), 1);
+        assert!(publisher.tag_verifies.is_empty());
+        assert!(publisher.release_creates.is_empty());
+        assert_eq!(publisher.release_assets, None);
+        Ok(())
+    }
+
+    #[test]
+    fn wrong_tag_target_stops_before_any_release_exists() -> Result<()> {
+        // The created ref must resolve to the admitted commit before the
+        // release is created; a mismatch stops with zero release/asset
+        // effects and the mismatch reported for explicit recovery.
+        let fixture = Fixture::new()?;
+        let staged = fixture.staged()?;
+        let facts = clone_facts(&fixture.facts);
+        let mut publisher = RecordingPublisher::authorized();
+        publisher.wrong_tag_target = true;
+        let error = match decide_and_publish(staged, facts, true, &mut publisher) {
+            Ok(()) => bail!("wrong tag target must stop the publish path"),
+            Err(error) => error,
+        };
+        assert!(
+            error.to_string().contains("TagTargetMismatch"),
+            "wrong target stopped with `{error:#}`"
+        );
+        assert_eq!(publisher.create_tags.len(), 1);
+        assert_eq!(publisher.tag_verifies.len(), 1);
+        assert!(publisher.release_creates.is_empty());
+        assert_eq!(publisher.release_assets, None);
         Ok(())
     }
 
