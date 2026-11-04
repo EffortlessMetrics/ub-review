@@ -7498,16 +7498,18 @@ mod tests {
 
     #[test]
     fn ub_review_gate_workflow_uses_contained_candidate_posture() {
-        // The candidate self gate still reports on every PR head, but #1240
-        // removed provider credentials and PR-write delivery from that
-        // candidate-controlled job. Posting policy remains declared for the
-        // eventual independent gate; this workflow stays model-off and
-        // artifact-only until that authority boundary exists.
+        // #1465 invokes the contained proof only after queue admission. Its
+        // reviewed immutable workflow definition retains #1240's model-off,
+        // artifact-only and separate-telemetry authority boundaries.
         let workflow = include_str!("../.github/workflows/ub-review-gate.yml");
         let profile = include_str!("../.ub-review.toml");
+        let queue = include_str!("../.github/workflows/queue-qualification.yml");
         assert!(
-            workflow.contains("types: [opened, reopened, ready_for_review, synchronize]"),
-            "self gate should run on every PR pass, including synchronize"
+            workflow.contains("\n  workflow_call:\n")
+                && !workflow.contains("\n  pull_request:\n")
+                && queue.contains("\n  merge_group:\n    types: [checks_requested]")
+                && queue.contains("uses: EffortlessMetrics/ub-review/.github/workflows/ub-review-gate.yml@bf077a0178c3fe159927a6ea39ee274050a92e10"),
+            "contained proof must use the reviewed definition through native queue admission"
         );
         assert!(
             profile.contains("post_review_on = [\"opened\", \"ready_for_review\"]"),
@@ -7519,17 +7521,18 @@ mod tests {
         );
         assert!(
             workflow.contains("run-pass: auto"),
-            "run-pass must preserve the exact pull-request event identity"
+            "automatic pass classification must remain separate from publication authority"
         );
         assert!(
             workflow.contains(
-                "base: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.event.pull_request.base.ref) || 'origin/main' }}"
-            ),
-            "self gate must diff against the PR's declared base branch so stacked PRs measure only their layer"
+                "base: ${{ github.event_name == 'merge_group' && inputs.base_sha || github.event_name == 'pull_request' && format('origin/{0}', github.event.pull_request.base.ref) || 'origin/main' }}"
+            ) && workflow.contains("head: ${{ github.event_name == 'merge_group' && inputs.group_sha || 'HEAD' }}")
+                && workflow.contains("merge-group: ${{ github.event_name == 'merge_group' && 'true' || 'false' }}"),
+            "queue proof must use actual B/G while retaining explicit legacy and diagnostic semantics"
         );
         assert!(
-            workflow.contains("cancel-in-progress: true"),
-            "synchronize passes must collapse push storms via concurrency"
+            workflow.contains("cancel-in-progress: false"),
+            "ordinary publication must not cancel an admitted integration proof"
         );
         assert!(
             workflow.contains("model-mode: off"),
