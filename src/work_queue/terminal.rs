@@ -508,12 +508,51 @@ fn terminal_proof_receipt_status(receipt: &ProofReceipt) -> Result<String> {
                 | "timed_out"
                 | "skipped_budget"
                 | "skipped_profile"
+                | "skipped_unresolved"
         ),
         "proof receipt {} has unsupported terminal result {}",
         receipt.id,
         receipt.result
     );
+    // A refused worker lease and a red/green run with a skipped base-plus-tests
+    // side are the only producers of an unresolved result. The result string
+    // alone is not evidence of a supported producer, so any other command
+    // role composition fails closed.
+    if receipt.result == "skipped_unresolved" {
+        anyhow::ensure!(
+            skipped_unresolved_receipt_roles_are_supported(receipt),
+            "proof receipt {} has unsupported skipped_unresolved command roles",
+            receipt.id
+        );
+    }
     Ok(receipt.result.clone())
+}
+
+fn skipped_unresolved_receipt_roles_are_supported(receipt: &ProofReceipt) -> bool {
+    let skipped_unresolved_command = |command: &ProofCommandReceipt| {
+        command.status == "skipped"
+            && !command.timed_out
+            && command.exit_code.is_none()
+            && command.timeout_sec == 0
+            && command.duration_ms == 0
+    };
+    let completed_command = |command: &ProofCommandReceipt| {
+        !command.timed_out && matches!(command.status.as_str(), "passed" | "failed")
+    };
+    // Worker lease refusal: completed setup preflight, skipped HEAD proof.
+    let worker_refusal = matches!(receipt.commands.as_slice(), [setup, head]
+        if setup.side == "nightly-preflight"
+            && completed_command(setup)
+            && head.side == "head"
+            && skipped_unresolved_command(head));
+    // Red/green partial: passed HEAD, skipped base-plus-tests proof side.
+    let red_green_partial = matches!(receipt.commands.as_slice(), [head, base]
+        if head.side == "head"
+            && head.status == "passed"
+            && !head.timed_out
+            && base.side == "base-plus-tests"
+            && skipped_unresolved_command(base));
+    worker_refusal || red_green_partial
 }
 
 fn load_proof_task_request_ids(out: &Path) -> Result<BTreeMap<String, Vec<String>>> {
