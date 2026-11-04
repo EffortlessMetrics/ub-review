@@ -46391,3 +46391,23 @@ kind = "exposure_gap"
 finding_id = "probe:src_work_queue_terminal_status_tests.rs:return_value:edf88f7c"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1645; probe duration_ms: 0,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by nonterminal_and_unknown_proof_results_cannot_commit_terminal_output, producer_plan_statuses_preserve_nonexecution_without_receipts, skipped_unresolved_receipts_publish_for_supported_command_roles. Re-verify after any edit to src/work_queue/terminal_status_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:f6dc7b08"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1646; probe \"failed\" if head.exit_code.is_some() => \"head_failed\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by base_worktree_cleanup_precedes_ledger_cleanup_completion, cache_warm_keeps_failed_versions_unavailable, cancelled_exact_head_without_replacement_is_inconclusive. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:bed3b28a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1646; probe \"failed\" => \"terminated_without_exit_code\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by base_worktree_cleanup_precedes_ledger_cleanup_completion, cache_warm_keeps_failed_versions_unavailable, discriminating_and_head_failed_are_published_whatever_else_the_receipt_says. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:440f2422"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1646; probe \"failed\" if head.exit_code.is_some() => \"head_failed\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by base_worktree_cleanup_precedes_ledger_cleanup_completion, cache_warm_keeps_failed_versions_unavailable, cancelled_exact_head_without_replacement_is_inconclusive. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:8434c51a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1646; probe \"failed\" => \"terminated_without_exit_code\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by base_worktree_cleanup_precedes_ledger_cleanup_completion, cache_warm_keeps_failed_versions_unavailable, discriminating_and_head_failed_are_published_whatever_else_the_receipt_says. Re-verify after any edit to src/proof/red_green.rs."
