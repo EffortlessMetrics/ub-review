@@ -426,6 +426,17 @@ pub(crate) fn admit_revision(
                     reviewed.commit_oid()
                 );
             }
+            // refs/pull/N/merge refreshes lazily, so the base-side parent
+            // must be the resolved base tip before the merge result counts
+            // as current-base.
+            let base_side = &parents[0];
+            if base_side != base.commit_oid() {
+                bail!(
+                    "resolved base tip {} is not the base-side parent {base_side} of merge-result checkout {}; rebuild the synthetic merge against the current base tip",
+                    base.commit_oid(),
+                    reviewed.commit_oid()
+                );
+            }
             let head = resolve_pair(root, "pr-head", head_side)?;
             (
                 ReviewSemantics::MergeResult,
@@ -1087,6 +1098,47 @@ mod tests {
             "{}",
             err
         );
+        Ok(())
+    }
+
+    #[test]
+    fn stale_merge_bases_are_rejected_but_current_merges_admit() -> Result<()> {
+        let repo = init_repo()?;
+        let (base_tip, pr_head) = divergent_commits(&repo)?;
+        let merge = synthetic_merge(&repo, &base_tip, &pr_head)?;
+
+        // `main` advancing past the merge's base-side parent models GitHub's
+        // lazy refs/pull/N/merge refresh: the stale synthetic merge must not
+        // be admitted as current-base.
+        let advanced = commit_file(&repo, "src/main.txt", "later main\n", "main advances again")?;
+        assert_ne!(advanced, base_tip);
+        let Err(err) = admit_revision(
+            repo.root(),
+            "main",
+            &merge,
+            Some(&pr_head),
+            &files_vec(),
+            &sample_patch(),
+        ) else {
+            bail!("stale-base merge must not be admitted");
+        };
+        let message = err.to_string();
+        assert!(message.contains("not the base-side parent"), "{message}");
+        assert!(message.contains("rebuild the synthetic merge"), "{message}");
+        assert!(message.contains(&advanced), "{message}");
+
+        // A merge rebuilt on the resolved base tip still admits.
+        let refreshed = synthetic_merge(&repo, &advanced, &pr_head)?;
+        let admission = admit_revision(
+            repo.root(),
+            "main",
+            &refreshed,
+            Some(&pr_head),
+            &files_vec(),
+            &sample_patch(),
+        )?;
+        assert_eq!(admission.semantics, "merge_result");
+        assert_eq!(admission.pr_head_commit.as_deref(), Some(pr_head.as_str()));
         Ok(())
     }
 
