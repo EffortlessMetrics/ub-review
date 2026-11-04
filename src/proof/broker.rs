@@ -1900,6 +1900,7 @@ mod tests {
         let mut failures = Vec::new();
         for case in [
             "success",
+            "setup_stall",
             "failure",
             "timeout",
             "setup_failure",
@@ -1924,12 +1925,17 @@ mod tests {
             profile.budgets.proof_max_focused_tests = 3;
             profile.budgets.proof_command_timeout_sec = 4;
             profile.budgets.proof_total_timeout_sec = 6;
-            // Worktree setup is real and can stall under full-suite load. This
-            // headroom is independent of the six-second proof accounting budget.
+            // Setup can stall under full-suite load. This headroom is
+            // independent of the six-second proof accounting budget.
             profile.budgets.hard_timeout_sec = 600;
             let args = test_run_args(out.clone());
             let box_state = BoxState::detect()?;
-            let started = Instant::now();
+            // Model a run already older than the former 30-second deadline.
+            let started = if case == "setup_stall" {
+                Instant::now() - std::time::Duration::from_secs(31)
+            } else {
+                Instant::now()
+            };
             let revision = RevisionRef {
                 digest: "a".repeat(64),
                 semantics: "candidate_head".to_owned(),
@@ -1941,6 +1947,7 @@ mod tests {
             let mut builds = 0;
             let mut build_started_ns = None;
             let last_command_finished = std::cell::Cell::new(0_u64);
+            let mut setup_stall_observed = false;
             let result = run_request_proof_broker_v0_with_runners(
                 temp.path(),
                 &out,
@@ -1991,6 +1998,10 @@ mod tests {
                     status
                 },
                 |_root, _out, _diff| {
+                    if case == "setup_stall" {
+                        std::thread::sleep(std::time::Duration::from_millis(1_100));
+                        setup_stall_observed = true;
+                    }
                     let base = temp.path().join("base-plus-tests");
                     fs::create_dir_all(&base)?;
                     Ok(base)
@@ -2031,6 +2042,10 @@ mod tests {
                 "elapsed_ns": started.elapsed().as_nanos(),
             });
             eprintln!("ACCOUNTING_MATRIX {row}");
+            if case == "setup_stall" {
+                ensure!(setup_stall_observed);
+                ensure!(broker_finished >= 32);
+            }
             if builds != usize::from(case != "timeout") {
                 failures.push(format!("{case}: required build executions={builds}"));
             }
