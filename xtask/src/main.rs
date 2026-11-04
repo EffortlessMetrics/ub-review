@@ -10,6 +10,8 @@ use serde_json::{Value as JsonValue, json};
 use toml::Value;
 use toml::map::Map;
 
+use xtask::release_publish;
+
 fn main() {
     if let Err(error) = run() {
         eprintln!("error: {error:#}");
@@ -70,6 +72,14 @@ fn run() -> Result<()> {
             let options = RenderReleaseNotesOptions::parse(args)?;
             run_render_release_notes(&root, &options)?;
         }
+        "validate-release" => {
+            let options = release_publish::ValidateReleaseOptions::parse(args)?;
+            release_publish::run(&root, options)?;
+        }
+        "release-packet-digest" => {
+            let options = release_publish::PacketDigestOptions::parse(args)?;
+            release_publish::run_packet_digest(&root, options)?;
+        }
         "help" | "-h" | "--help" => {
             reject_extra_args(args)?;
             print_help();
@@ -82,7 +92,7 @@ fn run() -> Result<()> {
         }
         other => {
             bail!(
-                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, ripr, smoke-base, calibration-report, render-release-notes, or help"
+                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, ripr, smoke-base, calibration-report, render-release-notes, validate-release, release-packet-digest, or help"
             )
         }
     }
@@ -110,6 +120,8 @@ cargo xtask commands
   cargo xtask smoke-base        select a non-empty local smoke diff base
   cargo xtask calibration-report <dir>  aggregate review/calibration.json files
   cargo xtask render-release-notes --tag <tag> --output <path>  render offline release notes
+  cargo xtask validate-release [authorized publish facts]      admit authorized bytes, then publish once
+  cargo xtask release-packet-digest --packet <path>            offline digest of an exact candidate packet
 
 precommit options
 
@@ -127,6 +139,32 @@ render-release-notes options
 
   --tag <tag>                   release tag (^v[0-9][A-Za-z0-9._-]*$)
   --output <path>               output file (template is fixed at .github/release-notes.md)
+
+validate-release options (trusted facts only; the staged candidate is untrusted data)
+
+  --staging <dir>               directory holding the frozen candidate artifact files
+  --repository <owner/name>     independently observed repository
+  --workflow <path>             producer workflow path observed at preparation
+  --head-sha <sha>              candidate commit observed from the run API
+  --tree-sha <sha>              candidate tree observed from the commits API
+  --producer-ref <ref>          sha-verified producer ref (heads or tags)
+  --run-id <id>                 candidate run id observed from the run API
+  --run-attempt <n>             candidate run attempt observed from the run API
+  --artifact-id <id>            frozen bytes artifact id observed from the artifacts API
+  --artifact-name <name>        artifact name observed from the artifacts API
+  --retained-until <epoch>      observed artifact expiry horizon (must cover the packet claim)
+  --proposed-tag <tag>          authorized tag (must be absent; peel = head sha)
+  --package-version <ver>       version observed from Cargo.toml at the candidate commit
+  --authorization-record <r>    authority record from the dispatch authorization
+  --authorization-verifier <id> verifier identity from the dispatch authorization
+  --packet-sha256 <digest>      exact packet digest named by the authorization
+  --authorization-expires-at <epoch>  authorization expiry
+  --now <epoch>                 trusted current time at the publication boundary
+  --publish                     perform the single create/upload pass (default: decision only)
+
+release-packet-digest options
+
+  --packet <path>               candidate packet file (ub-review.authorized_release.v1)
 "
     );
 }

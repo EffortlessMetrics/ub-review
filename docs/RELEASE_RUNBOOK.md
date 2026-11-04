@@ -89,23 +89,51 @@ Authentication, transport, API, and other command failures do not establish
 absence. Stop on any collision, even if the existing tag targets the same
 commit. Do not move or delete a historical tag to free a name.
 
-## Publication prerequisite: preserve the authorized bytes
+## Publication prerequisite: publish only the authorized bytes
 
-The current workflow cannot yet establish #817's required identity between
-the pre-authorization archive and the bytes it publishes. Dispatch and tag
-push build separate archives, and packaging retains fresh filesystem
-timestamps. Matching source SHAs therefore do not imply matching archive
-digests. The tag job checks only its own new receipt before exposing assets.
+Observed through 2026-10 (before #1344): the workflow rebuilt a fresh
+archive on every tag push, validated only its own self-written receipt, and
+uploaded with `gh release upload --clobber` onto an existing release, so
+published bytes were never bound to an authorized candidate. That
+rebuild-and-clobber route is removed.
 
-Do not proceed to tag creation or publication until a reviewed production
-path either promotes the exact authorized archive/checksum or proves
-reproducible packaging and compares the rebuilt bytes to the authorized
-digest **before** creating or uploading a GitHub Release. #816/#817 must
-retain this prerequisite and its tamper/mismatch rejection proof. Checking
-the digest after exposure is a verification backstop, not a substitute for
-this missing publication boundary. [#1300](https://github.com/EffortlessMetrics/ub-review/issues/1300)
-owns its implementation and proof. The remaining preparation steps below
-can assemble evidence while this prerequisite remains open.
+The current boundary (implemented with #1343's merged
+`ub-review.authorized_release.v1` validator in `xtask/src/release_bytes.rs`
+and its production adapter `xtask/src/release_publish.rs`):
+
+1. Candidate preparation (`package` job, any trigger) is non-publishing. It
+   uploads two frozen, immutable artifacts — the archive/checksum/notes and
+   the authorized-release packet — pinned to run id, run attempt, artifact
+   ids, and the archive digest. Ordinary preparation never creates a tag or
+   a public Release.
+2. Publication requires an explicit maintainer `workflow_dispatch` of
+   `release-binary.yml` that carries the trusted authorization packet:
+   candidate run id/attempt, both artifact ids, the exact packet digest
+   (`cargo xtask release-packet-digest` derives it offline), the proposed
+   tag, and the authorization record/verifier/expiry. The dispatching actor,
+   not any candidate-controlled file or comment, is the source of that
+   authorization (#817 owns issuance).
+3. The publish job resolves producer facts independently from the GitHub API
+   (run, artifacts, tree, sha-verified producer ref, tag absence, package
+   version at the candidate commit), downloads the frozen candidate by
+   immutable artifact id, and runs the #1343 validator before the first
+   create/upload side effect.
+4. The publisher creates the proposed tag at the admitted commit, the
+   release, and both assets exactly once. It has no overwrite, move, or
+   delete capability; occupied tags/releases, partial uploads, API outages
+   and unauthorized replays stop the publish path and require a separately
+   authorized recovery decision.
+
+Matching source SHAs still do not imply matching archive digests; the
+identity is the packet's exact archive/checksum digests bound to the frozen
+artifact by admission, and freshness (`retained_until`, authorization
+expiry) is rechecked at the boundary. #816/#817 must retain this boundary
+and its tamper/mismatch/collision rejection proof;
+[#1300](https://github.com/EffortlessMetrics/ub-review/issues/1300) owns the
+publication-byte reconciliation and closes only from this production-boundary
+proof. Release-facing description/version/claims prose remains owned by
+[#1342](https://github.com/EffortlessMetrics/ub-review/issues/1342); this
+section covers only the publication boundary.
 
 ## Build the pre-authorization packet
 
@@ -136,14 +164,21 @@ deterministic checklist alone.
 
 A manually dispatched `release-binary.yml` run packages a candidate without
 publishing. Dispatch against a ref resolving to the selected SHA, then verify
-the resulting run's `headSha`; reject a moved ref. Retain the
-`ub-review-linux-x64-release` artifact before its 14-day retention expires.
-It contains the archive, checksum, and `release-candidate.json`:
+the resulting run's `headSha`; reject a moved ref. Retain both frozen
+artifacts — `ub-review-linux-x64-release` and
+`ub-review-linux-x64-release-packet` — before their 14-day retention
+expires. The bytes artifact contains the archive, checksum, and offline
+release notes; the packet artifact contains `authorized-release-packet.json`
+with the versioned candidate identity:
 
 ```text
-schema = ub-review.release_candidate.v1
-head_sha, ref, tag, toolchain
-asset, checksum_asset, archive_sha256
+schema = ub-review.authorized_release.v1
+repository, head_sha, tree_sha, workflow, producer_ref
+run_id, run_attempt, artifact_id, artifact_name
+proposed_tag, peeled_commit, asset, checksum_asset
+archive_length, checksum_length, archive_sha256, checksum_sha256
+binary_version, package_version, target, toolchain, retained_until
+authorization_record (= release-candidate/<archive_sha256>), verifier
 ```
 
 Verify the actual binary's `--version` against the proposed tag, the single
@@ -178,47 +213,58 @@ Missing observations remain not proven. PR #1265's proposed Rust harness
 uses its own versioned environment/resolver receipts; its pending source and
 historical runs must not be represented as a producer already on main.
 
-## Authorization and tag push
+## Authorization and publication dispatch
 
 Close the publication-byte prerequisite and complete the reviewable packet
 in #816 before requesting authorization in #817. The maintainer's
-authorization must name the exact SHA, unused tag,
-intended external actions, claims, rollback target, and any separately allowed
-destructive recovery. Do not substitute a newer SHA after authorization.
+authorization must name the exact SHA, unused tag, the candidate packet
+digest, the frozen run/artifact identity, intended external actions, claims,
+rollback target, and any separately allowed destructive recovery. Do not
+substitute a newer SHA or a newer packet after authorization.
 
-Immediately before tagging, repeat the local/remote tag and release collision
-checks and verify the clean checkout is still the authorized SHA. Only then
-perform the explicitly authorized commands:
+Publication is an explicit `workflow_dispatch` of `release-binary.yml`
+carrying the trusted authorization inputs; a tag push only re-packages a
+candidate and never publishes. Immediately before dispatching, repeat the
+local/remote tag and release collision checks for the proposed tag. The
+dispatched publish path re-observes the run, artifacts, tree, producer ref,
+tag absence and package version from the GitHub API, admits the frozen
+candidate bytes with #1343's validator against the authorization packet, and
+only then creates the tag at the authorized commit, the release, and both
+assets exactly once:
 
 ```text
-git tag -a <authorized-tag> <authorized-candidate-sha> -m "ub-review <authorized-tag>"
-git push origin refs/tags/<authorized-tag>
+gh workflow run release-binary.yml --ref <trusted-adapter-revision> \
+  -f candidate-run-id=<authorized-run> \
+     candidate-run-attempt=<authorized-attempt> \
+     candidate-artifact-id=<frozen-bytes-artifact> \
+     packet-artifact-id=<frozen-packet-artifact> \
+     packet-sha256=<authorized-packet-digest> \
+     proposed-tag=<authorized-tag> \
+     authorization-record=<authority-record> \
+     authorization-verifier=<trusted-verifier> \
+     authorization-expires-at=<epoch>
 ```
 
-The tag-push workflow builds a new archive; it does not promote the earlier
-dispatch artifact. Before publishing, it verifies that its receipt matches
-`GITHUB_SHA`, the tag ref/name, Rust 1.95.0, asset names, and archive digest.
-That is an identity check within the tag run, not a comparison to #816's
-earlier archive. This current path must be repaired under the prerequisite
-above before an authorized cut. Preserve both receipts and independently
-compare the published assets with the authorized packet as #817 requires.
-A mismatch is unmet release acceptance, not permission to replace the
-recorded digest.
+Dispatch the publish adapter from a revision that independently received its
+own review (normally `main`): the publish job executes that revision's
+`xtask` adapter with publishing credentials, and the candidate bytes enter
+only as validated data. On any mismatch, occupied tag/release, expired or
+unavailable candidate, untrusted authorization, API outage, or partially
+uploaded release, the publish job fails with zero side effects and stays
+disabled — recovery (including uploading a missing asset to a partially
+published release) is a separately authorized decision, never a retry that
+assumes permission to clobber or delete. Historical tags, releases, and
+assets are never moved or overwritten.
 
-The current workflow creates a release using `.github/release-notes.md`, or
-uploads with `--clobber` if the release already exists. Its tag validator
-checks name syntax, not whether the name is unused or matches Cargo metadata.
-The collision and version checks above are required operating safeguards;
-never rerun an occupied historical tag as a routine release attempt.
-
-The workflow publishes the archive and checksum. The candidate manifest is a
-workflow artifact, not a GitHub Release asset. Neither the manifest nor the
-checksum establishes signing, SBOM, provenance attestations, portability,
-provider correctness, or stable-coordinator readiness.
+The publish path uploads only the admitted archive and checksum. The
+candidate packet remains a workflow artifact, not a GitHub Release asset.
+Neither the packet nor the checksum establishes signing, SBOM, provenance
+attestations, portability, provider correctness, or stable-coordinator
+readiness.
 
 ## Independently verify the published result
 
-Record the exact tag-push run and inspect it by ID:
+Record the exact publish-dispatch run and inspect it by ID:
 
 ```text
 gh run view <tag-run-id> --json headSha,headBranch,event,status,conclusion,url
