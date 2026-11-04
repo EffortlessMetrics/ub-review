@@ -2738,6 +2738,50 @@ mod tests {
         Ok(())
     }
 
+    /// Rejected provider payloads must fail the gate without leaking into the
+    /// serialized gate reasons the run publishes (#1427).
+    #[test]
+    fn invalid_provider_shape_fails_gate_without_serializing_payload() -> anyhow::Result<()> {
+        let canary = "sk-SYNTHETIC-PRIVATE-CANARY";
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let config = Config::from_toml_with_policy_receipts(&format!(
+            "[providers]\npolicy = \"{canary}\"\nminimax = [{{ private_payload = \"{canary}\" }}]\n"
+        ))?;
+        anyhow::ensure!(config.policy_errors.len() == 2);
+        anyhow::ensure!(
+            config
+                .policy_errors
+                .iter()
+                .all(|error| !error.detail.contains(canary))
+        );
+        let terminal_state = test_terminal_state("sufficient");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &config,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            tool_gate_outcomes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            reporter_gate: crate::ReporterGateInput::Absent,
+            planner_portfolio: None,
+            revision_digest: None,
+        });
+
+        // The policy failure itself is not weakened: both receipts block.
+        anyhow::ensure!(gate.conclusion == "fail");
+        anyhow::ensure!(gate.reasons.len() == 2);
+        anyhow::ensure!(gate.reasons.iter().all(|reason| reason.kind == "policy"
+            && reason.id.starts_with("providers")
+            && reason.receipt == "effective-config.json"));
+        anyhow::ensure!(!serde_json::to_string(&gate)?.contains(canary));
+        Ok(())
+    }
+
     fn check_loaded_tool_gate_fallback(id: &str) -> Result<()> {
         let temp = tempfile::tempdir()?;
         let path = temp.path().join("config.toml");
