@@ -41,16 +41,27 @@ install_cargo_bin() {
 install_npm_bin() {
   local bin="$1"
   local package="$2"
+  local version="$3"
   if command -v "$bin" >/dev/null 2>&1; then
-    echo "::notice::$bin already available"
-    return 0
+    local current_version
+    current_version="$("$bin" --version 2>/dev/null || true)"
+    if [[ "$current_version" == *"$version"* ]]; then
+      echo "::notice::$bin $version already available"
+      return 0
+    fi
+    echo "::notice::$bin is available but not $version; reinstalling $package@$version"
   fi
   if ! command -v npm >/dev/null 2>&1; then
     echo "::warning::npm unavailable; $bin sensor will be skipped"
     return 0
   fi
-  echo "::group::npm install -g $package"
-  npm install -g "$package" || echo "::warning::could not install $package; $bin sensor will be skipped"
+  echo "::group::npm install -g $package@$version"
+  if npm install -g "$package@$version" \
+    && [[ "$("$bin" --version 2>/dev/null || true)" == *"$version"* ]]; then
+    echo "::notice::installed $bin $version"
+  else
+    echo "::warning::could not install $package@$version; $bin sensor will be skipped"
+  fi
   echo "::endgroup::"
 }
 
@@ -95,7 +106,10 @@ case "$bundle" in
     # (#316 - unpinned installs let the gate-receipt subcommand drift apart).
     install_cargo_bin ripr ripr "${UB_REVIEW_RIPR_VERSION:-0.10.0}"
     install_cargo_bin unsafe-review unsafe-review "${UB_REVIEW_UNSAFE_REVIEW_VERSION:-0.3.4}"
-    install_npm_bin ast-grep @ast-grep/cli
+    # ast-grep's npm tarball has no simple checksum sibling, so its receipt
+    # identity is the pinned exact version plus the install command (#1063).
+    ast_grep_version="${UB_REVIEW_AST_GREP_VERSION:-0.51.1}"
+    install_npm_bin ast-grep @ast-grep/cli "$ast_grep_version"
     install_go_bin actionlint github.com/rhysd/actionlint/cmd/actionlint "${UB_REVIEW_ACTIONLINT_VERSION:-v1.7.12}"
     ;;
   *)

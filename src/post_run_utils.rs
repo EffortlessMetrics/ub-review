@@ -231,6 +231,10 @@ pub(crate) const STANDARD_IMAGE_CARGO_ALLOW_VERSION: &str = "0.1.8";
 // scripts/install-review-image-tools.sh.
 pub(crate) const STANDARD_IMAGE_RIPR_VERSION: &str = "0.10.0";
 pub(crate) const STANDARD_IMAGE_UNSAFE_REVIEW_VERSION: &str = "0.3.4";
+// ast-grep releases matching version numbers on npm (@ast-grep/cli) and
+// crates.io; npm publishes no simple checksum sibling, so the exact pin plus
+// the install command is the bootstrap receipt identity (#1063).
+pub(crate) const STANDARD_IMAGE_AST_GREP_VERSION: &str = "0.51.1";
 // The actionlint version deliberately omits the `v` prefix: the doctor
 // version-matcher parses `actionlint version v1.7.12` and strips the `v`
 // before comparing to this constant. The install scripts and docs use the
@@ -248,6 +252,7 @@ pub(crate) fn expected_standard_image_tool_version(tool_id: &str) -> Option<&'st
         "cargo-allow" => Some(STANDARD_IMAGE_CARGO_ALLOW_VERSION),
         "ripr" => Some(STANDARD_IMAGE_RIPR_VERSION),
         "unsafe-review" => Some(STANDARD_IMAGE_UNSAFE_REVIEW_VERSION),
+        "ast-grep" => Some(STANDARD_IMAGE_AST_GREP_VERSION),
         "actionlint" => Some(STANDARD_IMAGE_ACTIONLINT_VERSION),
         _ => None,
     }
@@ -271,7 +276,10 @@ pub(crate) fn doctor_tool_install_hint(tool_id: &str) -> String {
             "cargo install unsafe-review --locked --version {} --force",
             STANDARD_IMAGE_UNSAFE_REVIEW_VERSION
         ),
-        "ast-grep" => "npm install -g @ast-grep/cli".to_owned(),
+        "ast-grep" => format!(
+            "npm install -g @ast-grep/cli@{}",
+            STANDARD_IMAGE_AST_GREP_VERSION
+        ),
         "actionlint" => format!(
             "go install github.com/rhysd/actionlint/cmd/actionlint@v{}; add $(go env GOPATH)/bin to PATH",
             STANDARD_IMAGE_ACTIONLINT_VERSION

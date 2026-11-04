@@ -7046,6 +7046,10 @@ mod tests {
             "cargo install unsafe-review --locked --version 0.3.4 --force"
         );
         assert_eq!(
+            super::doctor_tool_install_hint("ast-grep"),
+            "npm install -g @ast-grep/cli@0.51.1"
+        );
+        assert_eq!(
             super::doctor_tool_install_hint("actionlint"),
             "go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12; add $(go env GOPATH)/bin to PATH"
         );
@@ -7069,12 +7073,22 @@ mod tests {
             super::doctor_tool_version_fix("actionlint", "1.7.12"),
             "go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12; add $(go env GOPATH)/bin to PATH"
         );
+        assert_eq!(
+            super::doctor_tool_version_fix("ast-grep", "0.51.1"),
+            "npm install -g @ast-grep/cli@0.51.1"
+        );
         assert!(super::command_version_matches("ripr 0.10.0", "0.10.0"));
         assert!(super::command_version_matches(
             "actionlint version v1.7.12",
             "1.7.12"
         ));
+        assert!(super::command_version_matches("ast-grep 0.51.1", "0.51.1"));
         assert!(!super::command_version_matches("ripr 0.9.9", "0.10.0"));
+        assert!(!super::command_version_matches("ast-grep 0.50.0", "0.51.1"));
+        assert_eq!(
+            super::expected_standard_image_tool_version("ast-grep"),
+            Some("0.51.1")
+        );
     }
 
     #[test]
