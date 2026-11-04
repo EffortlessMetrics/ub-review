@@ -1923,4 +1923,59 @@ mod tests {
         );
         Ok(())
     }
+
+    #[test]
+    fn signal_terminated_command_preserves_raw_failed_receipt_projection() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let spec = ProofCommandSpec {
+            argv: vec![
+                "cargo".to_owned(),
+                "test".to_owned(),
+                "focused_case".to_owned(),
+            ],
+            env: BTreeMap::new(),
+        };
+
+        let receipt = run_proof_command_receipt(
+            ProofCommandInvocation {
+                command_root: temp.path(),
+                out: &out,
+                receipt_id: "proof-command-signal-terminated",
+                side: "head",
+                spec: &spec,
+                timeout_sec: 7,
+                lease: &granted_lease("lease-proof-command-signal-terminated"),
+                task_ledger: None,
+                task: None,
+                cleanup: None,
+            },
+            &mut |_root, _argv, _env, _timeout, stdout, stderr, observe_process| {
+                observe_process(CommandProcessObservation::Spawned);
+                fs::write(stdout, b"partial\n")?;
+                fs::write(stderr, b"killed\n")?;
+                Ok(CommandStatus {
+                    exit_code: None,
+                    timed_out: false,
+                    success: false,
+                    reason: "process terminated without an exit code: signal: 9 (SIGKILL)"
+                        .to_owned(),
+                    duration_ms: 41,
+                })
+            },
+        )?;
+
+        // A signal kill keeps the existing raw schema vocabulary: a failure
+        // with no exit code, the runner's termination reason, measured
+        // duration, and both streams, so downstream credit guards can
+        // distinguish it from a genuine nonzero exit.
+        ensure!(receipt.status == "failed");
+        ensure!(receipt.exit_code.is_none());
+        ensure!(!receipt.timed_out);
+        ensure!(receipt.duration_ms == 41);
+        ensure!(receipt.reason == "process terminated without an exit code: signal: 9 (SIGKILL)");
+        ensure!(fs::read_to_string(out.join(&receipt.stdout))? == "partial\n");
+        ensure!(fs::read_to_string(out.join(&receipt.stderr))? == "killed\n");
+        Ok(())
+    }
 }

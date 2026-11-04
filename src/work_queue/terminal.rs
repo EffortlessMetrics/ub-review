@@ -505,6 +505,7 @@ fn terminal_proof_receipt_status(receipt: &ProofReceipt) -> Result<String> {
                 | "discriminating"
                 | "non_discriminating"
                 | "base_patch_failed"
+                | "terminated_without_exit_code"
                 | "timed_out"
                 | "skipped_budget"
                 | "skipped_profile"

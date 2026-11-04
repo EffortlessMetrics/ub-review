@@ -166,7 +166,8 @@ where
                 )?;
                 let result = match head.status.as_str() {
                     "passed" => "head_passed",
-                    "failed" => "head_failed",
+                    "failed" if head.exit_code.is_some() => "head_failed",
+                    "failed" => "terminated_without_exit_code",
                     "timed_out" => "timed_out",
                     _ => "skipped_profile",
                 };
@@ -289,7 +290,8 @@ where
     if head_status != "passed" {
         let result = match head_status.as_str() {
             "timed_out" => "timed_out",
-            "failed" => "head_failed",
+            "failed" if head.exit_code.is_some() => "head_failed",
+            "failed" => "terminated_without_exit_code",
             _ => "skipped_profile",
         };
         let reason = format!("HEAD proof {}: {}", head.status, head.reason);
@@ -353,9 +355,16 @@ where
         runner,
     )?;
     let (result, reason) = match base.status.as_str() {
-        "failed" => (
+        "failed" if base.exit_code.is_some() => (
             "discriminating".to_owned(),
             format!("HEAD passed; base+tests failed: {}", base.reason),
+        ),
+        "failed" => (
+            "terminated_without_exit_code".to_owned(),
+            format!(
+                "HEAD passed; base+tests terminated without an exit code: {}",
+                base.reason
+            ),
         ),
         "passed" => (
             "non_discriminating".to_owned(),
@@ -803,6 +812,247 @@ mod tests {
             receipt.reason.contains("classification refused"),
             "{receipt:?}"
         );
+        Ok(())
+    }
+
+    /// A base+tests command terminated by an infrastructure kill reports no
+    /// exit code, so it must withhold deterministic red/green credit, while a
+    /// genuine nonzero exit keeps discriminating exactly as before.
+    #[test]
+    fn signal_terminated_base_command_cannot_grant_discriminating_credit() -> Result<()> {
+        for (base_exit_code, expected_result, expected_credit) in [
+            (None, "terminated_without_exit_code", false),
+            (Some(7), "discriminating", true),
+        ] {
+            let repo = tempfile::tempdir()?;
+            let diff = same_file_fix_and_test_repo(repo.path())?;
+            let out = repo.path().join("out");
+            let mut command_calls = 0_usize;
+
+            let result = run_focused_red_green_proof_tasks_with_runner(
+                repo.path(),
+                &out,
+                &diff,
+                &Profile::default(),
+                &test_run_args(out.clone()),
+                ProofBudget {
+                    max_focused_test_files: 2,
+                    max_focused_tests: 2,
+                    per_command_timeout_sec: 300,
+                    max_total_seconds: 600,
+                },
+                vec![cargo_test_task()],
+                None,
+                ProofExecutionPhase::ModelRequest,
+                |_root, _argv, _env, _timeout, stdout, stderr, observe_process| {
+                    command_calls += 1;
+                    observe_process(CommandProcessObservation::Spawned);
+                    fs::write(stdout, b"")?;
+                    fs::write(stderr, b"")?;
+                    if command_calls == 1 {
+                        return Ok(CommandStatus {
+                            exit_code: Some(0),
+                            timed_out: false,
+                            success: true,
+                            reason: "completed".to_owned(),
+                            duration_ms: 7,
+                        });
+                    }
+                    Ok(CommandStatus {
+                        exit_code: base_exit_code,
+                        timed_out: false,
+                        success: false,
+                        reason: match base_exit_code {
+                            Some(code) => format!("exit code {code}"),
+                            None => "process terminated without an exit code: signal: 9 (SIGKILL)"
+                                .to_owned(),
+                        },
+                        duration_ms: 7,
+                    })
+                },
+                prepare_base_plus_tests_worktree,
+            )?;
+
+            let receipt = result
+                .proof_receipts
+                .first()
+                .ok_or_else(|| anyhow::anyhow!("expected one proof receipt"))?;
+            assert_eq!(receipt.result, expected_result, "{receipt:?}");
+            assert_eq!(receipt.commands.len(), 2);
+            assert_eq!(receipt.commands[1].exit_code, base_exit_code);
+            assert_eq!(
+                proof_receipt_is_test_proof_result(receipt),
+                expected_credit,
+                "{receipt:?}"
+            );
+            assert_eq!(proof_receipt_is_missing_evidence(receipt), !expected_credit);
+            assert_eq!(
+                witness_status_for_proof_receipt(receipt),
+                if expected_credit {
+                    "tool-confirmed"
+                } else {
+                    "needs-witness"
+                }
+            );
+            assert_eq!(
+                required_proof_receipt_class(receipt),
+                if expected_credit {
+                    RequiredProofClass::Passed
+                } else {
+                    RequiredProofClass::Skipped
+                }
+            );
+            if !expected_credit {
+                let mut summary = String::new();
+                render_missing_proof_receipt_summary(&mut summary, receipt);
+                assert!(
+                    summary.contains("terminated without an exit code")
+                        && summary.contains("no established test verdict"),
+                    "{summary}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// A HEAD command terminated without an exit code must not earn
+    /// `head_failed` credit in either producer, and the red/green producer
+    /// must not launch base+tests after an unverified HEAD termination.
+    #[test]
+    fn signal_terminated_head_command_cannot_grant_head_failed_credit() -> Result<()> {
+        for mode in [FocusedProofMode::HeadOnly, FocusedProofMode::RedGreen] {
+            for (head_exit_code, expected_result) in [
+                (None, "terminated_without_exit_code"),
+                (Some(7), "head_failed"),
+            ] {
+                let repo = tempfile::tempdir()?;
+                let diff = same_file_fix_and_test_repo(repo.path())?;
+                let out = repo.path().join("out");
+                let mut task = cargo_test_task();
+                task.mode = mode;
+                let mut command_calls = 0_usize;
+
+                let result = run_focused_red_green_proof_tasks_with_runner(
+                    repo.path(),
+                    &out,
+                    &diff,
+                    &Profile::default(),
+                    &test_run_args(out.clone()),
+                    ProofBudget {
+                        max_focused_test_files: 2,
+                        max_focused_tests: 2,
+                        per_command_timeout_sec: 300,
+                        max_total_seconds: 600,
+                    },
+                    vec![task],
+                    None,
+                    ProofExecutionPhase::ModelRequest,
+                    |_root, _argv, _env, _timeout, stdout, stderr, observe_process| {
+                        command_calls += 1;
+                        observe_process(CommandProcessObservation::Spawned);
+                        fs::write(stdout, b"")?;
+                        fs::write(stderr, b"")?;
+                        Ok(CommandStatus {
+                            exit_code: head_exit_code,
+                            timed_out: false,
+                            success: false,
+                            reason: match head_exit_code {
+                                Some(code) => format!("exit code {code}"),
+                                None => {
+                                    "process terminated without an exit code: signal: 9 (SIGKILL)"
+                                        .to_owned()
+                                }
+                            },
+                            duration_ms: 7,
+                        })
+                    },
+                    prepare_base_plus_tests_worktree,
+                )?;
+
+                let receipt = result
+                    .proof_receipts
+                    .first()
+                    .ok_or_else(|| anyhow::anyhow!("expected one proof receipt"))?;
+                assert_eq!(receipt.result, expected_result, "{receipt:?}");
+                assert_eq!(
+                    command_calls, 1,
+                    "a terminated HEAD must not launch base+tests"
+                );
+                assert_eq!(receipt.commands[0].exit_code, head_exit_code);
+                assert_eq!(
+                    proof_receipt_is_test_proof_result(receipt),
+                    head_exit_code.is_some()
+                );
+                assert_eq!(
+                    witness_status_for_proof_receipt(receipt),
+                    if head_exit_code.is_some() {
+                        "tool-confirmed"
+                    } else {
+                        "needs-witness"
+                    }
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// The shared process adapter must project a live self-terminating
+    /// base+tests command as a failure with no exit code, and the red/green
+    /// consumer must withhold discriminating credit for it.
+    #[cfg(unix)]
+    #[test]
+    fn live_self_terminating_base_command_yields_no_discriminating_credit() -> Result<()> {
+        let repo = tempfile::tempdir()?;
+        let diff = same_file_fix_and_test_repo(repo.path())?;
+        let out = repo.path().join("out");
+        let mut task = cargo_test_task();
+        let head_spec = ProofCommandSpec {
+            argv: vec!["sh".to_owned(), "-c".to_owned(), "exit 0".to_owned()],
+            env: BTreeMap::new(),
+        };
+        let base_spec = ProofCommandSpec {
+            argv: vec!["sh".to_owned(), "-c".to_owned(), "kill -TERM $$".to_owned()],
+            env: BTreeMap::new(),
+        };
+        task.command_specs = Some(FocusedTestCommandSpecs {
+            head: head_spec,
+            base_plus_tests: base_spec,
+        });
+
+        let result = run_focused_red_green_proof_tasks_with_runner(
+            repo.path(),
+            &out,
+            &diff,
+            &Profile::default(),
+            &test_run_args(out.clone()),
+            ProofBudget {
+                max_focused_test_files: 2,
+                max_focused_tests: 2,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 600,
+            },
+            vec![task],
+            None,
+            ProofExecutionPhase::ModelRequest,
+            run_command_to_files_with_spawn_observer,
+            prepare_base_plus_tests_worktree,
+        )?;
+
+        let receipt = result
+            .proof_receipts
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("expected one proof receipt"))?;
+        assert_eq!(
+            receipt.result, "terminated_without_exit_code",
+            "{receipt:?}"
+        );
+        assert_eq!(receipt.commands[0].status, "passed");
+        assert_eq!(receipt.commands[1].status, "failed");
+        assert_eq!(receipt.commands[1].exit_code, None);
+        assert!(!receipt.commands[1].timed_out);
+        assert!(receipt.commands[1].reason.contains("without an exit code"));
+        assert!(!proof_receipt_is_test_proof_result(receipt));
+        assert_eq!(witness_status_for_proof_receipt(receipt), "needs-witness");
         Ok(())
     }
 

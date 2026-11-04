@@ -82,6 +82,7 @@ pub(crate) fn proof_receipt_is_missing_evidence(receipt: &ProofReceipt) -> bool 
             receipt.result.as_str(),
             "non_discriminating"
                 | "base_patch_failed"
+                | "terminated_without_exit_code"
                 | "timed_out"
                 | "skipped_budget"
                 | "skipped_profile"
