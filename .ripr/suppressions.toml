@@ -45671,3 +45671,608 @@ kind = "exposure_gap"
 finding_id = "probe:src_model_api.rs:return_value:c7370d06"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1635; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by every_provider_endpoint_serializes_the_output_budget, output_child_fixture, output_read_failure_cleans_stderr_after_completion_and_timeout. Re-verify after any edit to src/model_api.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:8d203121"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub const MAX_ARCHIVE_BYTES: usize = 64 * 1024 * 1024;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:13d68461"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe const MAX_TAR_BYTES: usize = MAX_ARCHIVE_BYTES + 4096;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:1e61b956"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub schema: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:2660b819"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub repository: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:6ddf9e63"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub head_sha: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:2675bd91"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub tree_sha: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:48c23942"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub workflow: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, accepts_workflow_tag_shapes, actual_gnu_producer_format_is_accepted. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:21407e3c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub producer_ref: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:fd0676c6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub run_id: u64,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:f76f0b4a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub run_attempt: u64,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:f9566547"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub artifact_id: u64,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:45c6ba5a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub artifact_name: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:fff06f1c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub proposed_tag: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:ac227939"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub peeled_commit: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:bfbd90e6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub asset: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:8f0a24de"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub checksum_asset: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:d34688c0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub archive_length: u64,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:42700815"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub checksum_length: u64,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:8a8dff98"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub archive_sha256: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:9da8a932"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub checksum_sha256: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:d5409ac3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub binary_version: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:3eee6220"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub package_version: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:179bb01a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub toolchain: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:ed3f0dff"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub retained_until: u64,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:fe31f59f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub authorization_record: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:2660b819.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub repository: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:6ddf9e63.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub head_sha: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:2675bd91.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub tree_sha: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:48c23942.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub workflow: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, accepts_workflow_tag_shapes, actual_gnu_producer_format_is_accepted. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:21407e3c.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub producer_ref: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:fd0676c6.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub run_id: u64,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:f76f0b4a.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub run_attempt: u64,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:f9566547.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub artifact_id: u64,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:45c6ba5a.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub artifact_name: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:ed3f0dff.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub retained_until: u64,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:2660b819.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub repository: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:1afed043"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub tag: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, accepts_workflow_tag_shapes, actual_gnu_producer_format_is_accepted. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:ac227939.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub peeled_commit: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:cc224cd1"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe Success(T),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:a66fb509"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub record: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:ed74ff55"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe pub expires_at: u64,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:492665d2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe Trusted(Authorization),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:1273b228"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe Identity(&'static str),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:a4a2f330"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe validated_authority: Authorization,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:4093058d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe .retained_until: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:18f5bd44"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe .min(self.validated_authority.expires_at): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:return_value:445e9b84"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe .min(self.validated_authority.expires_at): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:predicate:bb6af7cb"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe if now >= self.valid_until() {: Strong oracle found: exact value or pattern assertion. Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:18fa2c37"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:return_value:67ab089d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:predicate:f32ed952"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe if bytes.len() > MAX_PACKET_BYTES {: Strong oracle found: exact value or pattern assertion. Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:predicate:0c2815b2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe if packet.schema != SCHEMA {: Strong oracle found: exact value or pattern assertion. Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:predicate:8b541428"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe && value.len() <= 256: Strong oracle found: exact value or pattern assertion. Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:ea11eed7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe .split('/'): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:return_value:081d2b8b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe .split('/'): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:2ee4ebf4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe packet_bytes: &[u8],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:74544aa1"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe producer: &Observation<Producer>,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:503cd61e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe tag: &Observation<UnusedTag>,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, accepts_workflow_tag_shapes, actual_gnu_producer_format_is_accepted. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:1741d321"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe authority: &Authority,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:aaff7a05"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe now: u64,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:81acbe0c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe ($field:ident) => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:match_arm:bdbc4a15"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe ($field:ident) => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:predicate:ca9372a2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe if checksum.len() > 512 || checksum.len() as u64 != packet.checksum_length {: Strong oracle found: exact value or pattern assertion. Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:return_value:205ad610"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe Ok(VerifiedPublication {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:07f248a4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe parts.len() == 3: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:return_value:cfe2d8a2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe parts.len() == 3: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:58c6e49a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe && (part.len() == 1 || !part.starts_with('0')): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:return_value:9b76e202"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe && (part.len() == 1 || !part.starts_with('0')): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:9627f56b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe }): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:3eb693f0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe decoder: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:115ed041"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe .by_ref(): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:ceb07579"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe .take((MAX_TAR_BYTES + 1) as u64): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:b3f8b75f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe || cstring(&header[345..500]) != Some(b\"\".as_slice()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:predicate:188c653a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe || cstring(&header[345..500]) != Some(b\"\".as_slice()): Strong oracle found: exact value or pattern assertion. Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:return_value:03f3b3b8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe || cstring(&header[345..500]) != Some(b\"\".as_slice()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:00dee427"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe || cstring(&header[157..257]) != Some(b\"\".as_slice()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:return_value:9558e78d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe || cstring(&header[157..257]) != Some(b\"\".as_slice()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:2c267f35"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe .iter(): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:c9835ef7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe .enumerate(): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:a72726e4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe .map(|(i, b)| {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:a57e960f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe if (148..156).contains(&i) {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:f36927f4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe 32: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:9db74439"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe } else {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:6fb8b3ee"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe u64::from(*b): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:60d32a10"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:3ca01909"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe }): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:e6ba1285"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe .sum();: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:115910c5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe if octal(&header[100..108]) != Some(0o755) {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:return_value:03f98312"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe if octal(&header[100..108]) != Some(0o755) {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:fca1145d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:return_value:4ba2cf7e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:062d262b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe .iter(): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:return_value:c967629c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe return None;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:return_value:291c3909"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe return None;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:7f47f674"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe producer: Observation<Producer>,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:cef4e7da"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe tag: Observation<UnusedTag>,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, accepts_workflow_tag_shapes, actual_gnu_producer_format_is_accepted. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:51fd01ae"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe authority: Authority,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:e1408762"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe let mut encoder = GzEncoder::new(Vec::new(), Compression::default());: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:c30fad12"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe encoder.finish(): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:return_value:828463d3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe encoder.finish(): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:11da83d7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe head_sha: \"a\".repeat(40),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:410ca47b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe tree_sha: \"b\".repeat(40),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:3fc0c731"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe run_id: 100,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:9e5f3741"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe run_attempt: 2,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:4cd4277c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe artifact_id: 200,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:2c0c3520"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe peeled_commit: \"a\".repeat(40),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:4b774502"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe retained_until: 500,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:e5d4276d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe producer,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:051cc43f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe tag,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, accepts_workflow_tag_shapes, actual_gnu_producer_format_is_accepted. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:658da6c7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe authority: Authority::Untrusted,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:match_arm:0943bef5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe self.authority = match packet_digest(&self.packet) {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:match_arm:0f901b73"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe Ok(digest) => Authority::Trusted(Authorization {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:e4d71210"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe expires_at: 600,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:field_construction:cf673e57"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe expires_at: 600,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:e3566182"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe }),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:match_arm:07d38667"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe Err(_) => Authority::Untrusted,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:d16b7a5d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe self.authorize();: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:return_value:8f4450ab"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe validate(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:return_value:87585d88"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe 100,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:call_deletion:e0a3ade7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_release_bytes.rs:return_value:c1c3c927"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1638; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/release_bytes.rs."
