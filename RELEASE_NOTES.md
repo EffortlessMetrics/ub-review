@@ -13,6 +13,8 @@ candidate-suggestion fingerprint parity fix (#922) and suppression-ledger
 validator (#921), do not prove a release was cut. Refresh tag and release
 metadata before selecting the next unused version.
 
+As checked 2026-11-05: `v0.1.2` still has no published release or remote tag. A candidate packet for main `19383da1` (version `0.1.2`, non-publishing packaging run 42027214303) is assembled on [#816], and the publication path now validates an independently authorized candidate's bytes before any release is created ([#1344]/[#1647]). Refresh tag and release metadata again at authorization time ([#817]).
+
 The `v0.1.0` tag-push run failed and its assets were completed manually;
 the `v0.1.1` tag-push run succeeded. The
 [runbook](docs/RELEASE_RUNBOOK.md#current-state-and-ownership) retains those

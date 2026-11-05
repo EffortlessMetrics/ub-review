@@ -9,6 +9,8 @@ assets, or deleting a release.
 
 ## Current state and ownership
 
+> **Freshness amendment (2026-11-05):** the publication-byte prerequisite is no longer open. The authorized-byte validator ([#1343]) landed via [#1638] (`c6bc743b`) and the production publish wiring ([#1344]) via [#1647] (`500930bc`): candidate preparation is non-publishing, `cargo xtask validate-release` gates the single create, and `gh release upload --clobber` plus rebuild-on-publish are removed ([#1300] closed with the boundary proof). A v0.1.2 candidate packet (SHA `19383da1`, packaging run 42027214303) is assembled on [#816]. Remaining before a cut: the [#815] installation-proof producer and the [#817] maintainer authorization record. The 2026-09-08 table below is retained as the historical dated observation.
+
 Read-only GitHub release and tag metadata checked on 2026-09-08 showed:
 
 | Surface | Observed state | Claim boundary |
@@ -44,10 +46,7 @@ release board; this table is a dated observation.
 - [#805](https://github.com/EffortlessMetrics/ub-review/issues/805) owns
   distribution integration and the completion criteria for its children.
 - [#815](https://github.com/EffortlessMetrics/ub-review/issues/815) owns
-  release-only installation and negative asset cases. Active
-  [PR #1265](https://github.com/EffortlessMetrics/ub-review/pull/1265) contains
-  a bounded `v0.1.0` portability proof; neither its existence nor a green
-  result proves general Linux support or the next candidate.
+  release-only installation and negative asset cases. [PR #1265](https://github.com/EffortlessMetrics/ub-review/pull/1265) was closed 2026-09-16 as retained `v0.1.0`-bound historical evidence, not a current merge candidate; a current-main producer for the `source_build_used=false` assertion is in flight on that issue.
 - [#816](https://github.com/EffortlessMetrics/ub-review/issues/816) owns the
   next exact candidate packet after its product and stable-tool prerequisites.
 - [#817](https://github.com/EffortlessMetrics/ub-review/issues/817) owns
