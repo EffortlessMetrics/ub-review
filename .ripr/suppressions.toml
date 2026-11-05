@@ -48517,3 +48517,68 @@ kind = "exposure_gap"
 finding_id = "probe:tests_cli.rs:error_path:0667c0c5.2"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1650 revise (tests/cli.rs:8004); probe .ok()?: allowlist-table plumbing (wrapper delegation, iterator copy, slice argument, or parameter declaration of the shared allowlisted_child_environment core). The table contents and both filter halves (ambient inheritance and caller overrides) are pinned end-to-end by the sentinel suite: PATH passes verbatim, a caller-supplied non-allowlisted key is dropped, template entries RUSTFLAGS/USE_SYSTEM_BUN survive for proof children while the sensor wrapper excludes them, and the sensor table stays byte-identical to the #879 contract. The quarantine oracle is discriminated end-to-end by the production-spawn sentinel suite (proof_environment_excludes_credentials_and_keeps_toolchain_metadata, fake_proof_cannot_read_actual_parent_credentials, proof_environment_runs_real_toolchain_child_under_allowlist): an independent security-review revert control restoring ambient inheritance (ProofWorkerAllowlist back to AmbientPlusExplicit) failed the sentinel parent with all seven canary credentials, ambient HOME/USERPROFILE entries and a caller-supplied override sentinel leaking, while both sensor sentinels stayed green. RIPR 0.10.0 cannot statically attribute oracles across child-process boundaries (ripr-swarm#1054/#1055). Re-verify after any edit to src/lane_packets.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_pr_context_hydration.rs:error_path:40f86718"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1648; probe not(target_os = \"linux\"),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, active_graph_does_not_reuse_stale_proof_receipts, active_graph_keeps_unresolved_conflict_when_another_lane_lacks_evidence. Re-verify after any edit to tests/pr_context_hydration.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_pr_context_hydration.rs:return_value:0dda28d1"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1648; probe not(target_os = \"linux\"),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by absent_or_malformed_status_is_not_invented, active_graph_does_not_reuse_stale_proof_receipts, active_graph_keeps_unresolved_conflict_when_another_lane_lacks_evidence. Re-verify after any edit to tests/pr_context_hydration.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_pr_context_hydration.rs:call_deletion:2e28d5a2"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1648; probe expect(: No assertion found on related tests. Reached by api_text_truncation_is_receipted_without_rewriting_original_records, exact_capture_limit_includes_status_trailer_and_rejects_one_extra_byte, first_page_and_zero_text_budget_keep_explicit_omissions. Re-verify after any edit to tests/pr_context_hydration.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_pr_context_hydration.rs:error_path:324b5519"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1648; probe expect(: No assertion found on related tests. Reached by api_text_truncation_is_receipted_without_rewriting_original_records, exact_capture_limit_includes_status_trailer_and_rejects_one_extra_byte, first_page_and_zero_text_budget_keep_explicit_omissions. Re-verify after any edit to tests/pr_context_hydration.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_pr_context_hydration.rs:return_value:cf942c80"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1648; probe expect(: No assertion found on related tests. Reached by api_text_truncation_is_receipted_without_rewriting_original_records, exact_capture_limit_includes_status_trailer_and_rejects_one_extra_byte, first_page_and_zero_text_budget_keep_explicit_omissions. Re-verify after any edit to tests/pr_context_hydration.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_pr_context_hydration.rs:call_deletion:7f1aa843"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1648; probe unused_mut,: No assertion found on related tests. Reached by api_text_truncation_is_receipted_without_rewriting_original_records, exact_capture_limit_includes_status_trailer_and_rejects_one_extra_byte, first_page_and_zero_text_budget_keep_explicit_omissions. Re-verify after any edit to tests/pr_context_hydration.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_pr_context_hydration.rs:error_path:5512415e"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1648; probe unused_mut,: No assertion found on related tests. Reached by api_text_truncation_is_receipted_without_rewriting_original_records, exact_capture_limit_includes_status_trailer_and_rejects_one_extra_byte, first_page_and_zero_text_budget_keep_explicit_omissions. Re-verify after any edit to tests/pr_context_hydration.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_pr_context_hydration.rs:return_value:ab761a73"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1648; probe unused_mut,: No assertion found on related tests. Reached by api_text_truncation_is_receipted_without_rewriting_original_records, exact_capture_limit_includes_status_trailer_and_rejects_one_extra_byte, first_page_and_zero_text_budget_keep_explicit_omissions. Re-verify after any edit to tests/pr_context_hydration.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_pr_context_hydration.rs:call_deletion:12bf4a18"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1648; probe ): No assertion found on related tests. Reached by api_text_truncation_is_receipted_without_rewriting_original_records, exact_capture_limit_includes_status_trailer_and_rejects_one_extra_byte, first_page_and_zero_text_budget_keep_explicit_omissions. Re-verify after any edit to tests/pr_context_hydration.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_pr_context_hydration.rs:error_path:25a1f8df"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1648; probe ): No assertion found on related tests. Reached by api_text_truncation_is_receipted_without_rewriting_original_records, exact_capture_limit_includes_status_trailer_and_rejects_one_extra_byte, first_page_and_zero_text_budget_keep_explicit_omissions. Re-verify after any edit to tests/pr_context_hydration.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_pr_context_hydration.rs:return_value:cc2a1e10"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1648; probe ): No assertion found on related tests. Reached by api_text_truncation_is_receipted_without_rewriting_original_records, exact_capture_limit_includes_status_trailer_and_rejects_one_extra_byte, first_page_and_zero_text_budget_keep_explicit_omissions. Re-verify after any edit to tests/pr_context_hydration.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_pr_context_hydration.rs:call_deletion:a6ad6144"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1648; probe )]: No assertion found on related tests. Reached by api_text_truncation_is_receipted_without_rewriting_original_records, exact_capture_limit_includes_status_trailer_and_rejects_one_extra_byte, first_page_and_zero_text_budget_keep_explicit_omissions. Re-verify after any edit to tests/pr_context_hydration.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_pr_context_hydration.rs:error_path:c700e205"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1648; probe )]: No assertion found on related tests. Reached by api_text_truncation_is_receipted_without_rewriting_original_records, exact_capture_limit_includes_status_trailer_and_rejects_one_extra_byte, first_page_and_zero_text_budget_keep_explicit_omissions. Re-verify after any edit to tests/pr_context_hydration.rs."
