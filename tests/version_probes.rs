@@ -108,7 +108,7 @@ impl Harness {
             ("cargo-allow", "0.1.8"),
             ("ripr", "0.10.0"),
             ("unsafe-review", "0.3.4"),
-            ("ast-grep", "0.0.0"),
+            ("ast-grep", "0.51.1"),
             ("actionlint", "1.7.12"),
         ] {
             let path = if tool == "tokmd" {

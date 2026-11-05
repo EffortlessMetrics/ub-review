@@ -51,6 +51,37 @@ fn review_image_tool_installer_uses_tool_dir_as_install_prefix() -> Result<()> {
 }
 
 #[test]
+fn ast_grep_bootstrap_identity_is_pinned_across_installers_and_doctor() -> Result<()> {
+    let github_runner_script = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/install-gh-runner-tools.sh"),
+    )?;
+    assert!(github_runner_script.contains("UB_REVIEW_AST_GREP_VERSION:-0.51.1"));
+    assert!(
+        github_runner_script
+            .contains("install_npm_bin ast-grep @ast-grep/cli \"$ast_grep_version\"")
+    );
+    assert!(
+        !github_runner_script.contains("install_npm_bin ast-grep @ast-grep/cli\n"),
+        "hosted fallback must not install npm latest ast-grep implicitly"
+    );
+    let image_script = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/install-review-image-tools.sh"),
+    )?;
+    assert!(image_script.contains("UB_REVIEW_AST_GREP_VERSION:-0.51.1"));
+    assert!(
+        image_script
+            .contains("install_tool ast-grep ast-grep \"${UB_REVIEW_AST_GREP_VERSION:-0.51.1}\"")
+    );
+    let doctor_source = fs::read_to_string("src/post_run_utils.rs")?;
+    assert!(doctor_source.contains("STANDARD_IMAGE_AST_GREP_VERSION: &str = \"0.51.1\""));
+    assert!(
+        !doctor_source.contains("\"npm install -g @ast-grep/cli\".to_owned()"),
+        "doctor must not hand operators the unpinned npm install command"
+    );
+    Ok(())
+}
+
+#[test]
 fn action_forwards_prior_resolved_candidates_input() -> Result<()> {
     let action = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("action.yml"))?;
     assert!(action.contains("prior-resolved-candidates:"));
@@ -3669,7 +3700,7 @@ fn doctor_rejects_failed_version_probe_even_when_it_prints_the_pin() -> Result<(
         ("cargo-allow", "0.1.8"),
         ("ripr", "0.10.0"),
         ("unsafe-review", "0.3.4"),
-        ("ast-grep", "0.0.0"),
+        ("ast-grep", "0.51.1"),
         ("actionlint", "1.7.12"),
     ] {
         let executable = temp.path().join(tool);

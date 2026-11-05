@@ -1128,7 +1128,7 @@ fn install_hint(name: &str) -> &'static str {
         "cargo-allow" => "cargo install cargo-allow --locked",
         "ripr" => "cargo install ripr --locked --version 0.10.0 --force",
         "unsafe-review" => "cargo install unsafe-review --locked --version 0.3.4 --force",
-        "ast-grep" => "npm install -g @ast-grep/cli",
+        "ast-grep" => "npm install -g @ast-grep/cli@0.51.1",
         "actionlint" => {
             "go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12; add $(go env GOPATH)/bin to PATH"
         }
@@ -2890,7 +2890,7 @@ mod tests {
                 "unsafe-review",
                 "cargo install unsafe-review --locked --version 0.3.4 --force",
             ),
-            ("ast-grep", "npm install -g @ast-grep/cli"),
+            ("ast-grep", "npm install -g @ast-grep/cli@0.51.1"),
             (
                 "actionlint",
                 "go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12; add $(go env GOPATH)/bin to PATH",
