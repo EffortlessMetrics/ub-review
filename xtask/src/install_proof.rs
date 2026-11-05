@@ -1680,12 +1680,18 @@ mod tests {
         fs::write(staged.join(rb::ASSET), &archive)?;
         fs::write(staged.join(format!("{}.sha256", rb::ASSET)), &checksum)?;
         let options = base_options(&dir, FIXTURE_VERSION_TAG, rb::ASSET);
-        // Full real CLI path: staged-file resolver, real --version probe,
-        // real host platform (this test only runs on Linux).
+        // Real transports only: staged-file resolver and the real
+        // --version probe executing the installed script (this test only
+        // runs on Unix, where the host platform is Linux x64 and the
+        // explicit platform below matches the host).
         let output_path = options.output.clone();
         let install_path = options.install_dir.clone();
         let archive_path = options.archive.clone();
-        let receipt = run(&dir, options)?;
+        let mut resolver = StagedResolver::new(options.archive.clone(), options.checksum.clone());
+        let probe = CommandVersionProbe {
+            path_env: dir.join("scanned-path").display().to_string(),
+        };
+        let receipt = run_with_resolver(&dir, options, &mut resolver, &probe, ("linux", "x86_64"))?;
         assert!(!receipt.source_build_used());
         assert_eq!(
             receipt.install().binary_sha256,
@@ -1699,6 +1705,7 @@ mod tests {
             archive_path.display().to_string()
         );
         assert_eq!(receipt.platform().os, "linux");
+        use std::os::unix::fs::PermissionsExt;
         let mode = fs::metadata(install_path.join(BINARY_NAME))?
             .permissions()
             .mode();
