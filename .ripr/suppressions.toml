@@ -46421,3 +46421,23 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_red_green.rs:match_arm:81ec99d8"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1646; probe \"failed\" if base.exit_code.is_some() => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by base_worktree_cleanup_precedes_ledger_cleanup_completion, baseline_gate_plan_phases_split_fast_signal_from_slow_suite, baseline_gate_sensor_argvs_match_required_matrix. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:match_arm:1a96f03a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1646; probe \"failed\" => \"terminated_without_exit_code\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by bounded_file_empty_does_not_reserve_the_capture_ceiling, bounded_file_missing_remains_an_error, bounded_file_preserves_exact_excerpts_and_truncation_truth. Re-verify after any edit to src/proof/build.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:8434c51a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1646; probe \"failed\" => \"terminated_without_exit_code\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by base_worktree_cleanup_precedes_ledger_cleanup_completion, cache_warm_keeps_failed_versions_unavailable, discriminating_and_head_failed_are_published_whatever_else_the_receipt_says. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:match_arm:2d7dbbfd"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1646; probe \"failed\" => (: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by base_worktree_cleanup_precedes_ledger_cleanup_completion, cache_warm_keeps_failed_versions_unavailable, discriminating_and_head_failed_are_published_whatever_else_the_receipt_says. Re-verify after any edit to src/proof/red_green.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:match_arm:dfc89c11"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1646; probe \"terminated_without_exit_code\" => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by body_budget_drops_topics_and_preserves_inline_fallback_receipt, bracketed_prefix_boundaries, bullet_budget_drops_all_topics_as_inline_only. Re-verify after any edit to src/review_text.rs."
