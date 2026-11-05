@@ -164,9 +164,9 @@ glob = "tools/ub-rules/**/*.yml"
 category = "external-tool-rules"
 language = "yaml"
 owner = "ub-review/sensors"
-reason = "ast-grep rule packs are YAML because the external tool consumes YAML rule definitions."
+reason = "ast-grep rule packs are YAML because the external tool consumes YAML rule definitions. Reviewed 2026-11-05: the exception remains inherently required (ast-grep consumes YAML rule definitions only); renewed ahead of the release packet per the policy-check overdue notice."
 created = "2026-06-03"
-review_after = "2026-09-03"
+review_after = "2027-02-05"
 
 [[exception]]
 id = "action-bootstrap-contract-tests"
