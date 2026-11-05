@@ -10,6 +10,7 @@ use serde_json::{Value as JsonValue, json};
 use toml::Value;
 use toml::map::Map;
 
+use xtask::install_proof;
 use xtask::release_publish;
 
 fn main() {
@@ -80,6 +81,10 @@ fn run() -> Result<()> {
             let options = release_publish::PacketDigestOptions::parse(args)?;
             release_publish::run_packet_digest(&root, options)?;
         }
+        "prove-install" => {
+            let options = install_proof::ProveInstallOptions::parse(args)?;
+            install_proof::run(&root, options)?;
+        }
         "help" | "-h" | "--help" => {
             reject_extra_args(args)?;
             print_help();
@@ -92,7 +97,7 @@ fn run() -> Result<()> {
         }
         other => {
             bail!(
-                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, ripr, smoke-base, calibration-report, render-release-notes, validate-release, release-packet-digest, or help"
+                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, ripr, smoke-base, calibration-report, render-release-notes, validate-release, release-packet-digest, prove-install, or help"
             )
         }
     }
@@ -122,6 +127,7 @@ cargo xtask commands
   cargo xtask render-release-notes --tag <tag> --output <path>  render offline release notes
   cargo xtask validate-release [authorized publish facts]      admit authorized bytes, then publish once
   cargo xtask release-packet-digest --packet <path>            offline digest of an exact candidate packet
+  cargo xtask prove-install [staged artifact facts]            install a staged release artifact and emit an install-proof receipt
 
 precommit options
 
@@ -165,6 +171,19 @@ validate-release options (trusted facts only; the staged candidate is untrusted 
 release-packet-digest options
 
   --packet <path>               candidate packet file (ub-review.authorized_release.v1)
+
+prove-install options
+
+  --archive <path>              staged release archive (release-shaped artifact)
+  --checksum <path>             staged archive checksum file (<sha256>  <name>)
+  --release-tag <tag>           release identity the resolver fetches (v-prefixed tag)
+  --asset <name>                release asset file name (must match the staged archive)
+  --install-dir <dir>           fresh directory receiving the installed ub-review binary
+  --output <path>               receipt path (ub-review.install_proof.v1); written only on success
+  --harness-revision <id>       producer source revision recorded verbatim in the receipt
+  --probe-path <paths>          PATH scanned for cargo/rustc/ub-review absence (default: process PATH)
+  --cargo-home <dir>            cargo home scanned for cargo-sourced tools (default: $CARGO_HOME or ~/.cargo)
+  --now <epoch>                 receipt timestamp override (default: current time)
 "
     );
 }
