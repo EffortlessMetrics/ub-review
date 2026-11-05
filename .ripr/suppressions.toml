@@ -46301,3 +46301,93 @@ kind = "exposure_gap"
 finding_id = "probe:xtask_src_main.rs:match_arm:ee319319"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1642; probe \"ast-grep\" => \"npm install -g @ast-grep/cli@0.51.1\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue_terminal_status_tests.rs:return_value:ae03a957"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1645; probe env: BTreeMap::new(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by broker_satisfies_new_request_from_existing_receipt_without_execution, ci_repair_invalid_envelopes_are_not_complete_empty_arrays, cli_environment_preserves_coverage_and_platform_keys_only. Re-verify after any edit to src/work_queue/terminal_status_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue_terminal_status_tests.rs:field_construction:429ad3e7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1645; probe exit_code: Some(0),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by gate_check_exit_codes_follow_fail_on_gate_resolution, nonterminal_and_unknown_proof_results_cannot_commit_terminal_output, pr_review_body_renders_head_failed_proof_exit_code. Re-verify after any edit to src/work_queue/terminal_status_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue_terminal_status_tests.rs:return_value:337ecd5e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1645; probe exit_code: Some(0),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by gate_check_exit_codes_follow_fail_on_gate_resolution, nonterminal_and_unknown_proof_results_cannot_commit_terminal_output, pr_review_body_renders_head_failed_proof_exit_code. Re-verify after any edit to src/work_queue/terminal_status_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue_terminal_status_tests.rs:field_construction:44a5546d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1645; probe timeout_sec: 30,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by nonterminal_and_unknown_proof_results_cannot_commit_terminal_output, producer_plan_statuses_preserve_nonexecution_without_receipts, required_build_exhaustion_terminalizes_declined_command_and_releases_completed_command. Re-verify after any edit to src/work_queue/terminal_status_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue_terminal_status_tests.rs:return_value:c8a79b33"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1645; probe timeout_sec: 30,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by nonterminal_and_unknown_proof_results_cannot_commit_terminal_output, producer_plan_statuses_preserve_nonexecution_without_receipts, required_build_exhaustion_terminalizes_declined_command_and_releases_completed_command. Re-verify after any edit to src/work_queue/terminal_status_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue_terminal_status_tests.rs:field_construction:a0b5be82"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1645; probe duration_ms: 7,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by nonterminal_and_unknown_proof_results_cannot_commit_terminal_output, producer_plan_statuses_preserve_nonexecution_without_receipts, required_build_exhaustion_terminalizes_declined_command_and_releases_completed_command. Re-verify after any edit to src/work_queue/terminal_status_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue_terminal_status_tests.rs:return_value:c8b444fb"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1645; probe duration_ms: 7,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by nonterminal_and_unknown_proof_results_cannot_commit_terminal_output, producer_plan_statuses_preserve_nonexecution_without_receipts, required_build_exhaustion_terminalizes_declined_command_and_releases_completed_command. Re-verify after any edit to src/work_queue/terminal_status_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue_terminal_status_tests.rs:return_value:e276cb67"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1645; probe ProofCommandReceipt {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by nonterminal_and_unknown_proof_results_cannot_commit_terminal_output, producer_plan_statuses_preserve_nonexecution_without_receipts, skipped_unresolved_receipts_publish_for_supported_command_roles. Re-verify after any edit to src/work_queue/terminal_status_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue_terminal_status_tests.rs:field_construction:4c5b1f22"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1645; probe env: BTreeMap::new(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by broker_satisfies_new_request_from_existing_receipt_without_execution, ci_repair_invalid_envelopes_are_not_complete_empty_arrays, cli_environment_preserves_coverage_and_platform_keys_only. Re-verify after any edit to src/work_queue/terminal_status_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue_terminal_status_tests.rs:return_value:7179b587"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1645; probe env: BTreeMap::new(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by broker_satisfies_new_request_from_existing_receipt_without_execution, ci_repair_invalid_envelopes_are_not_complete_empty_arrays, cli_environment_preserves_coverage_and_platform_keys_only. Re-verify after any edit to src/work_queue/terminal_status_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue_terminal_status_tests.rs:field_construction:25f69ad0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1645; probe exit_code: None,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by gate_check_exit_codes_follow_fail_on_gate_resolution, nonterminal_and_unknown_proof_results_cannot_commit_terminal_output, pr_review_body_renders_head_failed_proof_exit_code. Re-verify after any edit to src/work_queue/terminal_status_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue_terminal_status_tests.rs:return_value:1c6ed2fb"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1645; probe exit_code: None,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by gate_check_exit_codes_follow_fail_on_gate_resolution, nonterminal_and_unknown_proof_results_cannot_commit_terminal_output, pr_review_body_renders_head_failed_proof_exit_code. Re-verify after any edit to src/work_queue/terminal_status_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue_terminal_status_tests.rs:field_construction:f8d6f974"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1645; probe timeout_sec: 0,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by nonterminal_and_unknown_proof_results_cannot_commit_terminal_output, producer_plan_statuses_preserve_nonexecution_without_receipts, skipped_unresolved_receipts_publish_for_supported_command_roles. Re-verify after any edit to src/work_queue/terminal_status_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue_terminal_status_tests.rs:field_construction:e99a0dce"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1645; probe duration_ms: 0,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by nonterminal_and_unknown_proof_results_cannot_commit_terminal_output, producer_plan_statuses_preserve_nonexecution_without_receipts, skipped_unresolved_receipts_publish_for_supported_command_roles. Re-verify after any edit to src/work_queue/terminal_status_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue_terminal_status_tests.rs:return_value:68106cf5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1645; probe ProofCommandReceipt {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by nonterminal_and_unknown_proof_results_cannot_commit_terminal_output, producer_plan_statuses_preserve_nonexecution_without_receipts, required_build_exhaustion_terminalizes_declined_command_and_releases_completed_command. Re-verify after any edit to src/work_queue/terminal_status_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue_terminal_status_tests.rs:field_construction:0ac65be2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1645; probe env: BTreeMap::new(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by broker_satisfies_new_request_from_existing_receipt_without_execution, ci_repair_invalid_envelopes_are_not_complete_empty_arrays, cli_environment_preserves_coverage_and_platform_keys_only. Re-verify after any edit to src/work_queue/terminal_status_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue_terminal_status_tests.rs:return_value:82d804ad"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1645; probe timeout_sec: 0,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by nonterminal_and_unknown_proof_results_cannot_commit_terminal_output, producer_plan_statuses_preserve_nonexecution_without_receipts, skipped_unresolved_receipts_publish_for_supported_command_roles. Re-verify after any edit to src/work_queue/terminal_status_tests.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_work_queue_terminal_status_tests.rs:return_value:edf88f7c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1645; probe duration_ms: 0,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by nonterminal_and_unknown_proof_results_cannot_commit_terminal_output, producer_plan_statuses_preserve_nonexecution_without_receipts, skipped_unresolved_receipts_publish_for_supported_command_roles. Re-verify after any edit to src/work_queue/terminal_status_tests.rs."
