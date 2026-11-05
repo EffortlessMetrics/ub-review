@@ -48582,3 +48582,8 @@ kind = "exposure_gap"
 finding_id = "probe:tests_pr_context_hydration.rs:error_path:c700e205"
 owner = "ub-review/core"
 reason = "reachable_unrevealed static-path gap on PR #1648; probe )]: No assertion found on related tests. Reached by api_text_truncation_is_receipted_without_rewriting_original_records, exact_capture_limit_includes_status_trailer_and_rejects_one_extra_byte, first_page_and_zero_text_budget_keep_explicit_omissions. Re-verify after any edit to tests/pr_context_hydration.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_pr_context_hydration.rs:return_value:6a90594a"
+owner = "ub-review/core"
+reason = "reachable_unrevealed static-path gap on PR #1648; probe )]: No assertion found on related tests. Reached by api_text_truncation_is_receipted_without_rewriting_original_records, exact_capture_limit_includes_status_trailer_and_rejects_one_extra_byte, first_page_and_zero_text_budget_keep_explicit_omissions. Re-verify after any edit to tests/pr_context_hydration.rs."
