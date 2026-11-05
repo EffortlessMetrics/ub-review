@@ -1,12 +1,58 @@
 name: Release Binary
 
-# PR builds are covered by the gate's check/test proof; release packaging is a
-# release-lane concern.
+# #1344 boundary: candidate preparation never publishes. Every ordinary
+# trigger (tag push or dispatch without authorization inputs) produces frozen
+# workflow artifacts only. Publication requires an independent maintainer
+# dispatch that carries the trusted authorization packet, resolves producer
+# facts from the GitHub API, runs the merged #1343 validator
+# (ub-review.authorized_release.v1, xtask/src/release_bytes.rs) before the
+# first create/upload side effect, and then creates the tag/release/assets
+# exactly once through the reviewed `validate-release` publisher. There is no
+# rebuild-on-publish route and no overwrite flag: on mismatch, collision,
+# outage or partial external state the publish path stops (and stays
+# disabled) rather than falling back to unchecked behavior.
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      candidate-run-id:
+        description: 'Authorized candidate package run id (non-publishing preparation run)'
+        required: false
+        type: string
+      candidate-run-attempt:
+        description: 'Exact attempt of the authorized candidate run'
+        required: false
+        type: string
+      candidate-artifact-id:
+        description: 'Immutable artifact id of the frozen candidate bytes artifact'
+        required: false
+        type: string
+      packet-artifact-id:
+        description: 'Immutable artifact id of the frozen candidate packet artifact'
+        required: false
+        type: string
+      packet-sha256:
+        description: 'Exact ub-review.authorized_release.v1 packet digest named by the authorization (cargo xtask release-packet-digest)'
+        required: false
+        type: string
+      proposed-tag:
+        description: 'Authorized release tag; must equal v plus the candidate package version and must be absent'
+        required: false
+        type: string
+      authorization-record:
+        description: 'Release authority record identifier issued outside candidate-controlled files (#817)'
+        required: false
+        type: string
+      authorization-verifier:
+        description: 'Trusted verifier identity bound to the authorization record'
+        required: false
+        type: string
+      authorization-expires-at:
+        description: 'Epoch seconds after which the authorization is expired'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -17,7 +63,10 @@ concurrency:
 
 jobs:
   package:
-    name: Build release asset
+    name: Prepare release candidate
+    # A publish dispatch carries the authorization inputs, so its event must
+    # not also produce an unrelated candidate artifact.
+    if: github.event_name == 'push' || inputs['candidate-run-id'] == ''
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -25,6 +74,9 @@ jobs:
     env:
       ASSET_NAME: ub-review-x86_64-unknown-linux-gnu.tar.gz
       TARGET_DIR: ub-review-x86_64-unknown-linux-gnu
+      TOOLCHAIN: 1.95.0
+      ARTIFACT_NAME: ub-review-linux-x64-release
+      PACKET_ARTIFACT_NAME: ub-review-linux-x64-release-packet
     steps:
       - uses: actions/checkout@v5
 
@@ -51,114 +103,329 @@ jobs:
           tar -tzf "dist/$ASSET_NAME" | grep -Fx ub-review
           test -s "dist/$ASSET_NAME.sha256"
 
-      - name: Write immutable release candidate receipt
+      - name: Render offline release notes
         shell: bash
-        env:
-          TOOLCHAIN: 1.95.0
         run: |
           set -euo pipefail
-          candidate_sha="$(git rev-parse HEAD)"
-          archive_sha256="$(awk 'NF >= 1 {print $1; exit}' "dist/$ASSET_NAME.sha256")"
-          jq -n \
-            --arg schema "ub-review.release_candidate.v1" \
-            --arg head_sha "$candidate_sha" \
-            --arg ref "$GITHUB_REF" \
-            --arg tag "${GITHUB_REF_NAME:-}" \
-            --arg toolchain "$TOOLCHAIN" \
-            --arg asset "$ASSET_NAME" \
-            --arg checksum_asset "$ASSET_NAME.sha256" \
-            --arg archive_sha256 "$archive_sha256" \
-            '{schema:$schema,head_sha:$head_sha,ref:$ref,tag:$tag,toolchain:$toolchain,asset:$asset,checksum_asset:$checksum_asset,archive_sha256:$archive_sha256}' \
-            > dist/release-candidate.json
-          test "$(jq -r '.head_sha' dist/release-candidate.json)" = "$candidate_sha"
+          package_version="$(cargo metadata --locked --no-deps --format-version=1 | jq -r '.packages[] | select(.name == "ub-review") | .version')"
+          test -n "$package_version"
+          cargo run --locked --package xtask -- render-release-notes \
+            --tag "v$package_version" --output dist/release-notes.md
+          test -s dist/release-notes.md
 
-      - name: Upload workflow artifact
+      - name: Stamp candidate validity window
+        # The packet's retained_until claim MUST be stamped before the bytes
+        # artifact is uploaded: the publish job derives the horizon from that
+        # artifact's GitHub-side expires_at (upload time + retention), and
+        # admission requires the horizon to cover the claim. Stamping after
+        # the upload would make claim > horizon by construction and reject
+        # every legitimate production packet.
+        id: window
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "retained_until=$(date -u -d '+14 days' +%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload frozen candidate bytes artifact
+        id: candidate
         uses: actions/upload-artifact@v7
         with:
           name: ub-review-linux-x64-release
           path: |
             dist/${{ env.ASSET_NAME }}
             dist/${{ env.ASSET_NAME }}.sha256
-            dist/release-candidate.json
+            dist/release-notes.md
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Write authorized release candidate packet
+        # Immutable candidate identity: run id + run attempt + artifact id +
+        # archive digest. The authorization_record is derived from the archive
+        # digest, so the authority record names exactly these bytes; the
+        # verifier identity is the fixed trusted-verifier token #817 binds.
+        shell: bash
+        env:
+          CANDIDATE_ARTIFACT_ID: ${{ steps.candidate.outputs.artifact-id }}
+          RETAINED_UNTIL: ${{ steps.window.outputs.retained_until }}
+        run: |
+          set -euo pipefail
+          test -n "$CANDIDATE_ARTIFACT_ID"
+          test -n "$RETAINED_UNTIL"
+          head_sha="$(git rev-parse 'HEAD^{commit}')"
+          tree_sha="$(git rev-parse 'HEAD^{tree}')"
+          package_version="$(cargo metadata --locked --no-deps --format-version=1 | jq -r '.packages[] | select(.name == "ub-review") | .version')"
+          test -n "$package_version"
+          binary_version="$(target/release/ub-review --version | awk 'NF { value = $NF } END { print value }')"
+          test "$binary_version" = "$package_version"
+          archive_sha256="$(awk 'NF >= 1 {print $1; exit}' "dist/$ASSET_NAME.sha256")"
+          archive_length="$(wc -c < "dist/$ASSET_NAME")"
+          checksum_asset="$ASSET_NAME.sha256"
+          checksum_length="$(wc -c < "dist/$checksum_asset")"
+          checksum_sha256="$(sha256sum "dist/$checksum_asset" | awk 'NF >= 1 {print $1}')"
+          record="release-candidate/$archive_sha256"
+          jq -n \
+            --arg schema "ub-review.authorized_release.v1" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg head_sha "$head_sha" \
+            --arg tree_sha "$tree_sha" \
+            --arg workflow ".github/workflows/release-binary.yml" \
+            --arg producer_ref "$GITHUB_REF" \
+            --argjson run_id "$GITHUB_RUN_ID" \
+            --argjson run_attempt "$GITHUB_RUN_ATTEMPT" \
+            --argjson artifact_id "$CANDIDATE_ARTIFACT_ID" \
+            --arg artifact_name "$ARTIFACT_NAME" \
+            --arg proposed_tag "v$package_version" \
+            --arg peeled_commit "$head_sha" \
+            --arg asset "$ASSET_NAME" \
+            --arg checksum_asset "$checksum_asset" \
+            --argjson archive_length "$archive_length" \
+            --argjson checksum_length "$checksum_length" \
+            --arg archive_sha256 "$archive_sha256" \
+            --arg checksum_sha256 "$checksum_sha256" \
+            --arg binary_version "$package_version" \
+            --arg package_version "$package_version" \
+            --arg target "x86_64-unknown-linux-gnu" \
+            --arg toolchain "$TOOLCHAIN" \
+            --argjson retained_until "$RETAINED_UNTIL" \
+            --arg authorization_record "$record" \
+            --arg verifier "trusted-release-verifier/v1" \
+            '{schema:$schema,repository:$repository,head_sha:$head_sha,tree_sha:$tree_sha,workflow:$workflow,producer_ref:$producer_ref,run_id:$run_id,run_attempt:$run_attempt,artifact_id:$artifact_id,artifact_name:$artifact_name,proposed_tag:$proposed_tag,peeled_commit:$peeled_commit,asset:$asset,checksum_asset:$checksum_asset,archive_length:$archive_length,checksum_length:$checksum_length,archive_sha256:$archive_sha256,checksum_sha256:$checksum_sha256,binary_version:$binary_version,package_version:$package_version,target:$target,toolchain:$toolchain,retained_until:$retained_until,authorization_record:$authorization_record,verifier:$verifier}' \
+            > dist/authorized-release-packet.json
+          test "$(jq -r '.schema' dist/authorized-release-packet.json)" = "ub-review.authorized_release.v1"
+          test "$(jq -r '.head_sha' dist/authorized-release-packet.json)" = "$head_sha"
+          test "$(jq -r '.run_id' dist/authorized-release-packet.json)" = "$GITHUB_RUN_ID"
+          test "$(jq -r '.run_attempt' dist/authorized-release-packet.json)" = "$GITHUB_RUN_ATTEMPT"
+          test "$(jq -r '.artifact_id' dist/authorized-release-packet.json)" = "$CANDIDATE_ARTIFACT_ID"
+          test "$(jq -r '.peeled_commit' dist/authorized-release-packet.json)" = "$(jq -r '.head_sha' dist/authorized-release-packet.json)"
+
+      - name: Upload frozen candidate packet artifact
+        # The bytes artifact is immutable once uploaded; its identity is only
+        # known afterwards, so the packet is finalized against that identity
+        # and attached as a second immutable artifact of the same run/attempt.
+        uses: actions/upload-artifact@v7
+        with:
+          name: ub-review-linux-x64-release-packet
+          path: dist/authorized-release-packet.json
           if-no-files-found: error
           retention-days: 14
 
   publish:
-    name: Publish release asset
-    needs: package
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    name: Publish authorized release
+    # Publication never depends on this event's package job and never reads a
+    # "latest" or same-run artifact: the frozen candidate is addressed by the
+    # dispatch-authorized run id, attempt and immutable artifact ids. A
+    # dispatch without the authorization inputs is ordinary preparation, so
+    # the publish path stays off.
+    if: github.event_name == 'workflow_dispatch' && inputs['candidate-run-id'] != ''
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions:
       contents: write
     env:
       ASSET_NAME: ub-review-x86_64-unknown-linux-gnu.tar.gz
+      ARTIFACT_NAME: ub-review-linux-x64-release
+      PACKET_ARTIFACT_NAME: ub-review-linux-x64-release-packet
+      PACKET_FILE: authorized-release-packet.json
+      TOOLCHAIN: 1.95.0
     steps:
+      - name: Require the trusted authorization inputs
+        shell: bash
+        env:
+          CANDIDATE_RUN_ID: ${{ inputs.candidate-run-id }}
+          CANDIDATE_RUN_ATTEMPT: ${{ inputs.candidate-run-attempt }}
+          CANDIDATE_ARTIFACT_ID: ${{ inputs.candidate-artifact-id }}
+          PACKET_ARTIFACT_ID: ${{ inputs.packet-artifact-id }}
+          PACKET_SHA256: ${{ inputs.packet-sha256 }}
+          PROPOSED_TAG: ${{ inputs.proposed-tag }}
+          AUTHORIZATION_RECORD: ${{ inputs.authorization-record }}
+          AUTHORIZATION_VERIFIER: ${{ inputs.authorization-verifier }}
+          AUTHORIZATION_EXPIRES_AT: ${{ inputs.authorization-expires-at }}
+        run: |
+          set -euo pipefail
+          # Exact-length hex checks must use a regex quantifier: a bash case
+          # glob of N char-classes matches exactly N characters, so it would
+          # reject every legitimate digest (64) or head sha (40).
+          is_hex() {
+            printf '%s' "$1" | grep -qE "^[0-9a-f]{$2}$"
+          }
+          require_id() {
+            case "$1" in
+              ''|*[!0-9]*) echo "::error::$2 must be a positive integer"; exit 1 ;;
+            esac
+            test "$1" -gt 0 || { echo "::error::$2 must be positive"; exit 1; }
+          }
+          require_id "$CANDIDATE_RUN_ID" "candidate-run-id"
+          require_id "$CANDIDATE_RUN_ATTEMPT" "candidate-run-attempt"
+          require_id "$CANDIDATE_ARTIFACT_ID" "candidate-artifact-id"
+          require_id "$PACKET_ARTIFACT_ID" "packet-artifact-id"
+          require_id "$AUTHORIZATION_EXPIRES_AT" "authorization-expires-at"
+          is_hex "$PACKET_SHA256" 64 || { echo "::error::packet-sha256 must be 64 lowercase hex characters"; exit 1; }
+          case "$PROPOSED_TAG" in
+            v[0-9]*) ;;
+            *) echo "::error::proposed-tag must start with v plus a digit"; exit 1 ;;
+          esac
+          test -n "$AUTHORIZATION_RECORD" || { echo "::error::authorization-record is required"; exit 1; }
+          test -n "$AUTHORIZATION_VERIFIER" || { echo "::error::authorization-verifier is required"; exit 1; }
+
       - uses: actions/checkout@v5
-
-      - name: Validate release tag
-        id: tag
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag="${GITHUB_REF_NAME:-}"
-          if [[ ! "$tag" =~ ^v[0-9][A-Za-z0-9._-]*$ ]]; then
-            echo "::error::release tag must start with v plus a digit and contain only letters, numbers, dot, underscore, or dash"
-            exit 1
-          fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-
-      - name: Download packaged release asset
-        uses: actions/download-artifact@v7
+        # The dispatch ref is the maintainer-selected trusted revision of the
+        # publish adapter. The candidate source is never checked out for
+        # execution here, and no git credential is persisted.
         with:
-          name: ub-review-linux-x64-release
-          path: dist
+          persist-credentials: false
 
-      - name: Validate immutable release candidate receipt
-        shell: bash
-        env:
-          TAG: ${{ steps.tag.outputs.tag }}
-        run: |
-          set -euo pipefail
-          manifest="dist/release-candidate.json"
-          test -s "$manifest"
-          test "$(jq -r '.schema' "$manifest")" = "ub-review.release_candidate.v1"
-          test "$(jq -r '.head_sha' "$manifest")" = "$GITHUB_SHA"
-          test "$(jq -r '.ref' "$manifest")" = "refs/tags/$TAG"
-          test "$(jq -r '.tag' "$manifest")" = "$TAG"
-          test "$(jq -r '.toolchain' "$manifest")" = "1.95.0"
-          test "$(jq -r '.asset' "$manifest")" = "$ASSET_NAME"
-          test "$(jq -r '.checksum_asset' "$manifest")" = "$ASSET_NAME.sha256"
-          archive_sha256="$(awk 'NF >= 1 {print $1; exit}' "dist/$ASSET_NAME.sha256")"
-          test "$(jq -r '.archive_sha256' "$manifest")" = "$archive_sha256"
-          sha256sum -c "dist/$ASSET_NAME.sha256"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
 
-      - name: Install pinned Rust toolchain
-        shell: bash
-        run: |
-          set -euo pipefail
-          rustup toolchain install 1.95.0 --profile minimal
-
-      - name: Render release notes
-        shell: bash
-        env:
-          TAG: ${{ steps.tag.outputs.tag }}
-        run: |
-          set -euo pipefail
-          cargo +1.95.0 run --locked --package xtask -- render-release-notes --tag "$TAG" --output dist/release-notes.md
-
-      - name: Publish GitHub release asset
+      - name: Resolve trusted producer facts from the GitHub API
+        # Every value exported here comes from the API or the dispatch
+        # authorization, never from the candidate artifact. Candidate-controlled
+        # files enter the flow only as staged bytes in a later step.
+        id: facts
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.tag.outputs.tag }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate-run-id }}
+          CANDIDATE_RUN_ATTEMPT: ${{ inputs.candidate-run-attempt }}
+          CANDIDATE_ARTIFACT_ID: ${{ inputs.candidate-artifact-id }}
+          PACKET_ARTIFACT_ID: ${{ inputs.packet-artifact-id }}
+          PROPOSED_TAG: ${{ inputs.proposed-tag }}
         run: |
           set -euo pipefail
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "dist/$ASSET_NAME" "dist/$ASSET_NAME.sha256" --clobber
+          repo="$GITHUB_REPOSITORY"
+          mkdir -p trusted
+          # Run identity: the API is the producer source, not the packet.
+          gh api "repos/$repo/actions/runs/$CANDIDATE_RUN_ID" > trusted/run.json
+          test "$(jq -r '.run_attempt' trusted/run.json)" = "$CANDIDATE_RUN_ATTEMPT"
+          # The producer workflow identity is observed from the API and bound
+          # to the packet's constant at admission.
+          workflow_path="$(jq -r '.path' trusted/run.json)"
+          test "$workflow_path" = ".github/workflows/release-binary.yml"
+          head_sha="$(jq -r '.head_sha' trusted/run.json)"
+          printf '%s' "$head_sha" | grep -qE '^[0-9a-f]{40}$' || { echo "::error::run API returned a malformed head sha"; exit 1; }
+          head_branch="$(jq -r '.head_branch' trusted/run.json)"
+          # Candidate artifacts: exact immutable ids within that exact run,
+          # not expired, with the frozen names.
+          gh api "repos/$repo/actions/runs/$CANDIDATE_RUN_ID/artifacts?per_page=100" > trusted/artifacts.json
+          bytes_artifact="$(jq -c --argjson id "$CANDIDATE_ARTIFACT_ID" '.artifacts[] | select(.id == $id)' trusted/artifacts.json)"
+          packet_artifact="$(jq -c --argjson id "$PACKET_ARTIFACT_ID" '.artifacts[] | select(.id == $id)' trusted/artifacts.json)"
+          test -n "$bytes_artifact" || { echo "::error::candidate bytes artifact not found in the authorized run"; exit 1; }
+          test -n "$packet_artifact" || { echo "::error::candidate packet artifact not found in the authorized run"; exit 1; }
+          test "$(jq -r '.name' <<<"$bytes_artifact")" = "$ARTIFACT_NAME"
+          test "$(jq -r '.name' <<<"$packet_artifact")" = "$PACKET_ARTIFACT_NAME"
+          test "$(jq -r '.expired' <<<"$bytes_artifact")" = "false"
+          test "$(jq -r '.expired' <<<"$packet_artifact")" = "false"
+          artifact_name="$(jq -r '.name' <<<"$bytes_artifact")"
+          retained_until="$(date -u -d "$(jq -r '.expires_at' <<<"$bytes_artifact")" +%s)"
+          # Independent package-version evidence: Cargo.toml at the observed
+          # candidate commit.
+          gh api "repos/$repo/contents/Cargo.toml?ref=$head_sha" --jq '.content' | base64 -d > trusted/Cargo.toml
+          package_version="$(awk '/^\[/ { section = ($0 == "[package]") } section && $1 == "version" { gsub(/[" ]/, "", $3); print $3; exit }' trusted/Cargo.toml)"
+          test -n "$package_version" || { echo "::error::could not observe the candidate package version"; exit 1; }
+          # Proposed tag must be absent; a 404 proves absence, any other
+          # failure is an outage and stops the publish path.
+          tag_absent=false
+          if gh api "repos/$repo/git/ref/tags/$PROPOSED_TAG" > trusted/tag.json 2> trusted/tag.err; then
+            tag_absent=false
+          elif grep -q "HTTP 404" trusted/tag.err; then
+            tag_absent=true
           else
-            gh release create "$TAG" "dist/$ASSET_NAME" "dist/$ASSET_NAME.sha256" \
-              --verify-tag \
-              --title "$TAG" \
-              --notes-file dist/release-notes.md
+            echo "::error::tag lookup failed (API outage); publish path stops"
+            exit 1
           fi
+          test "$tag_absent" = "true" || { echo "::error::proposed tag already exists; publish path stops"; exit 1; }
+          # Producer ref resolution, sha-verified against the observed commit
+          # (branch head first, then lightweight or annotated tag).
+          producer_ref=""
+          if branch_sha="$(gh api "repos/$repo/git/ref/heads/$head_branch" --jq '.object.sha' 2>/dev/null)" && test "$branch_sha" = "$head_sha"; then
+            producer_ref="refs/heads/$head_branch"
+          elif tag_object="$(gh api "repos/$repo/git/ref/tags/$head_branch" --jq '.object.sha' 2>/dev/null)" && test "$tag_object" = "$head_sha"; then
+            producer_ref="refs/tags/$head_branch"
+          elif tag_object="$(gh api "repos/$repo/git/ref/tags/$head_branch" --jq '.object.sha' 2>/dev/null)" && peeled="$(gh api "repos/$repo/git/tags/$tag_object" --jq '.object.sha' 2>/dev/null)" && test "$peeled" = "$head_sha"; then
+            producer_ref="refs/tags/$head_branch"
+          else
+            echo "::error::could not resolve a sha-verified producer ref for the candidate run"
+            exit 1
+          fi
+          # Independent tree identity at the exact candidate commit.
+          tree_sha="$(gh api "repos/$repo/commits/$head_sha" --jq '.commit.tree.sha')"
+          printf '%s' "$tree_sha" | grep -qE '^[0-9a-f]{40}$' || { echo "::error::commits API returned a malformed tree sha"; exit 1; }
+          {
+            echo "workflow_path=$workflow_path"
+            echo "head_sha=$head_sha"
+            echo "tree_sha=$tree_sha"
+            echo "producer_ref=$producer_ref"
+            echo "artifact_name=$artifact_name"
+            echo "retained_until=$retained_until"
+            echo "package_version=$package_version"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download the frozen candidate by immutable id
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_ARTIFACT_ID: ${{ inputs.candidate-artifact-id }}
+          PACKET_ARTIFACT_ID: ${{ inputs.packet-artifact-id }}
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          rm -rf staging && mkdir -p staging
+          gh api "repos/$repo/actions/artifacts/$CANDIDATE_ARTIFACT_ID/zip" > "$RUNNER_TEMP/candidate.zip"
+          gh api "repos/$repo/actions/artifacts/$PACKET_ARTIFACT_ID/zip" > "$RUNNER_TEMP/packet.zip"
+          unzip -o "$RUNNER_TEMP/candidate.zip" -d staging
+          unzip -o "$RUNNER_TEMP/packet.zip" -d staging
+          test -s "staging/$ASSET_NAME"
+          test -s "staging/$ASSET_NAME.sha256"
+          test -s staging/release-notes.md
+          test -s "staging/$PACKET_FILE"
+          test "$(jq -r '.schema' "staging/$PACKET_FILE")" = "ub-review.authorized_release.v1"
+
+      - name: Admit the authorized bytes and publish once
+        # Publishing credentials exist only in this step, which executes the
+        # dispatch-ref (independently reviewed) xtask adapter — never
+        # candidate-built code. The validator consumes the staged candidate
+        # only as data and refuses before any side effect; the publisher has
+        # no overwrite, move or delete capability and creates the tag at the
+        # admitted commit, the release, and both assets exactly once.
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate-run-id }}
+          CANDIDATE_RUN_ATTEMPT: ${{ inputs.candidate-run-attempt }}
+          CANDIDATE_ARTIFACT_ID: ${{ inputs.candidate-artifact-id }}
+          PACKET_SHA256: ${{ inputs.packet-sha256 }}
+          PROPOSED_TAG: ${{ inputs.proposed-tag }}
+          AUTHORIZATION_RECORD: ${{ inputs.authorization-record }}
+          AUTHORIZATION_VERIFIER: ${{ inputs.authorization-verifier }}
+          AUTHORIZATION_EXPIRES_AT: ${{ inputs.authorization-expires-at }}
+          HEAD_SHA: ${{ steps.facts.outputs.head_sha }}
+          TREE_SHA: ${{ steps.facts.outputs.tree_sha }}
+          WORKFLOW_PATH: ${{ steps.facts.outputs.workflow_path }}
+          PRODUCER_REF: ${{ steps.facts.outputs.producer_ref }}
+          ARTIFACT_NAME_RESOLVED: ${{ steps.facts.outputs.artifact_name }}
+          RETAINED_UNTIL: ${{ steps.facts.outputs.retained_until }}
+          PACKAGE_VERSION: ${{ steps.facts.outputs.package_version }}
+        run: |
+          set -euo pipefail
+          now="$(date -u +%s)"
+          cargo run --locked --package xtask -- validate-release \
+            --staging staging \
+            --repository "$GITHUB_REPOSITORY" \
+            --workflow "$WORKFLOW_PATH" \
+            --head-sha "$HEAD_SHA" \
+            --tree-sha "$TREE_SHA" \
+            --producer-ref "$PRODUCER_REF" \
+            --run-id "$CANDIDATE_RUN_ID" \
+            --run-attempt "$CANDIDATE_RUN_ATTEMPT" \
+            --artifact-id "$CANDIDATE_ARTIFACT_ID" \
+            --artifact-name "$ARTIFACT_NAME_RESOLVED" \
+            --retained-until "$RETAINED_UNTIL" \
+            --proposed-tag "$PROPOSED_TAG" \
+            --package-version "$PACKAGE_VERSION" \
+            --authorization-record "$AUTHORIZATION_RECORD" \
+            --authorization-verifier "$AUTHORIZATION_VERIFIER" \
+            --packet-sha256 "$PACKET_SHA256" \
+            --authorization-expires-at "$AUTHORIZATION_EXPIRES_AT" \
+            --now "$now" \
+            --publish

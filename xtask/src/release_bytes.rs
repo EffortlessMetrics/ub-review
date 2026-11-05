@@ -14,7 +14,10 @@
 //! consuming these slices. Tag absence is a point-in-time observation, not a
 //! reservation: the next integration slice must recheck tag collisions directly
 //! before side effects; `ensure_current` checks only artifact/authority expiry.
-//! This module performs no side effects.
+//! This module performs no side effects. The producer observation's
+//! `retained_until` is the independently observed artifact expiry horizon; it
+//! must cover the packet's claimed validity window, so the packet claim may
+//! end before the horizon but never after it.
 use flate2::bufread::GzDecoder;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -27,7 +30,9 @@ pub const MAX_ARCHIVE_BYTES: usize = 64 * 1024 * 1024;
 const MAX_PACKET_BYTES: usize = 16 * 1024;
 const MAX_TAR_BYTES: usize = MAX_ARCHIVE_BYTES + 4096;
 
-/// Explicit new schema: the existing release_candidate.v1 producer is unchanged.
+/// Versioned candidate packet. #1344's non-publishing package job emits this
+/// schema; the legacy ub-review.release_candidate.v1 producer in the release
+/// workflow was removed with the rebuild-and-clobber route it fed.
 /// Declaration-order serialization supplies the canonical semantic digest.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -70,6 +75,10 @@ pub struct Producer {
     pub run_attempt: u64,
     pub artifact_id: u64,
     pub artifact_name: String,
+    /// Independently observed artifact expiry horizon (epoch seconds). The
+    /// packet's claimed validity window must not extend past this horizon;
+    /// exact equality is not required because the producer cannot observe
+    /// GitHub's computed artifact expiry seconds when it writes the packet.
     pub retained_until: u64,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -275,7 +284,13 @@ pub fn validate(
     bind!(run_attempt);
     bind!(artifact_id);
     bind!(artifact_name);
-    bind!(retained_until);
+    // #1344 production adapter: the packet claims a bounded validity window and
+    // the independently observed artifact expiry horizon must cover it. A claim
+    // beyond the observed horizon is an identity failure, not an expiry, so a
+    // stale or overreaching packet is rejected before availability is trusted.
+    if packet.retained_until > source.retained_until {
+        return Err(Rejection::Identity("retained_until"));
+    }
     if packet.retained_until <= now {
         return Err(Rejection::Expired);
     }
@@ -598,6 +613,27 @@ mod tests {
         let at_boundary = verified.ensure_current(150).map(|()| verified);
         assert_eq!(publisher.consume(at_boundary), Err(Rejection::Expired));
         assert!(publisher.calls.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn producer_horizon_covers_the_packet_validity_window() -> Result<(), Box<dyn std::error::Error>>
+    {
+        // #1344 production adapter: GitHub computes artifact expiry at upload
+        // time, which the producer cannot observe exactly when it writes the
+        // packet. The claimed window may end before the observed horizon but
+        // never after it, and publication still honours the claimed window.
+        let mut f = Fixture::new()?;
+        f.packet.retained_until = 400;
+        f.authorize();
+        let verified = f.admit().map_err(|_| "admit")?;
+        assert_eq!(verified.valid_until(), 400);
+        let mut publisher = RecordingPublisher::default();
+        assert_eq!(publisher.consume(Ok(verified)), Ok(()));
+        assert_eq!(publisher.calls.len(), 1);
+        let mut f = Fixture::new()?;
+        f.packet.retained_until = 501;
+        rejected(f.admit(), Rejection::Identity("retained_until"));
         Ok(())
     }
 
