@@ -200,18 +200,63 @@ seeking authorization.
 
 `source_build_used=false` is the explicit assertion required in #815/#816's
 harness-owned install-proof packet. It is not a current Action output or a
-field emitted by `ub-review.release_candidate.v1`; current main has no
-installer-receipt schema that emits this named field. The installation proof
-owner must name the actual harness source revision, schema, field mapping,
-and retained evidence used to establish the assertion.
+field emitted by `ub-review.release_candidate.v1`; the receipt schema named
+below is the only producer of this field. The installation proof owner must
+name the actual harness source revision, schema, field mapping, and retained
+evidence used to establish the assertion.
 
-That evidence must bind the selected Action ref and release artifact to the
-observed resolver path, installed binary identity, environment/tool-absence
-probes, and negative controls that detect forbidden source fallback. Merely
-requesting `install-mode: release` cannot populate a successful receipt.
-Missing observations remain not proven. PR #1265's proposed Rust harness
-uses its own versioned environment/resolver receipts; its pending source and
-historical runs must not be represented as a producer already on main.
+Producer and source revision: `cargo xtask prove-install`
+(`xtask/src/install_proof.rs`), introduced by the PR that closes #815's
+producer requirement (branch `feat/815-install-proof-producer`). Each
+receipt additionally records its `--harness-revision` fact verbatim, so a
+retained receipt names both the producing change and the recorded revision.
+
+Schema: `ub-review.install_proof.v1`. Field mapping for the assertion:
+
+- `source_build_used` is hardcoded `false` on the single success path of
+  `run_with_resolver`, after every gate passed. The receipt struct has no
+  public constructor, no setter, and no CLI flag can stamp or override the
+  assertion; any refusal writes no receipt at all.
+- Resolver-contract gates mirror the Action's `install-mode=release` step:
+  request validation and normalization, the Linux x64 platform gate
+  (`action.yml:486-489`), the checksum receipt parse and digest match
+  (`action.yml:487-497`), the single-root regular-file `ub-review` archive
+  layout (`action.yml:504-525`), fresh-directory extraction with the
+  executable bit (`action.yml:529-552`), and installed-binary identity via
+  `--version` = `ub-review <version>` (`action.yml:554-557`).
+- Environment/tool-absence probes run before the resolver is consulted and
+  are recorded under `probes`: `cargo`, `rustc`, and `ub-review` are probed
+  across the receipt's `scanned_path` entries and the cargo home
+  (`cargo-home` scope, covering cargo-sourced `ub-review`). Any detection
+  aborts before the fetch and writes no receipt; the receipt also records
+  the process PATH verbatim for review.
+- The receipt binds the artifact and the install: `artifact.source` (the
+  resolver path identity), `artifact.archive_sha256`/`archive_length`/
+  `checksum_sha256`, `install.binary_path`/`binary_sha256` (re-read from
+  disk after install), `version_expected`/`version_reported`, and
+  `platform` naming the gated host identity.
+- Negative controls that discriminate: a corrupt or mismatched archive
+  refuses with no receipt; a planted host `cargo`/`rustc`/`ub-review` is
+  detected before the resolver is consulted and aborts with no receipt; a
+  source-fallback attempt has nothing to reach — resolver unavailability
+  fails closed, mirroring the release-mode refusal at
+  `action.yml:566-572`.
+- Transport: the resolver is a seam (`ReleaseResolver`); the real
+  `staged-files` transport reads a staged archive/checksum pair with no
+  network and no credentials, and contract tests inject recording fakes, as
+  `release_publish.rs` does for its publisher seam. Real executable
+  extraction/identity runs are covered on the Linux x64 gate; the harness
+  refuses on other host platforms.
+
+Retained evidence for one installation proof is the emitted receipt file
+plus the staged archive/checksum pair it digests. Run the harness with a
+sanitized installation PATH (`--probe-path`) so the `cargo` process that
+launches xtask is not part of the scanned installation environment, and
+retain both the scanned and the recorded PATH values. Merely requesting
+`install-mode: release` cannot populate a successful receipt. Missing
+observations remain not proven. PR #1265's proposed Rust harness uses its
+own versioned environment/resolver receipts; its pending source and
+historical runs are not this producer and must not be represented as one.
 
 ## Authorization and publication dispatch
 
