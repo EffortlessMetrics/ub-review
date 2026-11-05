@@ -46291,3 +46291,13 @@ kind = "exposure_gap"
 finding_id = "probe:src_post_run_utils.rs:match_arm:05799a30"
 owner = "ub-review/core"
 reason = "weakly_exposed static-path gap on PR #1642; probe \"ast-grep\" => format!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by actionlint_sensor_uses_json_template_format, actual_gnu_producer_format_is_accepted, ast_grep_bootstrap_identity_is_pinned_across_installers_and_doctor. Re-verify after any edit to src/post_run_utils.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_post_run_utils.rs:match_arm:d0f51243"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1642; probe \"ast-grep\" => Some(STANDARD_IMAGE_AST_GREP_VERSION),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by ast_grep_bootstrap_identity_is_pinned_across_installers_and_doctor, baseline_gate_plan_phases_split_fast_signal_from_slow_suite, doctor_version_fix_reinstalls_pinned_standard_image_tools. Re-verify after any edit to src/post_run_utils.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:ee319319"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1642; probe \"ast-grep\" => \"npm install -g @ast-grep/cli@0.51.1\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by affected_packages_include_all_packages_for_root_manifest_and_lockfile, affected_packages_include_package_manifest_changes, bun_gate_pin_policy_accepts_consistent_docs. Re-verify after any edit to xtask/src/main.rs."
