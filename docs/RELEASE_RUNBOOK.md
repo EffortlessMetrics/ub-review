@@ -206,10 +206,11 @@ name the actual harness source revision, schema, field mapping, and retained
 evidence used to establish the assertion.
 
 Producer and source revision: `cargo xtask prove-install`
-(`xtask/src/install_proof.rs`), introduced by the PR that closes #815's
-producer requirement (branch `feat/815-install-proof-producer`). Each
-receipt additionally records its `--harness-revision` fact verbatim, so a
-retained receipt names both the producing change and the recorded revision.
+(`xtask/src/install_proof.rs`), introduced in #1653 (branch
+`feat/815-install-proof-producer`), the PR that closes #815's producer
+requirement. Each receipt additionally records its `--harness-revision`
+fact verbatim, so a retained receipt names both the producing change and
+the recorded revision.
 
 Schema: `ub-review.install_proof.v1`. Field mapping for the assertion:
 
