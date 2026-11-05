@@ -8331,112 +8331,135 @@ diff_classes = ["docs-only"]
 
     #[test]
     fn release_binary_workflow_dispatch_is_packaging_dry_run() {
-        let workflow = include_str!("../.github/workflows/release-binary.yml");
+        // #1344 boundary: dispatch packaging is a non-publishing dry run and
+        // publication requires an independent authorization dispatch.
+        // Normalized line endings keep the source contract exact on any
+        // checkout (hosted Linux LF, Windows CRLF).
+        let workflow =
+            include_str!("../.github/workflows/release-binary.yml").replace("\r\n", "\n");
         assert!(
             workflow.contains("workflow_dispatch:"),
-            "release packaging should be manually dry-runnable before a tag is pushed"
+            "release packaging should be manually dry-runnable before authorization"
         );
         assert!(
-            workflow.contains("package:\n    name: Build release asset"),
-            "the manual-runnable job should describe packaging, not release publishing"
+            workflow.contains("package:\n    name: Prepare release candidate"),
+            "the packaging job should describe candidate preparation, not release publishing"
+        );
+        let package_section = workflow
+            .split_once("\n  package:\n")
+            .map(|(_, section)| section)
+            .unwrap_or_default();
+        assert!(
+            package_section.contains("permissions:\n      contents: read"),
+            "the packaging job must not receive release-write permission"
         );
         assert!(
-            workflow.contains("package:\n    name: Build release asset")
-                && workflow.contains("permissions:\n      contents: read"),
-            "the manual-runnable packaging job must not receive release-write permission"
-        );
-        assert!(
-            workflow.contains("name: Upload workflow artifact")
-                && workflow.contains("dist/${{ env.ASSET_NAME }}")
-                && workflow.contains("dist/${{ env.ASSET_NAME }}.sha256"),
+            package_section.contains("uses: actions/upload-artifact@v7")
+                && package_section.contains("dist/${{ env.ASSET_NAME }}")
+                && package_section.contains("dist/${{ env.ASSET_NAME }}.sha256"),
             "manual dry-runs must leave the archive and .sha256 as workflow artifacts"
         );
-        let tag_only_guard =
-            "if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')";
         assert!(
-            workflow.contains(&format!(
-                "publish:\n    name: Publish release asset\n    needs: package\n    {tag_only_guard}"
-            )),
-            "the publish job must exist only on tag pushes"
+            package_section.contains("retention-days: 14"),
+            "candidate artifacts need the bounded approval-window retention"
         );
         assert!(
-            workflow.contains("publish:\n    name: Publish release asset")
-                && workflow.contains("permissions:\n      contents: write")
-                && workflow.contains("uses: actions/download-artifact@v7")
-                && workflow.contains("name: Publish GitHub release asset"),
-            "release write permission and GitHub release mutation must stay inside the tag-only publish job"
+            !package_section.contains("gh release") && !package_section.contains("--clobber"),
+            "candidate preparation must never touch tags or releases"
         );
+        // Publication is a separate maintainer dispatch carrying the trusted
+        // authorization packet; tag pushes only re-package candidates.
         let publish_section = workflow
             .split_once("\n  publish:\n")
             .map(|(_, section)| section)
             .unwrap_or_default();
-        let checkout_index = publish_section.find("uses: actions/checkout@v5");
-        let notes_index = publish_section.find("--notes-file dist/release-notes.md");
         assert!(
-            checkout_index
-                .zip(notes_index)
-                .is_some_and(|(checkout, notes)| checkout < notes),
-            "the publish job must check out the tagged repository before reading release notes"
+            publish_section.contains(
+                "if: github.event_name == 'workflow_dispatch' && inputs['candidate-run-id'] != ''"
+            ),
+            "the publish job must exist only on the explicit authorization dispatch"
         );
         assert!(
-            !publish_section.contains("--notes-file .github/release-notes.md"),
-            "the publish job must publish rendered notes, not the raw template"
-        );
-        let candidate_index =
-            publish_section.find("name: Validate immutable release candidate receipt");
-        let render_index = publish_section.find("render-release-notes");
-        let release_index = publish_section.find("gh release");
-        assert!(
-            candidate_index
-                .zip(render_index)
-                .zip(release_index)
-                .zip(notes_index)
-                .is_some_and(|(((candidate, render), release), notes)| {
-                    candidate < render && render < release && render < notes
-                }),
-            "the publish job must render release notes after candidate validation and before any gh release command"
+            publish_section.contains("permissions:\n      contents: write"),
+            "release write permission must stay inside the authorization-dispatch publish job"
         );
         assert!(
-            !publish_section.contains("dtolnay/rust-toolchain@master")
-                && !publish_section.contains("rustup default"),
-            "the publish job must not add a mutable toolchain action or persistent host state"
+            !workflow.contains("gh release") && !workflow.contains("--clobber"),
+            "no workflow step may create, upload to, or overwrite a release directly"
         );
         assert!(
-            publish_section.contains("rustup toolchain install 1.95.0 --profile minimal")
-                && publish_section
-                    .contains("cargo +1.95.0 run --locked --package xtask -- render-release-notes")
-                && publish_section.contains("--tag \"$TAG\" --output dist/release-notes.md")
-                && publish_section.contains("TAG: ${{ steps.tag.outputs.tag }}"),
-            "the publish job must render notes offline with the pinned toolchain and validated tag"
+            !publish_section.contains("needs:"),
+            "publication must never consume a same-run package artifact"
         );
-        let install_index =
-            publish_section.find("rustup toolchain install 1.95.0 --profile minimal");
         assert!(
-            install_index
-                .zip(render_index)
-                .is_some_and(|(install, render)| install < render),
-            "the publish job must install the pinned toolchain before rendering release notes"
+            publish_section.contains("persist-credentials: false"),
+            "the publish checkout must not persist git credentials"
+        );
+        // Release notes are rendered offline during packaging, not in the
+        // publish job, so the candidate prose ships with the frozen artifact.
+        assert!(
+            package_section.contains("render-release-notes")
+                && !publish_section.contains("render-release-notes"),
+            "release notes must be rendered offline during packaging"
         );
     }
 
     #[test]
     fn release_binary_workflow_records_and_validates_immutable_candidate() {
-        let workflow = include_str!("../.github/workflows/release-binary.yml");
+        // #1344 boundary: the non-publishing package job freezes an
+        // authorized_release.v1 packet bound to the immutable artifact
+        // identity, and the publish job admits it with the #1343 validator
+        // before the single create/upload pass.
+        let workflow =
+            include_str!("../.github/workflows/release-binary.yml").replace("\r\n", "\n");
         for required in [
-            "name: Write immutable release candidate receipt",
-            "ub-review.release_candidate.v1",
-            "candidate_sha=\"$(git rev-parse HEAD)\"",
-            "dist/release-candidate.json",
-            "name: Validate immutable release candidate receipt",
-            "$(jq -r '.head_sha' \"$manifest\")\" = \"$GITHUB_SHA\"",
-            "$(jq -r '.archive_sha256' \"$manifest\")\" = \"$archive_sha256\"",
-            "$(jq -r '.toolchain' \"$manifest\")\" = \"1.95.0\"",
+            "name: Write authorized release candidate packet",
+            "--arg schema \"ub-review.authorized_release.v1\"",
+            "--argjson run_id \"$GITHUB_RUN_ID\"",
+            "--argjson run_attempt \"$GITHUB_RUN_ATTEMPT\"",
+            "--argjson artifact_id \"$CANDIDATE_ARTIFACT_ID\"",
+            "--arg peeled_commit \"$head_sha\"",
+            "dist/authorized-release-packet.json",
+            "test \"$(jq -r '.artifact_id' dist/authorized-release-packet.json)\" = \"$CANDIDATE_ARTIFACT_ID\"",
         ] {
             assert!(
                 workflow.contains(required),
-                "release candidate contract missing: {required}"
+                "authorized candidate packet contract missing: {required}"
             );
         }
+        // The publish job resolves the trusted authorization inputs and runs
+        // the #1343 validator command before the only credential-bearing
+        // side effect.
+        let publish_section = workflow
+            .split_once("\n  publish:\n")
+            .map(|(_, section)| section)
+            .unwrap_or_default();
+        for required in [
+            "inputs.candidate-run-id",
+            "inputs.candidate-artifact-id",
+            "inputs.packet-artifact-id",
+            "inputs.packet-sha256",
+            "inputs.authorization-record",
+            "inputs.authorization-verifier",
+            "cargo run --locked --package xtask -- validate-release",
+            "--packet-sha256 \"$PACKET_SHA256\"",
+            "--authorization-record \"$AUTHORIZATION_RECORD\"",
+            "--now \"$now\"",
+            "--publish",
+        ] {
+            assert!(
+                publish_section.contains(required),
+                "publish authorization contract missing: {required}"
+            );
+        }
+        // The validity-window claim is stamped before the bytes artifact is
+        // uploaded so the publish horizon (artifact expires_at) covers it.
+        let package_stamp = workflow.find("id: window").unwrap_or(0);
+        let upload = workflow.find("actions/upload-artifact").unwrap_or(0);
+        assert!(
+            package_stamp > 0 && package_stamp < upload,
+            "the validity window must be stamped before the first artifact upload"
+        );
     }
 
     #[test]
