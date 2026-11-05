@@ -391,7 +391,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::task_ledger::{TaskEvent, TaskTerminalDisposition};
+    use crate::task_ledger::TaskEvent;
+    #[cfg(unix)]
+    use crate::task_ledger::TaskTerminalDisposition;
     use crate::tests::{run_test_command, test_diff, test_run_args};
     use anyhow::ensure;
     use std::fs;

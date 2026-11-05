@@ -37,6 +37,13 @@ fn serve_with_open_prefix(
     let process = Arc::clone(&caller);
     let handle = thread::spawn(move || {
         let mut requests = Vec::new();
+        #[cfg_attr(
+            not(target_os = "linux"),
+            expect(
+                unused_mut,
+                reason = "children are pushed only by the Linux-gated fixture branch"
+            )
+        )]
         let mut children = Vec::new();
         let deadline = Instant::now() + Duration::from_secs(45);
         for (index, (status, body)) in responses.into_iter().enumerate() {

@@ -23,6 +23,13 @@ pub trait FixtureCommandExt {
     /// Capture with null stdin and piped output. Fixture callers use these
     /// defaults; this deliberately does not support custom stdio configuration.
     fn fixture_output(&mut self) -> io::Result<Output>;
+    #[cfg_attr(
+        not(target_os = "linux"),
+        expect(
+            dead_code,
+            reason = "fixture_status callers are Linux-gated; the trait stays cross-platform"
+        )
+    )]
     fn fixture_status(&mut self) -> io::Result<ExitStatus>;
 }
 
