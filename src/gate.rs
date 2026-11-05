@@ -900,10 +900,10 @@ pub(crate) fn required_proof_receipt_class(receipt: &ProofReceipt) -> RequiredPr
         "head_passed" | "discriminating" => RequiredProofClass::Passed,
         "head_failed" | "timed_out" => RequiredProofClass::Failed,
         // Missing receipts, `skipped_budget`, `skipped_profile`,
-        // `non_discriminating`, and `base_patch_failed` stay non-blocking by
-        // default: a dry run must not redden the gate. Repos opt skipped
-        // required proof into blocking via [gate.blocking]
-        // required_proof_unproven = true.
+        // `non_discriminating`, `base_patch_failed`, and
+        // `terminated_without_exit_code` stay non-blocking by default: a dry
+        // run must not redden the gate. Repos opt skipped required proof into
+        // blocking via [gate.blocking] required_proof_unproven = true.
         _ => RequiredProofClass::Skipped,
     }
 }

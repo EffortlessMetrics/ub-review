@@ -140,7 +140,8 @@ where
         )?;
         let result = match head.status.as_str() {
             "passed" => "head_passed",
-            "failed" => "head_failed",
+            "failed" if head.exit_code.is_some() => "head_failed",
+            "failed" => "terminated_without_exit_code",
             "timed_out" => "timed_out",
             _ => "skipped_profile",
         };
@@ -500,6 +501,95 @@ mod tests {
             proof_result.resource_leases[0].reason,
             "profile allows zero focused build leases"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn signal_terminated_build_command_cannot_grant_head_failed_credit() -> Result<()> {
+        for (head_exit_code, expected_result) in [
+            (None, "terminated_without_exit_code"),
+            (Some(7), "head_failed"),
+        ] {
+            let temp = tempfile::tempdir()?;
+            let out = temp.path().join("out");
+            let diff = test_diff();
+            let proof_requests = vec![ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "proof-build-signal-terminated".to_owned(),
+                lane: "architecture".to_owned(),
+                requested_by: vec!["architecture".to_owned()],
+                command: "cargo check --workspace --all-targets --locked".to_owned(),
+                reason: "Exercise signal-terminated build proof credit.".to_owned(),
+                cost: "focused-build".to_owned(),
+                timeout_sec: 90,
+                required: false,
+                status: "requested".to_owned(),
+            }];
+            let tasks = focused_build_candidates_from_requests(&proof_requests);
+            let args = test_run_args(out.clone());
+            let profile = Profile {
+                limits: Limits {
+                    builds: 1,
+                    ..Limits::default()
+                },
+                ..Profile::default()
+            };
+
+            let proof_result = super::run_focused_build_proof_tasks_with_runner(
+                temp.path(),
+                &out,
+                &diff,
+                &profile,
+                &args,
+                ProofBudget {
+                    max_focused_test_files: 3,
+                    max_focused_tests: 1,
+                    per_command_timeout_sec: 120,
+                    max_total_seconds: 120,
+                },
+                tasks,
+                None,
+                ProofExecutionPhase::ModelRequest,
+                |_root, _argv, _env, _timeout, stdout, stderr, observe_process| {
+                    observe_process(CommandProcessObservation::Spawned);
+                    fs::write(stdout, b"")?;
+                    fs::write(stderr, b"")?;
+                    Ok(CommandStatus {
+                        exit_code: head_exit_code,
+                        timed_out: false,
+                        success: false,
+                        reason: match head_exit_code {
+                            Some(code) => format!("exit code {code}"),
+                            None => "process terminated without an exit code: signal: 9 (SIGKILL)"
+                                .to_owned(),
+                        },
+                        duration_ms: 1,
+                    })
+                },
+            )?;
+
+            assert_eq!(proof_result.proof_receipts.len(), 1);
+            let receipt = &proof_result.proof_receipts[0];
+            assert_eq!(receipt.kind, "focused-build");
+            assert_eq!(receipt.result, expected_result, "{receipt:?}");
+            assert_eq!(receipt.commands[0].exit_code, head_exit_code);
+            assert_eq!(
+                proof_receipt_is_test_proof_result(receipt),
+                head_exit_code.is_some()
+            );
+            assert_eq!(
+                proof_receipt_is_missing_evidence(receipt),
+                head_exit_code.is_none()
+            );
+            assert_eq!(
+                witness_status_for_proof_receipt(receipt),
+                if head_exit_code.is_some() {
+                    "tool-confirmed"
+                } else {
+                    "needs-witness"
+                }
+            );
+        }
         Ok(())
     }
 }

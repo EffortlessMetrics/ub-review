@@ -198,6 +198,11 @@ pub(crate) fn render_missing_proof_receipt_summary(text: &mut String, receipt: &
         "base_patch_failed" => format!(
             "Base+tests proof was unavailable for `{command}` because the test-only patch did not apply cleanly."
         ),
+        "terminated_without_exit_code" => {
+            format!(
+                "Focused proof terminated without an exit code for `{command}`; no established test verdict."
+            )
+        }
         "non_discriminating" => {
             let head_status = proof_command_outcome(receipt, "head")
                 .unwrap_or_else(|| "HEAD status unknown".to_owned());
