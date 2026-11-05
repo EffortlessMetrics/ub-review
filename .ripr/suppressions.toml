@@ -48587,3 +48587,703 @@ kind = "exposure_gap"
 finding_id = "probe:tests_pr_context_hydration.rs:return_value:6a90594a"
 owner = "ub-review/core"
 reason = "reachable_unrevealed static-path gap on PR #1648; probe )]: No assertion found on related tests. Reached by api_text_truncation_is_receipted_without_rewriting_original_records, exact_capture_limit_includes_status_trailer_and_rejects_one_extra_byte, first_page_and_zero_text_budget_keep_explicit_omissions. Re-verify after any edit to tests/pr_context_hydration.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:218ddb43"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe const BOUNDED_TEXT: usize = 400;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:2f82eabb"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe match arg.as_str() {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cargo_allow_present_and_absent_preserve_real_cargo_and_custody, clippy_findings_match_absolute_diagnostic_paths, corrupt_archive_refuses_without_a_receipt. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:12b0d61b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe \"--checksum\" => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by checksum_layout_and_malformed_identity_reject_independently, corrupt_archive_refuses_without_a_receipt, every_required_field_is_strict_and_input_order_is_semantic. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:fba813bd"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe \"--release-tag\" => release_tag = Some(take_value(&mut args, \"--release-tag\")?),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_workflow_tag_shapes, concurrent_tag_creation_is_never_adopted, corrupt_archive_refuses_without_a_receipt. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:c555c465"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe \"--asset\" => asset_name = Some(take_value(&mut args, \"--asset\")?),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, every_required_field_is_strict_and_input_order_is_semantic, git_patch_paths_decode_bytes_without_normalizing_identity. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:e6745590"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe \"--install-dir\" => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, every_required_field_is_strict_and_input_order_is_semantic, git_patch_paths_decode_bytes_without_normalizing_identity. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:f53f493e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe \"--harness-revision\" => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, every_required_field_is_strict_and_input_order_is_semantic, git_patch_paths_decode_bytes_without_normalizing_identity. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:24f83484"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe \"--probe-path\" => probe_path = Some(take_value(&mut args, \"--probe-path\")?),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, clippy_findings_match_absolute_diagnostic_paths, corrupt_archive_refuses_without_a_receipt. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:659fd7bb"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe \"--cargo-home\" => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cargo_allow_present_and_absent_preserve_real_cargo_and_custody, corrupt_archive_refuses_without_a_receipt, every_required_field_is_strict_and_input_order_is_semantic. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:2907832b"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe \"--now\" => now = Some(take_u64(&mut args, \"--now\")?),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, epoch_to_ymd_matches_known_dates, every_required_field_is_strict_and_input_order_is_semantic. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:5d02fe65"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe other => bail!(\"unexpected prove-install argument `{other}`\"),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, every_required_field_is_strict_and_input_order_is_semantic, git_patch_paths_decode_bytes_without_normalizing_identity. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:a8146509"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe Ok(Self {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, every_required_field_is_strict_and_input_order_is_semantic, git_patch_paths_decode_bytes_without_normalizing_identity. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:fccf5879"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe probe_path,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, every_required_field_is_strict_and_input_order_is_semantic, git_patch_paths_decode_bytes_without_normalizing_identity. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:2f0258ef"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe cargo_home,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, every_required_field_is_strict_and_input_order_is_semantic, git_patch_paths_decode_bytes_without_normalizing_identity. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:731a4862"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe now,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, epoch_to_ymd_matches_known_dates, every_required_field_is_strict_and_input_order_is_semantic. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:4cc17056"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe match self {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cargo_allow_present_and_absent_preserve_real_cargo_and_custody, clippy_findings_match_absolute_diagnostic_paths, corrupt_archive_refuses_without_a_receipt. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:6146f00a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe request: &ReleaseRequest,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:2989764e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe checksum_path,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by acceptance_captures_private_bytes_and_deterministic_identity, actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:2d8f4cd5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe _request: &ReleaseRequest,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:87078133"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe Ok(ResolvedArtifact {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:9271a7e6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe pub path_env: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by authorized_candidate_produces_exactly_one_byte_identical_publication, corrupt_archive_refuses_without_a_receipt, dry_run_decision_performs_no_publish_call. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:ed744147"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe \"exit status {:?}\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cargo_allow_present_and_absent_preserve_real_cargo_and_custody, corrupt_archive_refuses_without_a_receipt, git_failure_during_staged_admission_keeps_no_success_summary. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:e7198b34"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe \"exit status {:?}\",: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cargo_allow_present_and_absent_preserve_real_cargo_and_custody, corrupt_archive_refuses_without_a_receipt, git_failure_during_staged_admission_keeps_no_success_summary. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:35e2e38e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe )));: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cargo_allow_present_and_absent_preserve_real_cargo_and_custody, corrupt_archive_refuses_without_a_receipt, git_failure_during_staged_admission_keeps_no_success_summary. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:d1dc7b3e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe )));: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cargo_allow_present_and_absent_preserve_real_cargo_and_custody, corrupt_archive_refuses_without_a_receipt, git_failure_during_staged_admission_keeps_no_success_summary. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:07461bef"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe pub scope: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by authorized_candidate_produces_exactly_one_byte_identical_publication, corrupt_archive_refuses_without_a_receipt, dry_run_decision_performs_no_publish_call. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:a6ff7251"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe process_path,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:8f7c34ea"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe .map(|entry| entry.to_string_lossy().into_owned()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:7b34a397"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe .collect(): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:62b8c220"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe return Some(dir.to_path_buf());: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:e36a467d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe return false;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:e36a467d.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe return false;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:6cfdfc75"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:d699c65e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:51349f38"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:34f80c02"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe os: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:17bd2b44"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe scope: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:db68a869"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe match self {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cargo_allow_present_and_absent_preserve_real_cargo_and_custody, clippy_findings_match_absolute_diagnostic_paths, corrupt_archive_refuses_without_a_receipt. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:90580b9c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe InstallStop::ChecksumReceipt { detail } => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cargo_allow_present_and_absent_preserve_real_cargo_and_custody, corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:997bca4e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe InstallStop::ChecksumMismatch { expected, actual } => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by actual_gnu_producer_format_is_accepted, cargo_allow_present_and_absent_preserve_real_cargo_and_custody, corrupt_archive_refuses_without_a_receipt. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:56aa75ea"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe InstallStop::ExtractionFailed { detail } => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cargo_allow_present_and_absent_preserve_real_cargo_and_custody, corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:e758fe7d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe InstallStop::BinaryMissing { detail } => write!(f, \"{detail}\"),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cargo_allow_present_and_absent_preserve_real_cargo_and_custody, corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:30949de4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe InstallStop::BinaryNotExecutable { path } => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, cargo_allow_present_and_absent_preserve_real_cargo_and_custody, clippy_findings_match_absolute_diagnostic_paths. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:cc891c9e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe InstallStop::VersionExecution { detail } => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cargo_allow_present_and_absent_preserve_real_cargo_and_custody, corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:64c612c9"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe InstallStop::VersionIdentity { expected, reported } => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cargo_allow_present_and_absent_preserve_real_cargo_and_custody, corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:52f34dbc"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe InstallStop::ToolPresent { tool, path, scope } => write!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, cargo_allow_present_and_absent_preserve_real_cargo_and_custody, clippy_findings_match_absolute_diagnostic_paths. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:5c5ea993"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe match stop {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, actual_gnu_producer_format_is_accepted. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:08f27e53"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe pub platform_os: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by authorized_candidate_produces_exactly_one_byte_identical_publication, corrupt_archive_refuses_without_a_receipt, dry_run_decision_performs_no_publish_call. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:876b6e38"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe pub platform_arch: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by authorized_candidate_produces_exactly_one_byte_identical_publication, corrupt_archive_refuses_without_a_receipt, dry_run_decision_performs_no_publish_call. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:3ea7483a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe pub archive_source: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by authorized_candidate_produces_exactly_one_byte_identical_publication, corrupt_archive_refuses_without_a_receipt, dry_run_decision_performs_no_publish_call. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:8a5fa4cb"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe pub archive_length: u64,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by authorized_candidate_produces_exactly_one_byte_identical_publication, corrupt_archive_refuses_without_a_receipt, dry_run_decision_performs_no_publish_call. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:db9a7103"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe pub checksum_sha256: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by authorized_candidate_produces_exactly_one_byte_identical_publication, corrupt_archive_refuses_without_a_receipt, dry_run_decision_performs_no_publish_call. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:cc1fd606"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe version_probe: &dyn VersionProbe,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:0b243640"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe request: &ReleaseRequest,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:c7c05a0a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:c1f3af49"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:c7c05a0a.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:c1f3af49.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:4cf30b56"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe })?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:c7c05a0a.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:c1f3af49.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:56ca4d6d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe Ok(InstalledBinary {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:b9f6d127"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:697f7328"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:b9f6d127.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:697f7328.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:b9f6d127.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:697f7328.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:5758469c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe .to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:a851364e"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe .to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:dca479bf"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe .to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:b9f6d127.4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:697f7328.4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:8e3bed5d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:272143c2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:f98aadb6"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:b641b1ba"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe detail: \"malformed\".to_owned(),: Only relational oracle found; it may not discriminate the changed value exactly. Reached by checksum_layout_and_malformed_identity_reject_independently, corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:272143c2.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:f98aadb6.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:predicate:de291582"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe while offset + 512 <= tar.len() {: Strong oracle found: exact value or pattern assertion. Reached by corrupt_archive_refuses_without_a_receipt, exact_length_hex_checks_use_regex_quantifiers, invalid_release_requests_refuse_before_fetch. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:4d4cc41d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe candidate = Some(tar[data_start..data_end].to_vec());: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by authorized_candidate_produces_exactly_one_byte_identical_publication, candidate_preparation_only_uploads_frozen_artifacts, corrupt_archive_refuses_without_a_receipt. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:5bc9cc88"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe )));: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:eac80d11"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe return None;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:cc940f76"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe Some(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:20dcae54"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe candidate_bytes: &[u8],: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:774c375f"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe ),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:7294dab0"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe ),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:fc1cb073"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe ),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:67b51881"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:7e27fe39"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:f065c5b8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe })?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:f065c5b8.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe })?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:f065c5b8.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe })?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:67b51881.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:7e27fe39.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:f065c5b8.4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe })?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:67b51881.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:7e27fe39.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:f065c5b8.5"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe })?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:774c375f.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe ),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:7294dab0.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe ),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:fc1cb073.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe ),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:67b51881.4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:7e27fe39.4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:6a053411"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe pub os: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by authorized_candidate_produces_exactly_one_byte_identical_publication, corrupt_archive_refuses_without_a_receipt, dry_run_decision_performs_no_publish_call. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:8a5fa4cb.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe pub archive_length: u64,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by authorized_candidate_produces_exactly_one_byte_identical_publication, corrupt_archive_refuses_without_a_receipt, dry_run_decision_performs_no_publish_call. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:db9a7103.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe pub checksum_sha256: String,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by authorized_candidate_produces_exactly_one_byte_identical_publication, corrupt_archive_refuses_without_a_receipt, dry_run_decision_performs_no_publish_call. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:89f012d1"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe bail!(: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:47195da4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe )?;: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:0cd70287"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe Ok(()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, archive_negative_corpus_is_bounded_without_execution. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:ff813718"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe .unwrap_or_else(|| std::env::var(\"PATH\").unwrap_or_default()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, clippy_findings_match_absolute_diagnostic_paths, corrupt_archive_refuses_without_a_receipt. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:8774a064"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe SystemTime::now(): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, epoch_to_ymd_matches_known_dates, invalid_release_requests_refuse_before_fetch. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:b199b90c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe .duration_since(UNIX_EPOCH): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:41a8617c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe .map(|duration| duration.as_secs()): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:15789230"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe .unwrap_or_default(): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:9f261f11"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe version_probe: &dyn VersionProbe,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:d73eecd2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:5e19a604"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe .to_owned(),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:d73eecd2.2"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:d73eecd2.3"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe },: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:9b5f08a7"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe std::process::id(): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:c49c6376"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe encoder.finish().map_err(Into::into): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution, corrupt_archive_refuses_without_a_receipt. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:79b0cc22"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe encoder.finish().map_err(Into::into): Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by actual_gnu_producer_format_is_accepted, archive_negative_corpus_is_bounded_without_execution, corrupt_archive_refuses_without_a_receipt. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:34f081f8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe Self {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:1e2dbd8c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe Self {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cargo_allow_present_and_absent_preserve_real_cargo_and_custody, corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:92c95948"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe request: &ReleaseRequest,: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:b74d8206"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe detail: detail.clone(),: Only relational oracle found; it may not discriminate the changed value exactly. Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:8f3c7bf4"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:1e0ece96"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe });: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:70c89def"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe Ok(ResolvedArtifact {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:4f5c9aa8"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe Self {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:27ecb45c"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe Self {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, individual_identity_mutations_have_stable_reasons, invalid_release_requests_refuse_before_fetch. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:ecdf1622"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe Self {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, individual_identity_mutations_have_stable_reasons, invalid_release_requests_refuse_before_fetch. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:error_path:9758f871"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe }: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, individual_identity_mutations_have_stable_reasons, invalid_release_requests_refuse_before_fetch. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:f716015d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe match &self.output {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, cargo_allow_present_and_absent_preserve_real_cargo_and_custody, clippy_findings_match_absolute_diagnostic_paths. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:match_arm:8ebb6f6a"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe Ok(text) => Ok(text.clone()),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by cargo_allow_present_and_absent_preserve_real_cargo_and_custody, corrupt_archive_refuses_without_a_receipt, git_failure_during_staged_admission_keeps_no_success_summary. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:1b489e10"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe ProveInstallOptions {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, invalid_release_requests_refuse_before_fetch, layout_refusals_cover_nested_duplicate_and_non_regular_roots. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:field_construction:2c792267"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe now: Some(100),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, epoch_to_ymd_matches_known_dates, invalid_release_requests_refuse_before_fetch. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_install_proof.rs:return_value:ee593259"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe now: Some(100),: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by corrupt_archive_refuses_without_a_receipt, epoch_to_ymd_matches_known_dates, invalid_release_requests_refuse_before_fetch. Re-verify after any edit to xtask/src/install_proof.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:match_arm:38b7593d"
+owner = "ub-review/core"
+reason = "weakly_exposed static-path gap on PR #1653; probe \"prove-install\" => {: Discriminator unconfirmed: no assertion text references this probe's changed expression (observation_unverified). Reached by accepts_flag_like_output_path, accepts_workflow_tag_shapes, affected_packages_include_all_packages_for_root_manifest_and_lockfile. Re-verify after any edit to xtask/src/main.rs."
