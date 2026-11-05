@@ -5733,6 +5733,7 @@ fn duplicate_model_proof_requests_execute_once_with_all_request_ids() -> Result<
     let path = prepend_to_path(&fake_bin)?;
     let fake_cargo_log = temp.path().join("fake-cargo.log");
     let fake_cargo_log_str = path_str(&fake_cargo_log)?.to_owned();
+    write_fake_tool_config(&fake_bin, "cargo", &[("log", &fake_cargo_log_str)])?;
     let out = temp.path().join("packet");
     let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
     let bin = env!("CARGO_BIN_EXE_ub-review");
@@ -5775,7 +5776,6 @@ fn duplicate_model_proof_requests_execute_once_with_all_request_ids() -> Result<
             ("PATH", path.as_str()),
             ("UB_REVIEW_MINIMAX_API_KEY", dummy_key),
             ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
-            ("FAKE_CARGO_LOG", fake_cargo_log_str.as_str()),
         ],
     )?;
     let provider_requests = join_fake_provider(provider)?;
@@ -5965,14 +5965,12 @@ fn model_suggested_manual_cost_proof_request_is_rejected_before_execution() -> R
     let path = prepend_to_path(&fake_bin)?;
     let fake_cargo_log = temp.path().join("fake-cargo.log");
     let fake_cargo_log_str = path_str(&fake_cargo_log)?.to_owned();
+    write_fake_tool_config(&fake_bin, "cargo", &[("log", &fake_cargo_log_str)])?;
     run_with_env(
         temp.path(),
         "cargo",
         &["--version"],
-        &[
-            ("PATH", path.as_str()),
-            ("FAKE_CARGO_LOG", fake_cargo_log_str.as_str()),
-        ],
+        &[("PATH", path.as_str())],
     )
     .context("fake cargo sanity check before manual-cost proof run")?;
     let out = temp.path().join("packet");
@@ -6017,7 +6015,6 @@ fn model_suggested_manual_cost_proof_request_is_rejected_before_execution() -> R
             ("PATH", path.as_str()),
             ("UB_REVIEW_MINIMAX_API_KEY", dummy_key),
             ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
-            ("FAKE_CARGO_LOG", fake_cargo_log_str.as_str()),
         ],
     )?;
     let provider_requests = join_fake_provider(provider)?;
@@ -6120,14 +6117,12 @@ fn model_suggested_shell_token_proof_request_is_rejected_before_execution() -> R
     let path = prepend_to_path(&fake_bin)?;
     let fake_cargo_log = temp.path().join("fake-cargo.log");
     let fake_cargo_log_str = path_str(&fake_cargo_log)?.to_owned();
+    write_fake_tool_config(&fake_bin, "cargo", &[("log", &fake_cargo_log_str)])?;
     run_with_env(
         temp.path(),
         "cargo",
         &["--version"],
-        &[
-            ("PATH", path.as_str()),
-            ("FAKE_CARGO_LOG", fake_cargo_log_str.as_str()),
-        ],
+        &[("PATH", path.as_str())],
     )?;
     let out = temp.path().join("packet");
     let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
@@ -6171,7 +6166,6 @@ fn model_suggested_shell_token_proof_request_is_rejected_before_execution() -> R
             ("PATH", path.as_str()),
             ("UB_REVIEW_MINIMAX_API_KEY", dummy_key),
             ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
-            ("FAKE_CARGO_LOG", fake_cargo_log_str.as_str()),
         ],
     )?;
     let provider_requests = join_fake_provider(provider)?;
@@ -6275,6 +6269,11 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
     let fake_bin = temp.path().join("fake-bin");
     write_fake_bun(&fake_bin)?;
     let path = prepend_to_path(&fake_bin)?;
+    write_fake_tool_config(
+        &fake_bin,
+        "bun",
+        &[("sleep_ms", "600"), ("sleep_seconds", "1")],
+    )?;
     let dummy_key = "dummy-minimax-key-for-overlap-test";
     let (provider_url, provider) = spawn_fake_openai_provider(2)?;
     let out = temp.path().join("packet");
@@ -6317,8 +6316,6 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
             ("PATH", path.as_str()),
             ("UB_REVIEW_MINIMAX_API_KEY", dummy_key),
             ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
-            ("FAKE_BUN_SLEEP_MS", "600"),
-            ("FAKE_BUN_SLEEP_SECONDS", "1"),
         ],
     )?;
     let provider_requests = join_fake_provider(provider)?;
@@ -6445,6 +6442,11 @@ required = true
     let fake_bin = temp.path().join("fake-bin");
     write_fake_cargo(&fake_bin)?;
     let path = prepend_to_path(&fake_bin)?;
+    write_fake_tool_config(
+        &fake_bin,
+        "cargo",
+        &[("sleep_ms", "700"), ("sleep_seconds", "1")],
+    )?;
     let dummy_key = "dummy-minimax-key-for-seeded-proof-overlap";
     let (provider_url, provider) = spawn_fake_openai_provider_with_delay(2, 500)?;
     let out = temp.path().join("packet");
@@ -6488,8 +6490,6 @@ required = true
             ("PATH", path.as_str()),
             ("UB_REVIEW_MINIMAX_API_KEY", dummy_key),
             ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
-            ("FAKE_CARGO_SLEEP_MS", "700"),
-            ("FAKE_CARGO_SLEEP_SECONDS", "1"),
         ],
     )?;
     let provider_requests = join_fake_provider(provider)?;
@@ -7830,8 +7830,12 @@ fn write_fake_bun(dir: &Path) -> Result<()> {
             &script,
             r#"#!/bin/sh
 echo "fake bun $*"
-if [ -n "$FAKE_BUN_SLEEP_SECONDS" ]; then
-  sleep "$FAKE_BUN_SLEEP_SECONDS"
+config="$(dirname "$0")/fake-bun-config.txt"
+if [ -f "$config" ]; then
+  sleep_seconds=$(sed -n 's/^sleep_seconds=//p' "$config" | head -n 1)
+  if [ -n "$sleep_seconds" ]; then
+    sleep "$sleep_seconds"
+  fi
 fi
 if [ -f .git ] && grep -q base-plus-tests .git; then
   echo "base failure" >&2
@@ -7848,6 +7852,22 @@ exit 0
         )?;
     }
     Ok(())
+}
+
+/// Stub tools take their operational controls (invocation log path, proof
+/// timing sleeps) from a config file beside the stub binary instead of the
+/// process environment. Proof children run under the #1062 deny-by-default
+/// environment allowlist, so ambient fixture variables no longer reach them
+/// and must not: only documented non-secret entries cross that boundary.
+fn write_fake_tool_config(dir: &Path, tool: &str, entries: &[(&str, &str)]) -> Result<()> {
+    let mut body = String::new();
+    for (key, value) in entries {
+        body.push_str(key);
+        body.push('=');
+        body.push_str(value);
+        body.push('\n');
+    }
+    write_file(&dir.join(format!("fake-{tool}-config.txt")), &body)
 }
 
 fn write_fake_cargo(dir: &Path) -> Result<()> {
@@ -7880,11 +7900,16 @@ fn write_fake_cargo(dir: &Path) -> Result<()> {
             &script,
             r#"#!/bin/sh
 echo "fake cargo $*"
-if [ -n "$FAKE_CARGO_LOG" ]; then
-  printf '%s\n' "fake cargo $*" >> "$FAKE_CARGO_LOG"
-fi
-if [ -n "$FAKE_CARGO_SLEEP_SECONDS" ]; then
-  sleep "$FAKE_CARGO_SLEEP_SECONDS"
+config="$(dirname "$0")/fake-cargo-config.txt"
+if [ -f "$config" ]; then
+  log=$(sed -n 's/^log=//p' "$config" | head -n 1)
+  if [ -n "$log" ]; then
+    printf '%s\n' "fake cargo $*" >> "$log"
+  fi
+  sleep_seconds=$(sed -n 's/^sleep_seconds=//p' "$config" | head -n 1)
+  if [ -n "$sleep_seconds" ]; then
+    sleep "$sleep_seconds"
+  fi
 fi
 exit 0
 "#,
@@ -7922,9 +7947,6 @@ fn real_fake_tool_writers_survive_concurrent_launches() -> Result<()> {
             for tool in ["bun", "cargo"] {
                 let output = Command::new(dir.join(tool))
                     .current_dir(cwd.path())
-                    .env_remove("FAKE_BUN_SLEEP_SECONDS")
-                    .env_remove("FAKE_CARGO_LOG")
-                    .env_remove("FAKE_CARGO_SLEEP_SECONDS")
                     .fixture_output()?;
                 assert!(output.status.success());
                 assert_eq!(output.stdout, format!("fake {tool} \n").as_bytes());
@@ -7940,16 +7962,26 @@ fn real_fake_tool_writers_survive_concurrent_launches() -> Result<()> {
 }
 
 #[cfg(windows)]
-const FAKE_BUN_SOURCE: &str = r#"use std::{env, fs, process};
+const FAKE_BUN_SOURCE: &str = r#"use std::{env, fs, process, thread, time::Duration};
+
+fn sleep_ms_config() -> Option<u64> {
+    let config = env::current_exe()
+        .ok()?
+        .parent()?
+        .join("fake-bun-config.txt");
+    let text = fs::read_to_string(config).ok()?;
+    text.lines().find_map(|line| {
+        let value = line.strip_prefix("sleep_ms=")?;
+        value.parse::<u64>().ok()
+    })
+}
 
 fn main() {
     let cwd = env::current_dir().expect("current dir");
     let args = env::args().skip(1).collect::<Vec<_>>();
     println!("fake bun {}", args.join(" "));
-    if let Ok(value) = env::var("FAKE_BUN_SLEEP_MS") {
-        if let Ok(ms) = value.parse::<u64>() {
-            std::thread::sleep(std::time::Duration::from_millis(ms));
-        }
+    if let Some(ms) = sleep_ms_config() {
+        thread::sleep(Duration::from_millis(ms));
     }
     let mut base_plus_tests = cwd.to_string_lossy().contains("base-plus-tests");
     let git_file = cwd.join(".git");
@@ -7965,13 +7997,25 @@ fn main() {
 "#;
 
 #[cfg(windows)]
-const FAKE_CARGO_SOURCE: &str = r#"use std::env;
+const FAKE_CARGO_SOURCE: &str = r#"use std::{env, fs, thread, time::Duration};
+
+fn config_value(key: &str) -> Option<String> {
+    let config = env::current_exe()
+        .ok()?
+        .parent()?
+        .join("fake-cargo-config.txt");
+    let text = fs::read_to_string(config).ok()?;
+    text.lines().find_map(|line| {
+        let value = line.strip_prefix(key)?.strip_prefix('=')?;
+        Some(value.to_owned())
+    })
+}
 
 fn main() {
     let args = env::args().skip(1).collect::<Vec<_>>();
     println!("fake cargo {}", args.join(" "));
-    if let Ok(path) = env::var("FAKE_CARGO_LOG") {
-        let _ = std::fs::OpenOptions::new()
+    if let Some(path) = config_value("log") {
+        let _ = fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(path)
@@ -7980,9 +8024,9 @@ fn main() {
                 writeln!(file, "fake cargo {}", args.join(" "))
             });
     }
-    if let Ok(value) = env::var("FAKE_CARGO_SLEEP_MS") {
+    if let Some(value) = config_value("sleep_ms") {
         if let Ok(ms) = value.parse::<u64>() {
-            std::thread::sleep(std::time::Duration::from_millis(ms));
+            thread::sleep(Duration::from_millis(ms));
         }
     }
 }
