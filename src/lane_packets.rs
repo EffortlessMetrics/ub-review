@@ -220,8 +220,17 @@ pub(crate) fn append_existing_file(target: &Path, source: &Path) -> Result<()> {
     append_file(target, &text)
 }
 
-/// Run an approved proof/worker subprocess with its explicit environment while
-/// exposing the same spawn and completion authority used by sensors.
+/// Run an approved proof/worker subprocess under the proof environment
+/// contract (#1062) while exposing the same spawn and completion authority
+/// used by sensors.
+///
+/// Proof and worker children execute candidate-controlled code, so they must
+/// never inherit the action's provider, GitHub, OIDC, or unrelated runner
+/// environment: the child sees only the allowlisted OS and toolchain entries
+/// (see [`proof_child_environment_from`]) plus the command's explicitly
+/// approved environment. Candidate grandchild processes inherit this same
+/// contracted environment, closing the process tree against sentinel
+/// credentials.
 pub(crate) fn run_command_to_files_with_spawn_observer(
     root: &Path,
     argv: &[String],
@@ -231,7 +240,7 @@ pub(crate) fn run_command_to_files_with_spawn_observer(
     stderr_path: &Path,
     observe_process: &mut dyn FnMut(CommandProcessObservation),
 ) -> Result<CommandStatus> {
-    let ambient = BTreeMap::new();
+    let ambient = ambient_environment_snapshot();
     run_command_to_files_inner(CommandRun {
         root,
         argv,
@@ -240,9 +249,18 @@ pub(crate) fn run_command_to_files_with_spawn_observer(
         timeout_sec,
         stdout_path,
         stderr_path,
-        quarantine_environment: false,
+        child_environment: ChildEnvironment::ProofWorkerAllowlist,
         observe_process,
     })
+}
+
+/// Snapshot the ambient parent environment for a quarantined spawn. Keys that
+/// are not valid Unicode are dropped, mirroring the sensor contract: they are
+/// inert rather than fatal.
+fn ambient_environment_snapshot() -> BTreeMap<String, std::ffi::OsString> {
+    std::env::vars_os()
+        .filter_map(|(key, value)| key.into_string().ok().map(|key| (key, value)))
+        .collect()
 }
 
 /// Run a sensor subprocess with the deny-by-default environment contract.
@@ -284,9 +302,7 @@ pub(crate) fn run_sensor_command_to_files_with_spawn_observer(
     stderr_path: &Path,
     observe_process: &mut dyn FnMut(CommandProcessObservation),
 ) -> Result<CommandStatus> {
-    let ambient = std::env::vars_os()
-        .filter_map(|(key, value)| key.into_string().ok().map(|key| (key, value)))
-        .collect();
+    let ambient = ambient_environment_snapshot();
     run_command_to_files_inner(CommandRun {
         root,
         argv,
@@ -295,9 +311,30 @@ pub(crate) fn run_sensor_command_to_files_with_spawn_observer(
         timeout_sec,
         stdout_path,
         stderr_path,
-        quarantine_environment: true,
+        child_environment: ChildEnvironment::SensorAllowlist,
         observe_process,
     })
+}
+
+/// Spawn-time environment policy for one child process.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ChildEnvironment {
+    /// Test-only raw seam: inherit the ambient parent environment plus the
+    /// explicit command environment. Production callers must never use this
+    /// policy for candidate-executing children.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "the ambient-inheritance seam is test-only by construction; the expectation fails if production code ever constructs it"
+        )
+    )]
+    AmbientPlusExplicit,
+    /// Sensor contract (#879): deny-by-default OS allowlist.
+    SensorAllowlist,
+    /// Proof/worker contract (#1062): OS allowlist plus explicit toolchain
+    /// homes; overrides are restricted to repo-template entries.
+    ProofWorkerAllowlist,
 }
 
 struct CommandRun<'a> {
@@ -308,7 +345,7 @@ struct CommandRun<'a> {
     timeout_sec: u64,
     stdout_path: &'a Path,
     stderr_path: &'a Path,
-    quarantine_environment: bool,
+    child_environment: ChildEnvironment,
     observe_process: &'a mut dyn FnMut(CommandProcessObservation),
 }
 
@@ -331,7 +368,7 @@ fn run_command_to_files_inner_with_wait(
         timeout_sec,
         stdout_path,
         stderr_path,
-        quarantine_environment,
+        child_environment,
         observe_process,
     } = run;
     let Some((program, args)) = argv.split_first() else {
@@ -348,14 +385,26 @@ fn run_command_to_files_inner_with_wait(
         .current_dir(root)
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr));
-    if quarantine_environment {
-        // Sensors are advisory child processes. They must never inherit the
-        // action's provider, GitHub, OIDC, or unrelated runner environment.
-        command
-            .env_clear()
-            .envs(sensor_child_environment_from(ambient, env));
-    } else {
-        command.envs(env);
+    match child_environment {
+        ChildEnvironment::AmbientPlusExplicit => {
+            command.envs(env);
+        }
+        ChildEnvironment::SensorAllowlist => {
+            // Sensors are advisory child processes. They must never inherit the
+            // action's provider, GitHub, OIDC, or unrelated runner environment.
+            command
+                .env_clear()
+                .envs(sensor_child_environment_from(ambient, env));
+        }
+        ChildEnvironment::ProofWorkerAllowlist => {
+            // Proof and worker children execute candidate-controlled code, so
+            // the same deny-by-default rule applies with the toolchain homes a
+            // cargo child demonstrably needs (see the allowlist tables above
+            // [`CHILD_ENVIRONMENT_OS_ENTRIES`]).
+            command
+                .env_clear()
+                .envs(proof_child_environment_from(ambient, env));
+        }
     }
     let mut child = command
         .spawn()
@@ -474,39 +523,178 @@ fn terminate_and_reap_child(
     )
 }
 
+/// Allowlisted child environment entries and their purpose.
+///
+/// Every quarantined child (sensor, proof, worker) inherits only these
+/// non-secret OS entries from the ambient parent environment; every other
+/// key, including provider, GitHub, OIDC, and cloud credentials, agent
+/// config, credential helpers, and the home directory itself, is dropped at
+/// spawn. Matching is ASCII case-insensitive so Windows-spelled keys resolve.
+///
+/// | Entry | Purpose |
+/// |---|---|
+/// | `PATH` | Resolve the child program and the tools it invokes (cargo, rustc and `+toolchain` proxies, cc/linkers, git, sensor binaries, platform shells). |
+/// | `TEMP`, `TMP` | Windows per-process temporary directories used by toolchains and test fixtures. |
+/// | `TMPDIR` | Unix temporary directory for the same purpose. |
+/// | `SystemRoot`, `WINDIR` | Windows system directory required for system DLL loading and child process creation. |
+/// | `COMSPEC` | Absolute cmd.exe location used by Windows shell fixtures. |
+/// | `PATHEXT` | Windows executable-extension resolution for script fixtures. |
+/// | `LANG`, `LC_ALL` | Locale for stable tool diagnostics. |
+///
+/// Proof and worker children additionally inherit the toolchain homes:
+///
+/// | Entry | Purpose |
+/// |---|---|
+/// | `CARGO_HOME` | Registry/source cache and cargo config for `--locked` proof builds; derived from the ambient home when the runner does not export it. |
+/// | `RUSTUP_HOME` | rustup toolchain resolution for `cargo`/`cargo +nightly` proxies; derived from the ambient home when not exported. |
+///
+/// Proof and worker commands may also add these override entries, each of
+/// which originates only from repo-approved command templates:
+///
+/// | Entry | Purpose |
+/// |---|---|
+/// | `RUSTFLAGS` | Sanitizer-witness template sets `-Zsanitizer=address`. |
+/// | `USE_SYSTEM_BUN` | Base+tests bun variant selects the system bun. |
+///
+/// Candidate-supplied proof requests carry no environment (`ProofRequestV2`
+/// has no env field) and candidate-provided command specs parse to an empty
+/// env, and any override key outside the tables is dropped at spawn, so a
+/// candidate cannot extend the child environment.
+const CHILD_ENVIRONMENT_OS_ENTRIES: [&str; 10] = [
+    "PATH",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "SystemRoot",
+    "WINDIR",
+    "COMSPEC",
+    "PATHEXT",
+    "LANG",
+    "LC_ALL",
+];
+
+/// Toolchain homes a proof/worker cargo child needs on top of the OS entries.
+const CHILD_ENVIRONMENT_TOOLCHAIN_ENTRIES: [&str; 2] = ["CARGO_HOME", "RUSTUP_HOME"];
+
+/// Override entries a proof/worker command may add beyond the inherited
+/// allowlist; see the table above for each entry's repo-template origin.
+const CHILD_ENVIRONMENT_PROOF_OVERRIDE_ENTRIES: [&str; 2] = ["RUSTFLAGS", "USE_SYSTEM_BUN"];
+
 /// Keep only the non-secret execution metadata needed by sensor tools.
 fn sensor_child_environment_from(
     ambient: &BTreeMap<String, std::ffi::OsString>,
     overrides: &BTreeMap<String, String>,
 ) -> BTreeMap<String, std::ffi::OsString> {
-    const ALLOWED: [&str; 10] = [
-        "PATH",
-        "TEMP",
-        "TMP",
-        "TMPDIR",
-        "SystemRoot",
-        "WINDIR",
-        "COMSPEC",
-        "PATHEXT",
-        "LANG",
-        "LC_ALL",
-    ];
-    let is_allowed = |key: &str| {
-        ALLOWED
+    allowlisted_child_environment(
+        ambient,
+        overrides,
+        &CHILD_ENVIRONMENT_OS_ENTRIES,
+        &CHILD_ENVIRONMENT_OS_ENTRIES,
+    )
+}
+
+/// Keep the OS entries, the explicit toolchain homes, and only the approved
+/// template overrides a proof/worker cargo child needs. When the runner never
+/// exported `CARGO_HOME`/`RUSTUP_HOME`, derive them from the ambient home
+/// directory so the rustup proxies and `--locked` builds keep working without
+/// inheriting that home directory itself.
+fn proof_child_environment_from(
+    ambient: &BTreeMap<String, std::ffi::OsString>,
+    overrides: &BTreeMap<String, String>,
+) -> BTreeMap<String, std::ffi::OsString> {
+    let inherited = CHILD_ENVIRONMENT_OS_ENTRIES
+        .iter()
+        .chain(CHILD_ENVIRONMENT_TOOLCHAIN_ENTRIES.iter())
+        .copied()
+        .collect::<Vec<_>>();
+    let override_allowed = CHILD_ENVIRONMENT_OS_ENTRIES
+        .iter()
+        .chain(CHILD_ENVIRONMENT_TOOLCHAIN_ENTRIES.iter())
+        .chain(CHILD_ENVIRONMENT_PROOF_OVERRIDE_ENTRIES.iter())
+        .copied()
+        .collect::<Vec<_>>();
+    let mut child = allowlisted_child_environment(
+        ambient,
+        overrides,
+        inherited.as_slice(),
+        override_allowed.as_slice(),
+    );
+    derive_toolchain_homes_from_ambient_home(ambient, &mut child);
+    child
+}
+
+fn allowlisted_child_environment(
+    ambient: &BTreeMap<String, std::ffi::OsString>,
+    overrides: &BTreeMap<String, String>,
+    inherited_entries: &[&str],
+    override_entries: &[&str],
+) -> BTreeMap<String, std::ffi::OsString> {
+    let is_allowed = |key: &str, entries: &[&str]| {
+        entries
             .iter()
             .any(|allowed| key.eq_ignore_ascii_case(allowed))
     };
     let mut result = ambient
         .iter()
-        .filter(|(key, _)| is_allowed(key))
+        .filter(|(key, _)| is_allowed(key, inherited_entries))
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect::<BTreeMap<_, _>>();
     for (key, value) in overrides {
-        if is_allowed(key) {
+        if is_allowed(key, override_entries) {
             result.insert(key.clone(), value.into());
         }
     }
     result
+}
+
+/// Forward the resolved toolchain homes into the child environment without
+/// inheriting the ambient home directory entry itself: cargo and rustup
+/// otherwise fall back to the (absent) child home and fail to locate the
+/// installed toolchain. The derivation reads the ambient home path in the
+/// trusted parent and exports only the resulting toolchain path.
+fn derive_toolchain_homes_from_ambient_home(
+    ambient: &BTreeMap<String, std::ffi::OsString>,
+    child: &mut BTreeMap<String, std::ffi::OsString>,
+) {
+    let Some(home) = ambient_home_entry(ambient) else {
+        return;
+    };
+    if !child_environment_has_entry(child, "CARGO_HOME") {
+        child.insert(
+            "CARGO_HOME".to_owned(),
+            Path::new(home).join(".cargo").into_os_string(),
+        );
+    }
+    if !child_environment_has_entry(child, "RUSTUP_HOME") {
+        child.insert(
+            "RUSTUP_HOME".to_owned(),
+            Path::new(home).join(".rustup").into_os_string(),
+        );
+    }
+}
+
+fn child_environment_has_entry(child: &BTreeMap<String, std::ffi::OsString>, key: &str) -> bool {
+    child
+        .keys()
+        .any(|existing| existing.eq_ignore_ascii_case(key))
+}
+
+/// The ambient home directory entry: `HOME` on Unix, `USERPROFILE` on Windows.
+#[cfg(unix)]
+fn ambient_home_entry(
+    ambient: &BTreeMap<String, std::ffi::OsString>,
+) -> Option<&std::ffi::OsString> {
+    ambient.get("HOME")
+}
+
+#[cfg(windows)]
+fn ambient_home_entry(
+    ambient: &BTreeMap<String, std::ffi::OsString>,
+) -> Option<&std::ffi::OsString> {
+    ambient
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case("USERPROFILE"))
+        .map(|(_, value)| value)
 }
 
 pub(crate) fn parse_lcov_count(value: &str) -> u64 {
@@ -693,9 +881,9 @@ mod lifecycle_receipt_tests;
 #[cfg(test)]
 mod tests {
     use super::{
-        CommandProcessObservation, CommandRun, TerminateAndReap, reconcile_command_timeout,
-        reconcile_wait_failure, run_command_to_files_inner_with_wait, run_sensor_command_to_files,
-        terminate_and_reap_child,
+        ChildEnvironment, CommandProcessObservation, CommandRun, TerminateAndReap,
+        reconcile_command_timeout, reconcile_wait_failure, run_command_to_files_inner_with_wait,
+        run_sensor_command_to_files, terminate_and_reap_child,
     };
     use anyhow::{Context, Result, ensure};
     use std::{collections::BTreeMap, collections::VecDeque, fs, io, thread, time::Duration};
@@ -1012,7 +1200,7 @@ mod tests {
                 timeout_sec: 5,
                 stdout_path: &stdout,
                 stderr_path: &stderr,
-                quarantine_environment: false,
+                child_environment: ChildEnvironment::AmbientPlusExplicit,
                 observe_process: &mut |event| observations.push(event),
             },
             &mut wait_for_child,
@@ -1181,6 +1369,159 @@ mod tests {
         ensure!(!observed.contains("sentinel-github"));
         ensure!(!observed.contains("sentinel-oidc"));
         ensure!(!observed.contains("sentinel-runner"));
+        Ok(())
+    }
+
+    // #1062: the production proof/worker spawn path must quarantine the child
+    // environment exactly as sensors do. The probe runs the real production
+    // runner inside a test binary whose parent environment carries canary
+    // provider keys and GitHub tokens, then asserts the child proof fixture
+    // cannot see any of them while the allowlisted toolchain entries survive.
+
+    #[test]
+    fn proof_environment_excludes_credentials_and_keeps_toolchain_metadata() -> Result<()> {
+        let exe = std::env::current_exe()?;
+        let status = std::process::Command::new(exe)
+            .arg("--exact")
+            .arg("lane_packets::tests::fake_proof_cannot_read_actual_parent_credentials")
+            .arg("--nocapture")
+            .env("UB_REVIEW_PROOF_ENV_PROBE_CHILD", "1")
+            .env("UB_REVIEW_MINIMAX_API_KEY", "sentinel-minimax")
+            .env("UB_REVIEW_OPENCODE_API_KEY", "sentinel-opencode")
+            .env("UB_REVIEW_ACTION_GITHUB_TOKEN", "sentinel-github")
+            .env("UB_REVIEW_GITHUB_TOKEN", "sentinel-github-v1")
+            .env("GH_TOKEN", "sentinel-gh-token")
+            .env("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "sentinel-oidc")
+            .env("ACTIONS_RUNTIME_TOKEN", "sentinel-runner")
+            .status()?;
+        ensure!(
+            status.success(),
+            "actual-parent proof probe process failed: {status}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn fake_proof_cannot_read_actual_parent_credentials() -> Result<()> {
+        if std::env::var_os("UB_REVIEW_PROOF_ENV_PROBE_CHILD").is_none() {
+            return Ok(());
+        }
+        let temp = tempfile::tempdir()?;
+        let stdout = temp.path().join("stdout.txt");
+        let stderr = temp.path().join("stderr.txt");
+        #[cfg(unix)]
+        let argv = vec!["/bin/sh".to_owned(), "-c".to_owned(), "env".to_owned()];
+        #[cfg(windows)]
+        let argv = vec![std::env::var("COMSPEC")?, "/C".to_owned(), "set".to_owned()];
+        // A caller-supplied environment cannot add entries to the allowlist:
+        // this override key must be dropped at spawn even though the command
+        // asked for it explicitly.
+        let overrides = BTreeMap::from([(
+            "UB_REVIEW_PROOF_SENTINEL_OVERRIDE".to_owned(),
+            "sentinel-override".to_owned(),
+        )]);
+        let mut observations = Vec::new();
+        let status = super::run_command_to_files_with_spawn_observer(
+            temp.path(),
+            &argv,
+            &overrides,
+            // Windows hosts can spend several seconds on a first spawn under
+            // the cleared environment (real-time scanner warm-up); the budget
+            // is generous so the assertion measures quarantine, not host speed.
+            60,
+            &stdout,
+            &stderr,
+            &mut |event| observations.push(event),
+        )?;
+        ensure!(
+            status.success,
+            "quarantined proof fixture failed: {}",
+            status.reason
+        );
+        ensure!(observations == [CommandProcessObservation::Spawned]);
+        let observed = fs::read_to_string(stdout)?;
+        let lowered = observed.to_ascii_lowercase();
+        // Positive control: the allowlist keeps the child executable. The
+        // child must still see its ambient PATH value verbatim and at least
+        // one explicitly resolved toolchain home.
+        let expected_path = std::env::var("PATH").context("ambient PATH fixture missing")?;
+        let expected_path_line = format!("path={}", expected_path.to_ascii_lowercase());
+        ensure!(
+            lowered.lines().any(|line| line == expected_path_line),
+            "quarantined child did not observe the ambient PATH value verbatim: {observed:?}"
+        );
+        ensure!(
+            lowered.contains("cargo_home=") || lowered.contains("rustup_home="),
+            "quarantined child lost its toolchain home: {observed:?}"
+        );
+        // Sentinel negatives: provider keys, GitHub write tokens, and OIDC or
+        // runner authority must not cross the spawn boundary.
+        for sentinel in [
+            "sentinel-minimax",
+            "sentinel-opencode",
+            "sentinel-github",
+            "sentinel-github-v1",
+            "sentinel-gh-token",
+            "sentinel-oidc",
+            "sentinel-runner",
+        ] {
+            ensure!(
+                !lowered.contains(sentinel),
+                "quarantined proof child observed sentinel credential {sentinel}: {observed:?}"
+            );
+        }
+        // No ambient home/config credential leak: the home directory entries
+        // themselves never cross the boundary even though the parent had one.
+        ensure!(
+            !lowered.lines().any(|line| {
+                ["home=", "userprofile=", "homedrive=", "homepath="]
+                    .iter()
+                    .any(|entry| line.starts_with(entry))
+            }),
+            "quarantined proof child observed an ambient home entry: {observed:?}"
+        );
+        // Candidate-provided environment cannot add allowlist entries.
+        ensure!(
+            !lowered.contains("sentinel-override"),
+            "quarantined proof child accepted a non-allowlisted override: {observed:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn proof_environment_runs_real_toolchain_child_under_allowlist() -> Result<()> {
+        // The probe is only meaningful where the ambient environment resolves
+        // cargo; hosts without a toolchain skip rather than fake signal.
+        let Ok(probe) = std::process::Command::new("cargo")
+            .arg("--version")
+            .output()
+        else {
+            return Ok(());
+        };
+        ensure!(probe.status.success(), "ambient cargo probe failed");
+        let temp = tempfile::tempdir()?;
+        let stdout = temp.path().join("stdout.txt");
+        let stderr = temp.path().join("stderr.txt");
+        let status = super::run_command_to_files_with_spawn_observer(
+            temp.path(),
+            &["cargo".to_owned(), "--version".to_owned()],
+            &BTreeMap::new(),
+            120,
+            &stdout,
+            &stderr,
+            &mut |_| {},
+        )?;
+        ensure!(
+            status.success,
+            "quarantined cargo child failed: {} (stderr: {})",
+            status.reason,
+            fs::read_to_string(&stderr).unwrap_or_default()
+        );
+        let observed = fs::read_to_string(&stdout)?;
+        ensure!(
+            observed.contains("cargo"),
+            "unexpected quarantined cargo output: {observed:?}"
+        );
         Ok(())
     }
 }

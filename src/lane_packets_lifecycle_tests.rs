@@ -149,7 +149,7 @@ fn stopped_child_receipt_after_start_delay(
                     timeout_sec,
                     stdout_path,
                     stderr_path,
-                    quarantine_environment: false,
+                    child_environment: ChildEnvironment::AmbientPlusExplicit,
                     observe_process,
                 },
                 &mut |child, timeout| {
