@@ -4612,11 +4612,26 @@ def is_global_calibration_refutation(observation: dict) -> bool:
     )
 
 
+def is_model_only_failed_objection(observation: dict) -> bool:
+    # Mirror of src/noise.rs:47-53 (PR #1497, commit 8f77a63b): producer
+    # provenance decides whether a rejected hypothesis is private audit,
+    # preserving groups with an independent evidence source.
+    sources = observation["sources"]
+    return bool(sources) and all(source == "model-failed-objection" for source in sources)
+
+
 def is_pr_body_artifact_only_observation(observation: dict) -> bool:
     text = observation_text(observation)
     return (
         observation["status"] == "covered"
         or observation["kind"] == "resolved-check"
+        # Mirror of src/noise.rs:64 (PR #1497, commit 8f77a63b): model-only
+        # failed objections are private audit, so the follow-up emission
+        # behind src/follow_up_routing.rs:164 emits no task for them.
+        or is_model_only_failed_objection(observation)
+        # Mirror of src/noise.rs:65-68 (PR #914, commit f6c7a1c2):
+        # specialist audit outcomes stay artifact-only.
+        or observation["kind"] in {"empty-internal-audit", "malformed-internal-audit"}
         or observation["dedupe_key"].startswith("lane-output-shape")
         or observation["dedupe_key"].startswith("lane-output-malformed-content")
         or (observation["kind"] == "bug" and "lane model summary" in text)
@@ -8903,6 +8918,12 @@ def require_observation_schema(observation: dict) -> None:
     ]:
         if not isinstance(observation.get(field), str) or not observation[field]:
             fail(f"observation missing string field {field}: {observation!r}")
+    # Mirror of src/validate.rs:16-24 (PR #914, commit f6c7a1c2): specialist
+    # audit outcome kinds are accepted alongside allowed_observation_kind.
+    internal_audit_kind = observation["kind"] in {
+        "empty-internal-audit",
+        "malformed-internal-audit",
+    }
     if observation["kind"] not in {
         "bug",
         "verification-question",
@@ -8914,7 +8935,7 @@ def require_observation_schema(observation: dict) -> None:
         "false-premise",
         "parked-follow-up",
         "resolved-check",
-    }:
+    } and not internal_audit_kind:
         fail(f"observation has unsupported kind: {observation!r}")
     if observation["status"] not in {
         "open",
@@ -8924,7 +8945,11 @@ def require_observation_schema(observation: dict) -> None:
         "demoted",
         "parked",
         "duplicate",
-    }:
+    } and not (
+        # Mirror of src/validate.rs:26-34: degraded/failed status is valid
+        # only for the internal-audit kinds.
+        internal_audit_kind and observation["status"] in {"degraded", "failed"}
+    ):
         fail(f"observation has unsupported status: {observation!r}")
     if observation["severity"] not in {"blocker", "high", "medium", "low"}:
         fail(f"observation has unsupported severity: {observation!r}")
@@ -16852,6 +16877,7 @@ def run_self_tests() -> None:
     if plan["follow_up_tasks"]:
         fail("artifact-only meta observations created follow-up tasks in self-test")
     self_test_source_route_late_proof_routes_and_suppresses_task()
+    self_test_model_only_failed_objection_follow_up_suppressed()
     self_test_final_tool_gate_routes_to_relevant_lanes()
     self_test_empty_candidate_artifacts_without_dir()
     self_test_internal_audit_artifact_contract()
@@ -16972,6 +16998,49 @@ def self_test_source_route_late_proof_routes_and_suppresses_task() -> None:
         fail("source-route self-test did not route the proof receipt")
     if final["follow_up_tasks"]:
         fail("source-route self-test did not suppress the resolved follow-up task")
+
+
+def self_test_model_only_failed_objection_follow_up_suppressed() -> None:
+    """Discriminating mirror of the #1497 private-audit boundary
+    (src/noise.rs:64): an observation group whose sources are exclusively
+    `model-failed-objection` gets no follow-up task, while the same group
+    with an independent evidence source keeps its tertiary
+    refutation-confirmation task (Rust replay: src/noise.rs:1154-1173), and
+    the #914 specialist audit kinds stay artifact-only too
+    (src/noise.rs:1197-1208)."""
+    refuted_false_premise = self_test_observation(
+        "obsgrp-model-only-objection",
+        "false-premise:self-test",
+        "The changed producer crosses a worker boundary.",
+        "false-premise",
+    )
+    refuted_false_premise["status"] = "refuted"
+    refuted_false_premise["sources"] = ["model-failed-objection"]
+    plan = expected_orchestrator_plan([], [refuted_false_premise], [], [])
+    if plan["follow_up_tasks"]:
+        fail("model-only failed objection created a follow-up task in self-test")
+    if len(plan["observation_groups"]) != 1:
+        fail("model-only failed objection dropped the observation group")
+    corroborated = dict(refuted_false_premise)
+    corroborated["id"] = "obsgrp-corroborated-objection"
+    corroborated["sources"] = ["model-failed-objection", "proof-receipt"]
+    plan = expected_orchestrator_plan([], [corroborated], [], [])
+    if len(plan["follow_up_tasks"]) != 1:
+        fail("independently corroborated objection lost its follow-up task")
+    task = plan["follow_up_tasks"][0]
+    if task["evidence_need"] != "refutation-confirmation" or task["stage"] != "tertiary":
+        fail("corroborated objection follow-up was misclassified")
+    for kind, status in [
+        ("empty-internal-audit", "degraded"),
+        ("malformed-internal-audit", "failed"),
+    ]:
+        audit = self_test_observation(
+            f"obsgrp-{kind}", kind, f"Specialist internal audit was {kind}.", kind
+        )
+        audit["status"] = status
+        plan = expected_orchestrator_plan([], [audit], [], [])
+        if plan["follow_up_tasks"]:
+            fail(f"{kind} created a follow-up task in self-test")
 
 
 def self_test_final_tool_gate_routes_to_relevant_lanes() -> None:
