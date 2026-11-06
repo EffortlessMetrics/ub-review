@@ -426,13 +426,13 @@ result = {}
 minimax_url = scenario.get('minimax_url')
 opencode_url = scenario.get('opencode_url')
 if minimax_url and url == minimax_url and method == 'POST':
-    if 'X-Api-Key: synthetic-fixture-value' not in headers: sys.exit(94)
+    if 'X-Api-Key: test-token-redacted' not in headers: sys.exit(94)
     if scenario['provider'] in ('outage', 'primary-down'):
         status = 503; result = {'error': {'message': 'synthetic primary unavailable'}}
     else:
         result = {'content': [{'type': 'text', 'text': scenario['content']}]}
 elif opencode_url and url == opencode_url and method == 'POST':
-    if 'Authorization: Bearer synthetic-fixture-value' not in headers: sys.exit(94)
+    if 'Authorization: Bearer test-token-redacted' not in headers: sys.exit(94)
     result = {'content': [{'type': 'text', 'text': scenario['content']}]}
 elif url == 'https://github.invalid/repos/example/repo/pulls/123' and method == 'GET':
     result = {'head': {'sha': scenario['head']}}
@@ -897,7 +897,7 @@ sys.exit(22 if status >= 400 else 0)
         if spec.provider_key {
             env.push((
                 "UB_REVIEW_MINIMAX_API_KEY".to_owned(),
-                "synthetic-fixture-value".to_owned(),
+                "test-token-redacted".to_owned(),
             ));
         }
         if spec.with_opencode {
@@ -907,7 +907,7 @@ sys.exit(22 if status >= 400 else 0)
             ));
             env.push((
                 "UB_REVIEW_OPENCODE_API_KEY".to_owned(),
-                "synthetic-fixture-value".to_owned(),
+                "test-token-redacted".to_owned(),
             ));
         }
         let env_refs = env
@@ -1161,7 +1161,7 @@ sys.exit(22 if status >= 400 else 0)
                 "--github-api-url",
                 "https://github.invalid",
                 "--github-token",
-                "synthetic-fixture-value",
+                "test-token-redacted",
             ]));
         }
         let env_refs = env
@@ -1232,7 +1232,7 @@ sys.exit(22 if status >= 400 else 0)
                 "--github-api-url",
                 "https://github.invalid",
                 "--github-token",
-                "synthetic-fixture-value",
+                "test-token-redacted",
                 "--fail-on-post-error",
             ]));
             let env = [
@@ -1329,7 +1329,7 @@ sys.exit(22 if status >= 400 else 0)
             "--github-api-url",
             "https://github.invalid",
             "--github-token",
-            "synthetic-fixture-value",
+            "test-token-redacted",
             "--fail-on-post-error",
         ]));
         let env = [
