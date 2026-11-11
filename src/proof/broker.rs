@@ -122,18 +122,19 @@ pub(crate) fn run_initial_diff_proof_broker_v0(
         .collect::<Vec<_>>();
     let (final_budget, final_files) =
         prior_file_capacity(total_budget, final_budget, &all_leases, &catalog);
-    let final_selection = select_proof_portfolio_with_prior_files(
-        ProofPortfolioInput {
-            test_tasks: &tasks,
-            build_tasks: &[],
-            proof_requests: &[],
-            proof_receipts: &receipts,
-            head: &diff.head,
-            budget: final_budget,
-            runtime: current_portfolio_runtime(profile, box_state, run_started)?,
-        },
-        &final_files,
-    );
+    let final_selection =
+        defer_unexecuted_final_selection(select_proof_portfolio_with_prior_files(
+            ProofPortfolioInput {
+                test_tasks: &tasks,
+                build_tasks: &[],
+                proof_requests: &[],
+                proof_receipts: &receipts,
+                head: &diff.head,
+                budget: final_budget,
+                runtime: current_portfolio_runtime(profile, box_state, run_started)?,
+            },
+            &final_files,
+        ));
     write_proof_portfolio_selection_artifact(
         out,
         diff,
@@ -388,6 +389,22 @@ pub(crate) struct ProofPortfolioSelection {
     pub(crate) decisions: Vec<ProofPortfolioDecision>,
     pub(crate) remaining_seconds: u64,
     pub(crate) runtime: ProofPortfolioRuntime,
+}
+
+fn defer_unexecuted_final_selection(
+    mut selection: ProofPortfolioSelection,
+) -> ProofPortfolioSelection {
+    for decision in &mut selection.decisions {
+        if decision.status == "selected" && decision.receipt_ids.is_empty() {
+            decision.status = "deferred_by_safe_wind_down".to_owned();
+            decision.reason =
+                "broker phase ended before dispatch; work remains eligible for a later phase"
+                    .to_owned();
+        }
+    }
+    selection.test_tasks.clear();
+    selection.build_tasks.clear();
+    selection
 }
 
 fn remaining_focused_proof_budget_after(
@@ -1095,18 +1112,19 @@ where
         .collect::<Vec<_>>();
     let (final_budget, final_files) =
         prior_file_capacity(total_budget, final_budget, &all_leases, &catalog);
-    let final_selection = select_proof_portfolio_with_prior_files(
-        ProofPortfolioInput {
-            test_tasks: &test_candidates,
-            build_tasks: &build_candidates,
-            proof_requests,
-            proof_receipts: &final_receipts,
-            head: &diff.head,
-            budget: final_budget,
-            runtime: current_portfolio_runtime(profile, box_state, run_started)?,
-        },
-        &final_files,
-    );
+    let final_selection =
+        defer_unexecuted_final_selection(select_proof_portfolio_with_prior_files(
+            ProofPortfolioInput {
+                test_tasks: &test_candidates,
+                build_tasks: &build_candidates,
+                proof_requests,
+                proof_receipts: &final_receipts,
+                head: &diff.head,
+                budget: final_budget,
+                runtime: current_portfolio_runtime(profile, box_state, run_started)?,
+            },
+            &final_files,
+        ));
     write_proof_portfolio_selection_artifact(
         out,
         diff,
@@ -1237,18 +1255,19 @@ pub(crate) fn run_follow_up_proof_broker_v0(
         .collect::<Vec<_>>();
     let (final_budget, final_files) =
         prior_file_capacity(total_budget, final_budget, &all_leases, &catalog);
-    let final_selection = select_proof_portfolio_with_prior_files(
-        ProofPortfolioInput {
-            test_tasks: &test_candidates,
-            build_tasks: &build_candidates,
-            proof_requests,
-            proof_receipts: &final_receipts,
-            head: &diff.head,
-            budget: final_budget,
-            runtime: current_portfolio_runtime(profile, box_state, run_started)?,
-        },
-        &final_files,
-    );
+    let final_selection =
+        defer_unexecuted_final_selection(select_proof_portfolio_with_prior_files(
+            ProofPortfolioInput {
+                test_tasks: &test_candidates,
+                build_tasks: &build_candidates,
+                proof_requests,
+                proof_receipts: &final_receipts,
+                head: &diff.head,
+                budget: final_budget,
+                runtime: current_portfolio_runtime(profile, box_state, run_started)?,
+            },
+            &final_files,
+        ));
     // A follow-up pass with no newly requested proof must not replace the
     // primary broker's authoritative portfolio with an empty/zero-budget
     // snapshot. The primary portfolio contains the request-to-task decisions
@@ -1406,11 +1425,23 @@ fn merge_proof_portfolio_with_disk(
     if existing.head != head {
         return (candidate_tasks, selected_task_ids, decisions);
     }
+    let speculative_ids = decisions
+        .iter()
+        .filter(|decision| {
+            decision.status == "deferred_by_safe_wind_down"
+                && decision.reason
+                    == "broker phase ended before dispatch; work remains eligible for a later phase"
+        })
+        .map(|decision| decision.task_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let retained_selected = existing
+        .selected_task_ids
+        .into_iter()
+        .filter(|id| !speculative_ids.contains(id.as_str()))
+        .collect();
     (
         merge_proof_portfolio_candidate_tasks(existing.candidate_tasks, candidate_tasks),
-        merge_proof_portfolio_entries(existing.selected_task_ids, selected_task_ids, |id| {
-            id.as_str()
-        }),
+        merge_proof_portfolio_entries(retained_selected, selected_task_ids, |id| id.as_str()),
         merge_proof_portfolio_decisions(existing.decisions, decisions),
     )
 }
@@ -2980,10 +3011,97 @@ mod tests {
     }
 
     #[test]
+    fn final_replan_does_not_publish_unexecuted_impact_as_selected() {
+        let mut first = focused_test_task("first", Vec::new(), 300);
+        let mut second = focused_test_task("second", Vec::new(), 300);
+        first.mode = FocusedProofMode::HeadOnly;
+        second.mode = FocusedProofMode::HeadOnly;
+        let tasks = [first, second];
+        let receipt = test_receipt("first", Vec::new(), "head_passed");
+        let selection = select_proof_portfolio(ProofPortfolioInput {
+            test_tasks: &tasks,
+            build_tasks: &[],
+            proof_requests: &[],
+            proof_receipts: &[receipt],
+            head: "head",
+            budget: proof_budget_for_test(3, 349),
+            runtime: portfolio_runtime_for_test(349, 4, Some(8192), Some(20000)),
+        });
+        assert!(
+            selection
+                .decisions
+                .iter()
+                .any(|decision| decision.task_id == "second" && decision.status == "selected")
+        );
+        let final_selection = defer_unexecuted_final_selection(selection);
+        assert!(final_selection.test_tasks.is_empty());
+        assert!(
+            final_selection
+                .decisions
+                .iter()
+                .any(|decision| decision.task_id == "second"
+                    && decision.status == "deferred_by_safe_wind_down"
+                    && decision.receipt_ids.is_empty())
+        );
+    }
+
+    #[test]
+    fn speculative_final_selection_is_removed_without_erasing_unrelated_selection() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        fs::write(
+            temp.path().join("proof_portfolio.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "head":"head", "candidate_tasks":[], "selected_task_ids":["second", "unrelated"], "decisions":[]
+            }))?,
+        )?;
+        let decision = ProofPortfolioDecision {
+            task_id: "second".to_owned(),
+            kind: "focused-head".to_owned(),
+            status: "deferred_by_safe_wind_down".to_owned(),
+            reason: "broker phase ended before dispatch; work remains eligible for a later phase"
+                .to_owned(),
+            required: false,
+            estimated_cost_sec: 300,
+            request_ids: Vec::new(),
+            receipt_ids: Vec::new(),
+        };
+        let (_, selected, decisions) = merge_proof_portfolio_with_disk(
+            temp.path(),
+            "head",
+            Vec::new(),
+            Vec::new(),
+            vec![decision],
+        );
+        assert_eq!(selected, ["unrelated"]);
+        assert_eq!(decisions[0].status, "deferred_by_safe_wind_down");
+        fs::write(
+            temp.path().join("proof_portfolio.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "head":"head", "candidate_tasks":[], "selected_task_ids":&selected, "decisions":&decisions
+            }))?,
+        )?;
+        let mut answered = decisions[0].clone();
+        answered.status = "answered_by_existing_receipt".to_owned();
+        answered.reason = "terminal receipt".to_owned();
+        answered.receipt_ids.push("receipt-second".to_owned());
+        let (_, _, later) = merge_proof_portfolio_with_disk(
+            temp.path(),
+            "head",
+            Vec::new(),
+            Vec::new(),
+            vec![answered],
+        );
+        assert_eq!(later[0].status, "answered_by_existing_receipt");
+        assert_eq!(later[0].receipt_ids, ["receipt-second"]);
+        Ok(())
+    }
+
+    #[test]
     fn prior_test_files_are_counted_distinctly_and_builds_do_not_consume_them() {
         let mut total = proof_budget_for_test(4, 600);
         total.max_focused_test_files = 1;
-        let a = focused_test_task("a", Vec::new(), 1);
+        let mut a = focused_test_task("a", Vec::new(), 1);
+        a.mode = FocusedProofMode::HeadOnly;
         let mut same = focused_test_task("same", Vec::new(), 1);
         same.file = a.file.clone();
         let other = focused_test_task("other", Vec::new(), 1);

@@ -6506,6 +6506,14 @@ fn model_off_required_builds_precede_optional_impact_with_four_slots() -> Result
     // Current main deliberately excludes head-only receipts from planner
     // accounting; this scheduling port does not change that policy.
     assert_eq!(gate["planner_required_proofs"]["proven"], 0);
+    let portfolio: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/proof_portfolio.json"))?)?;
+    assert!(json_array_field(&portfolio, "selected_task_ids")?.is_empty());
+    assert!(
+        json_array_field(&portfolio, "decisions")?
+            .iter()
+            .all(|decision| decision["status"] != "selected")
+    );
     let scheduler: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/scheduler.json"))?)?;
     let phases = json_array_field(&scheduler, "phases")?;
