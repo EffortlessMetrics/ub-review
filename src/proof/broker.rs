@@ -57,6 +57,7 @@ pub(crate) fn run_initial_diff_proof_broker_v0(
     run_started: &Instant,
     impact: &ImpactPlan,
     prior: &ProofBrokerResult,
+    seeded_requests: &[ProofRequest],
     task_ledger: Option<&ProofTaskLedger>,
 ) -> Result<ProofBrokerResult> {
     let total_budget = proof_budget(profile)?;
@@ -68,15 +69,25 @@ pub(crate) fn run_initial_diff_proof_broker_v0(
     );
     let runtime = current_portfolio_runtime(profile, box_state, run_started)?;
     let tasks = focused_test_candidates_from_diff(diff, &[], Some(impact));
-    let selection = select_proof_portfolio(ProofPortfolioInput {
-        test_tasks: &tasks,
-        build_tasks: &[],
-        proof_requests: &[],
-        proof_receipts: &prior.proof_receipts,
-        head: &diff.head,
-        budget,
-        runtime,
-    });
+    let mut catalog = tasks.clone();
+    merge_focused_test_candidates(
+        &mut catalog,
+        focused_test_candidates_from_requests(seeded_requests),
+    );
+    let (budget, prior_files) =
+        prior_file_capacity(total_budget, budget, &prior.resource_leases, &catalog);
+    let selection = select_proof_portfolio_with_prior_files(
+        ProofPortfolioInput {
+            test_tasks: &tasks,
+            build_tasks: &[],
+            proof_requests: &[],
+            proof_receipts: &prior.proof_receipts,
+            head: &diff.head,
+            budget,
+            runtime,
+        },
+        &prior_files,
+    );
     let result = run_focused_red_green_proof_tasks_with_runner(
         root,
         out,
@@ -103,15 +114,26 @@ pub(crate) fn run_initial_diff_proof_broker_v0(
         &receipts,
         &diff.head,
     );
-    let final_selection = select_proof_portfolio(ProofPortfolioInput {
-        test_tasks: &tasks,
-        build_tasks: &[],
-        proof_requests: &[],
-        proof_receipts: &receipts,
-        head: &diff.head,
-        budget: final_budget,
-        runtime: current_portfolio_runtime(profile, box_state, run_started)?,
-    });
+    let all_leases = prior
+        .resource_leases
+        .iter()
+        .chain(&result.resource_leases)
+        .cloned()
+        .collect::<Vec<_>>();
+    let (final_budget, final_files) =
+        prior_file_capacity(total_budget, final_budget, &all_leases, &catalog);
+    let final_selection = select_proof_portfolio_with_prior_files(
+        ProofPortfolioInput {
+            test_tasks: &tasks,
+            build_tasks: &[],
+            proof_requests: &[],
+            proof_receipts: &receipts,
+            head: &diff.head,
+            budget: final_budget,
+            runtime: current_portfolio_runtime(profile, box_state, run_started)?,
+        },
+        &final_files,
+    );
     write_proof_portfolio_selection_artifact(
         out,
         diff,
@@ -135,7 +157,6 @@ pub(crate) fn run_seeded_proof_stream_v0(
     profile: &Profile,
     args: &RunArgs,
     seeded_proof_requests: &[ProofRequest],
-    initial_proof_loop: ActiveRunLoop,
     event_log: &EventLog,
     run_started: &Instant,
     box_state: &BoxState,
@@ -148,6 +169,11 @@ pub(crate) fn run_seeded_proof_stream_v0(
         .filter(|request| request.required)
         .cloned()
         .collect::<Vec<_>>();
+    let mut prior_catalog = focused_test_candidates_from_diff(diff, &[], Some(impact));
+    merge_focused_test_candidates(
+        &mut prior_catalog,
+        focused_test_candidates_from_requests(seeded_proof_requests),
+    );
     let mut proof_result = ProofBrokerResult::default();
     if has_unreceipted_proof_request_tasks(&required, &[], &diff.head) {
         let active = start_run_loop(
@@ -157,23 +183,26 @@ pub(crate) fn run_seeded_proof_stream_v0(
             "proof",
             "seeded-required-broker",
         )?;
-        let result = run_request_proof_broker_v0_with_runners(
-            root,
-            out,
-            diff,
-            profile,
-            &required,
-            &[],
-            &[],
-            args,
-            box_state,
-            run_started,
-            task_ledger,
-            true,
-            run_command_to_files_with_spawn_observer,
-            prepare_base_plus_tests_worktree,
-            run_command_to_files_with_spawn_observer,
-        );
+        let result = run_required_until_settled(&required, &diff.head, |accumulated| {
+            run_request_proof_broker_v0_with_runners(
+                root,
+                out,
+                diff,
+                profile,
+                seeded_proof_requests,
+                &accumulated.proof_receipts,
+                &accumulated.resource_leases,
+                args,
+                box_state,
+                run_started,
+                task_ledger,
+                true,
+                &prior_catalog,
+                run_command_to_files_with_spawn_observer,
+                prepare_base_plus_tests_worktree,
+                run_command_to_files_with_spawn_observer,
+            )
+        });
         phases.push(finish_run_loop_phase(
             event_log,
             run_started,
@@ -184,14 +213,15 @@ pub(crate) fn run_seeded_proof_stream_v0(
                 "failed"
             },
         )?);
-        proof_result = match result {
-            Ok(result) => result,
-            Err(error) => {
-                finish_run_loop_phase(event_log, run_started, initial_proof_loop, "failed")?;
-                return Err(error);
-            }
-        };
+        proof_result = result?;
     }
+    let initial_proof_loop = start_run_loop(
+        event_log,
+        run_started,
+        "proof",
+        "proof",
+        "initial-diff-broker",
+    )?;
     let initial_result = run_initial_diff_proof_broker_v0(
         root,
         out,
@@ -202,6 +232,7 @@ pub(crate) fn run_seeded_proof_stream_v0(
         run_started,
         impact,
         &proof_result,
+        seeded_proof_requests,
         task_ledger,
     );
     let initial_status = if initial_result.is_ok() {
@@ -246,6 +277,7 @@ pub(crate) fn run_seeded_proof_stream_v0(
             args,
             box_state,
             run_started,
+            &prior_catalog,
             task_ledger,
         );
         let request_status = if request_result.is_ok() {
@@ -269,6 +301,52 @@ pub(crate) fn run_seeded_proof_stream_v0(
     }
 
     Ok((proof_result, phases))
+}
+
+fn run_required_until_settled(
+    required: &[ProofRequest],
+    head: &str,
+    mut run: impl FnMut(&ProofBrokerResult) -> Result<ProofBrokerResult>,
+) -> Result<ProofBrokerResult> {
+    let mut accumulated = ProofBrokerResult::default();
+    while has_unreceipted_proof_request_tasks(required, &accumulated.proof_receipts, head) {
+        let next = run(&accumulated)?;
+        let progress = !next.proof_receipts.is_empty();
+        accumulated.proof_receipts.extend(next.proof_receipts);
+        accumulated.resource_leases.extend(next.resource_leases);
+        if !progress {
+            break;
+        }
+    }
+    Ok(accumulated)
+}
+
+pub(crate) fn run_model_request_proof_phase(
+    event_log: &EventLog,
+    run_started: &Instant,
+    tracker: &mut RunLoopTracker,
+    broker: impl FnOnce() -> Result<ProofBrokerResult>,
+) -> Result<ProofBrokerResult> {
+    let active = start_run_loop(
+        event_log,
+        run_started,
+        "proof",
+        "proof",
+        "model-request-broker",
+    )?;
+    let result = broker();
+    finish_run_loop(
+        event_log,
+        run_started,
+        tracker,
+        active,
+        if result.is_ok() {
+            "completed"
+        } else {
+            "failed"
+        },
+    )?;
+    result
 }
 
 /// Normalize a v1 `ProofRequest` to a typed `ProofRequestV2` (Order 4b of
@@ -324,6 +402,34 @@ fn remaining_focused_proof_budget_after(
     settled_focused_proof_budget(total_budget, &all_leases, receipts, head)
 }
 
+fn prior_file_capacity(
+    total: ProofBudget,
+    mut remaining: ProofBudget,
+    leases: &[ResourceLease],
+    candidates: &[FocusedTestTask],
+) -> (ProofBudget, BTreeSet<String>) {
+    let mut files = BTreeSet::new();
+    let mut unknown = 0usize;
+    if leases.iter().any(|lease| {
+        matches!(lease.kind.as_str(), "focused-test" | "focused-build")
+            && matches!(lease.status.as_str(), "exhausted" | "absent")
+    }) {
+        return (remaining, files);
+    }
+    for lease in leases
+        .iter()
+        .filter(|lease| lease.kind == "focused-test" && lease.status == "granted")
+    {
+        if let Some(task) = candidates.iter().find(|task| task.id == lease.consumer) {
+            files.insert(task.file.clone());
+        } else {
+            unknown += 1;
+        }
+    }
+    remaining.max_focused_test_files = total.max_focused_test_files.saturating_sub(unknown);
+    (remaining, files)
+}
+
 #[derive(Clone, Copy)]
 enum PortfolioCandidate {
     Test(usize),
@@ -334,6 +440,13 @@ enum PortfolioCandidate {
 /// set. The selector is deterministic and receipt-aware so the broker can
 /// call it again after each execution phase without rerunning answered work.
 pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPortfolioSelection {
+    select_proof_portfolio_with_prior_files(input, &BTreeSet::new())
+}
+
+fn select_proof_portfolio_with_prior_files(
+    input: ProofPortfolioInput<'_>,
+    prior_files: &BTreeSet<String>,
+) -> ProofPortfolioSelection {
     let request_by_id = input
         .proof_requests
         .iter()
@@ -375,7 +488,7 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
 
     let mut selected_tests = Vec::new();
     let mut selected_builds = Vec::new();
-    let mut selected_files = BTreeSet::new();
+    let mut selected_files = prior_files.clone();
     let mut used_tasks = 0_usize;
     let mut used_seconds = 0_u64;
     let mut decisions = Vec::new();
@@ -799,6 +912,7 @@ pub(crate) fn run_request_proof_broker_v0(
     args: &RunArgs,
     box_state: &BoxState,
     run_started: &Instant,
+    prior_catalog: &[FocusedTestTask],
     task_ledger: Option<&ProofTaskLedger>,
 ) -> Result<ProofBrokerResult> {
     run_request_proof_broker_v0_with_runners(
@@ -814,6 +928,7 @@ pub(crate) fn run_request_proof_broker_v0(
         run_started,
         task_ledger,
         false,
+        prior_catalog,
         run_command_to_files_with_spawn_observer,
         prepare_base_plus_tests_worktree,
         run_command_to_files_with_spawn_observer,
@@ -837,6 +952,7 @@ fn run_request_proof_broker_v0_with_runners<F, G, H>(
     run_started: &Instant,
     task_ledger: Option<&ProofTaskLedger>,
     required_only: bool,
+    prior_catalog: &[FocusedTestTask],
     test_runner: F,
     prepare_base_plus_tests: G,
     build_runner: H,
@@ -885,16 +1001,27 @@ where
         &mut test_candidates,
         focused_test_candidates_from_v2(&v2_requests),
     );
-    let build_candidates = focused_build_candidates_from_v2(&v2_requests);
-    let selection = select_proof_portfolio(ProofPortfolioInput {
-        test_tasks: &test_candidates,
-        build_tasks: &build_candidates,
-        proof_requests,
-        proof_receipts: existing_receipts,
-        head: &diff.head,
-        budget,
-        runtime: current_portfolio_runtime(profile, box_state, run_started)?,
-    });
+    let mut build_candidates = focused_build_candidates_from_v2(&v2_requests);
+    if required_only {
+        test_candidates.retain(|task| task.required);
+        build_candidates.retain(|task| task.required);
+    }
+    let mut catalog = prior_catalog.to_vec();
+    merge_focused_test_candidates(&mut catalog, test_candidates.clone());
+    let (budget, prior_files) =
+        prior_file_capacity(total_budget, budget, existing_leases, &catalog);
+    let selection = select_proof_portfolio_with_prior_files(
+        ProofPortfolioInput {
+            test_tasks: &test_candidates,
+            build_tasks: &build_candidates,
+            proof_requests,
+            proof_receipts: existing_receipts,
+            head: &diff.head,
+            budget,
+            runtime: current_portfolio_runtime(profile, box_state, run_started)?,
+        },
+        &prior_files,
+    );
     let mut result = run_follow_up_proof_broker_v0_with_runner(
         root,
         out,
@@ -921,15 +1048,20 @@ where
         &existing_and_new_receipts,
         &diff.head,
     );
-    let replan = select_proof_portfolio(ProofPortfolioInput {
-        test_tasks: &test_candidates,
-        build_tasks: &build_candidates,
-        proof_requests,
-        proof_receipts: &existing_and_new_receipts,
-        head: &diff.head,
-        budget: remaining_budget,
-        runtime: current_portfolio_runtime(profile, box_state, run_started)?,
-    });
+    let (remaining_budget, remaining_files) =
+        prior_file_capacity(total_budget, remaining_budget, &consumed_leases, &catalog);
+    let replan = select_proof_portfolio_with_prior_files(
+        ProofPortfolioInput {
+            test_tasks: &test_candidates,
+            build_tasks: &build_candidates,
+            proof_requests,
+            proof_receipts: &existing_and_new_receipts,
+            head: &diff.head,
+            budget: remaining_budget,
+            runtime: current_portfolio_runtime(profile, box_state, run_started)?,
+        },
+        &remaining_files,
+    );
     let build_result = run_focused_build_proof_tasks_with_runner(
         root,
         out,
@@ -956,15 +1088,25 @@ where
         &final_receipts,
         &diff.head,
     );
-    let final_selection = select_proof_portfolio(ProofPortfolioInput {
-        test_tasks: &test_candidates,
-        build_tasks: &build_candidates,
-        proof_requests,
-        proof_receipts: &final_receipts,
-        head: &diff.head,
-        budget: final_budget,
-        runtime: current_portfolio_runtime(profile, box_state, run_started)?,
-    });
+    let all_leases = existing_leases
+        .iter()
+        .chain(&result.resource_leases)
+        .cloned()
+        .collect::<Vec<_>>();
+    let (final_budget, final_files) =
+        prior_file_capacity(total_budget, final_budget, &all_leases, &catalog);
+    let final_selection = select_proof_portfolio_with_prior_files(
+        ProofPortfolioInput {
+            test_tasks: &test_candidates,
+            build_tasks: &build_candidates,
+            proof_requests,
+            proof_receipts: &final_receipts,
+            head: &diff.head,
+            budget: final_budget,
+            runtime: current_portfolio_runtime(profile, box_state, run_started)?,
+        },
+        &final_files,
+    );
     write_proof_portfolio_selection_artifact(
         out,
         diff,
@@ -992,6 +1134,7 @@ pub(crate) fn run_follow_up_proof_broker_v0(
     args: &RunArgs,
     box_state: &BoxState,
     run_started: &Instant,
+    prior_catalog: &[FocusedTestTask],
     task_ledger: Option<&ProofTaskLedger>,
 ) -> Result<ProofBrokerResult> {
     let total_budget = proof_budget(profile)?;
@@ -1005,15 +1148,22 @@ pub(crate) fn run_follow_up_proof_broker_v0(
         focused_test_candidates_from_requests(proof_requests),
     );
     let build_candidates = focused_build_candidates_from_requests(proof_requests);
-    let selection = select_proof_portfolio(ProofPortfolioInput {
-        test_tasks: &test_candidates,
-        build_tasks: &build_candidates,
-        proof_requests,
-        proof_receipts: existing_receipts,
-        head: &diff.head,
-        budget,
-        runtime: current_portfolio_runtime(profile, box_state, run_started)?,
-    });
+    let mut catalog = prior_catalog.to_vec();
+    merge_focused_test_candidates(&mut catalog, test_candidates.clone());
+    let (budget, prior_files) =
+        prior_file_capacity(total_budget, budget, existing_leases, &catalog);
+    let selection = select_proof_portfolio_with_prior_files(
+        ProofPortfolioInput {
+            test_tasks: &test_candidates,
+            build_tasks: &build_candidates,
+            proof_requests,
+            proof_receipts: existing_receipts,
+            head: &diff.head,
+            budget,
+            runtime: current_portfolio_runtime(profile, box_state, run_started)?,
+        },
+        &prior_files,
+    );
     let mut result = run_follow_up_proof_broker_v0_with_runner(
         root,
         out,
@@ -1040,15 +1190,20 @@ pub(crate) fn run_follow_up_proof_broker_v0(
         &existing_and_new_receipts,
         &diff.head,
     );
-    let replan = select_proof_portfolio(ProofPortfolioInput {
-        test_tasks: &test_candidates,
-        build_tasks: &build_candidates,
-        proof_requests,
-        proof_receipts: &existing_and_new_receipts,
-        head: &diff.head,
-        budget: remaining_budget,
-        runtime: current_portfolio_runtime(profile, box_state, run_started)?,
-    });
+    let (remaining_budget, remaining_files) =
+        prior_file_capacity(total_budget, remaining_budget, &consumed_leases, &catalog);
+    let replan = select_proof_portfolio_with_prior_files(
+        ProofPortfolioInput {
+            test_tasks: &test_candidates,
+            build_tasks: &build_candidates,
+            proof_requests,
+            proof_receipts: &existing_and_new_receipts,
+            head: &diff.head,
+            budget: remaining_budget,
+            runtime: current_portfolio_runtime(profile, box_state, run_started)?,
+        },
+        &remaining_files,
+    );
     let build_result = run_focused_build_proof_tasks_with_runner(
         root,
         out,
@@ -1075,15 +1230,25 @@ pub(crate) fn run_follow_up_proof_broker_v0(
         &final_receipts,
         &diff.head,
     );
-    let final_selection = select_proof_portfolio(ProofPortfolioInput {
-        test_tasks: &test_candidates,
-        build_tasks: &build_candidates,
-        proof_requests,
-        proof_receipts: &final_receipts,
-        head: &diff.head,
-        budget: final_budget,
-        runtime: current_portfolio_runtime(profile, box_state, run_started)?,
-    });
+    let all_leases = existing_leases
+        .iter()
+        .chain(&result.resource_leases)
+        .cloned()
+        .collect::<Vec<_>>();
+    let (final_budget, final_files) =
+        prior_file_capacity(total_budget, final_budget, &all_leases, &catalog);
+    let final_selection = select_proof_portfolio_with_prior_files(
+        ProofPortfolioInput {
+            test_tasks: &test_candidates,
+            build_tasks: &build_candidates,
+            proof_requests,
+            proof_receipts: &final_receipts,
+            head: &diff.head,
+            budget: final_budget,
+            runtime: current_portfolio_runtime(profile, box_state, run_started)?,
+        },
+        &final_files,
+    );
     // A follow-up pass with no newly requested proof must not replace the
     // primary broker's authoritative portfolio with an empty/zero-budget
     // snapshot. The primary portfolio contains the request-to-task decisions
@@ -1872,6 +2037,7 @@ mod tests {
                 &Instant::now(),
                 None,
                 false,
+                &[],
                 |_root, argv, _env, _timeout, stdout, stderr, _observe| {
                     requested_commands.push(argv.to_vec());
                     fs::write(stdout, b"requested target fails\n")?;
@@ -2028,6 +2194,7 @@ mod tests {
                 &started,
                 Some(&ledger),
                 false,
+                &[],
                 |root, argv, env, timeout, stdout, stderr, observer| {
                     ensure!(argv.first().is_some_and(|arg| arg == "cargo"));
                     ensure!(timeout == 3);
@@ -2218,6 +2385,7 @@ mod tests {
             &Instant::now(),
             None,
             false,
+            &[],
             |_root, argv, _env, timeout, stdout, stderr, _observer| {
                 ensure!(argv.join(" ") == "cargo test --locked --package fixture --test probe");
                 ensure!(timeout == 3);
@@ -2782,6 +2950,100 @@ mod tests {
     }
 
     #[test]
+    fn model_request_phase_records_failure_and_preserves_error() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("events.ndjson");
+        let log = EventLog::open(&path)?;
+        let mut tracker = RunLoopTracker::new();
+        let result = run_model_request_proof_phase(&log, &Instant::now(), &mut tracker, || {
+            Err(std::io::Error::new(std::io::ErrorKind::BrokenPipe, "fixture failure").into())
+        });
+        let error = result
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("expected failure"))?;
+        assert_eq!(
+            error
+                .downcast_ref::<std::io::Error>()
+                .map(std::io::Error::kind),
+            Some(std::io::ErrorKind::BrokenPipe)
+        );
+        assert_eq!(tracker.phases.len(), 1);
+        assert_eq!(tracker.phases[0].stage, "model-request-broker");
+        assert_eq!(tracker.phases[0].status, "failed");
+        let events = fs::read_to_string(path)?;
+        assert!(
+            events.contains("proof_loop_started")
+                && events.contains("proof_loop_finished")
+                && events.contains("failed")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn prior_test_files_are_counted_distinctly_and_builds_do_not_consume_them() {
+        let mut total = proof_budget_for_test(4, 600);
+        total.max_focused_test_files = 1;
+        let a = focused_test_task("a", Vec::new(), 1);
+        let mut same = focused_test_task("same", Vec::new(), 1);
+        same.file = a.file.clone();
+        let other = focused_test_task("other", Vec::new(), 1);
+        let prior = granted_focused_test_lease("a", 1);
+        let catalog = [a.clone(), same.clone(), other.clone()];
+        let (remaining, files) =
+            prior_file_capacity(total, total, std::slice::from_ref(&prior), &catalog);
+        let same_tasks = [same];
+        let selected = select_proof_portfolio_with_prior_files(
+            ProofPortfolioInput {
+                test_tasks: &same_tasks,
+                build_tasks: &[],
+                proof_requests: &[],
+                proof_receipts: &[],
+                head: "head",
+                budget: remaining,
+                runtime: portfolio_runtime_for_test(600, 4, Some(8192), Some(20000)),
+            },
+            &files,
+        );
+        assert_eq!(selected.test_tasks.len(), 1);
+        let other_tasks = [other];
+        let selected = select_proof_portfolio_with_prior_files(
+            ProofPortfolioInput {
+                test_tasks: &other_tasks,
+                build_tasks: &[],
+                proof_requests: &[],
+                proof_receipts: &[],
+                head: "head",
+                budget: remaining,
+                runtime: portfolio_runtime_for_test(600, 4, Some(8192), Some(20000)),
+            },
+            &files,
+        );
+        assert!(selected.test_tasks.is_empty());
+        let mut repeated = prior.clone();
+        repeated.consumer = "same".to_owned();
+        let (_, files) = prior_file_capacity(total, total, &[prior.clone(), repeated], &catalog);
+        assert_eq!(files.len(), 1);
+        let (unknown, _) = prior_file_capacity(total, total, &[prior], &[]);
+        assert_eq!(unknown.max_focused_test_files, 0);
+        let build = focused_build_resource_lease(
+            &focused_build_task("build", Vec::new(), 1),
+            total,
+            ProofLeaseBudget {
+                cpu: 1,
+                memory_mb: 512,
+                disk_mb: 64,
+                network: false,
+                scratch: true,
+            },
+            "granted",
+            "fixture",
+        );
+        let (remaining, files) = prior_file_capacity(total, total, &[build], &catalog);
+        assert_eq!(remaining.max_focused_test_files, 1);
+        assert!(files.is_empty());
+    }
+
+    #[test]
     fn seeded_required_builds_use_four_slot_consumer_budget_before_impact() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
@@ -2801,7 +3063,7 @@ mod tests {
                 600,
             ),
         ];
-        let requests: Vec<_> = specs
+        let mut requests: Vec<_> = specs
             .iter()
             .map(|(id, command, timeout)| {
                 let mut request = proof_request(id, true);
@@ -2811,6 +3073,12 @@ mod tests {
                 request
             })
             .collect();
+        let mut shared = requests[0].clone();
+        shared.id = "optional-shared-policy".to_owned();
+        shared.required = false;
+        shared.lane = "optional-lane".to_owned();
+        shared.requested_by = vec!["optional-lane".to_owned()];
+        requests.push(shared);
         let mut profile = Profile::default();
         profile.limits.tests = 1;
         profile.limits.builds = 1;
@@ -2839,6 +3107,7 @@ mod tests {
             &Instant::now(),
             None,
             true,
+            &[],
             |_root, _argv, _env, _timeout, _stdout, _stderr, _observe| {
                 Err(anyhow::anyhow!(
                     "optional test must not run in required pass"
@@ -2875,6 +3144,25 @@ mod tests {
                         && receipt.request_ids.contains(&request.id))
             );
         }
+        let shared_receipt = result
+            .proof_receipts
+            .iter()
+            .find(|receipt| {
+                receipt
+                    .request_ids
+                    .contains(&"optional-shared-policy".to_owned())
+            })
+            .ok_or_else(|| anyhow::anyhow!("shared request attribution missing"))?;
+        assert!(
+            shared_receipt
+                .request_ids
+                .contains(&"proof-0002-d2ae3e742e84".to_owned())
+        );
+        assert!(
+            shared_receipt
+                .requested_by
+                .contains(&"optional-lane".to_owned())
+        );
         let remaining = settled_focused_proof_budget(
             proof_budget(&profile)?,
             &result.resource_leases,
@@ -2892,6 +3180,58 @@ mod tests {
             &diff.head,
         );
         assert!(stale_budget.max_total_seconds < remaining.max_total_seconds);
+        // Estimated costs exceed the allocation, but short completed commands
+        // release enough time to admit the remaining required command before
+        // control returns to the impact phase.
+        profile.budgets.proof_total_timeout_sec = 1200;
+        let second_out = temp.path().join("replan-out");
+        let required = requests
+            .iter()
+            .filter(|request| request.required)
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut batches = 0;
+        let rerun = run_required_until_settled(&required, &diff.head, |prior| {
+            batches += 1;
+            run_request_proof_broker_v0_with_runners(
+                temp.path(),
+                &second_out,
+                &diff,
+                &profile,
+                &requests,
+                &prior.proof_receipts,
+                &prior.resource_leases,
+                &args,
+                &state,
+                &Instant::now(),
+                None,
+                true,
+                &[],
+                |_root, _argv, _env, _timeout, _stdout, _stderr, _observe| {
+                    Err(anyhow::anyhow!("unexpected optional test"))
+                },
+                |_root, _out, _diff| Err(anyhow::anyhow!("unexpected worktree")),
+                |_root, _argv, _env, _timeout, stdout, stderr, _observe| {
+                    fs::write(stdout, b"fake build")?;
+                    fs::write(stderr, b"")?;
+                    Ok(CommandStatus {
+                        exit_code: Some(0),
+                        timed_out: false,
+                        success: true,
+                        reason: "fixture".to_owned(),
+                        duration_ms: 1000,
+                    })
+                },
+            )
+        })?;
+        assert!(batches >= 2);
+        assert_eq!(rerun.proof_receipts.len(), 3);
+        assert!(required.iter().all(|request| {
+            rerun
+                .proof_receipts
+                .iter()
+                .any(|receipt| receipt.request_ids.contains(&request.id))
+        }));
         Ok(())
     }
 
@@ -2933,14 +3273,6 @@ mod tests {
         let args = test_run_args(out.clone());
         let event_log = crate::EventLog::open(&temp.path().join("events.ndjson"))?;
         let run_started = Instant::now();
-        let initial_loop = crate::start_run_loop(
-            &event_log,
-            &run_started,
-            "proof",
-            "proof",
-            "initial-diff-broker",
-        )?;
-
         let (_, phases) = run_seeded_proof_stream_v0(
             temp.path(),
             &out,
@@ -2948,7 +3280,6 @@ mod tests {
             &profile,
             &args,
             std::slice::from_ref(&proof_request("seeded", true)),
-            initial_loop,
             &event_log,
             &run_started,
             &BoxState {
@@ -3058,6 +3389,7 @@ mod tests {
             &Instant::now(),
             None,
             false,
+            &[],
             |_root, argv, env, timeout, stdout, stderr, _observe_process| {
                 test_commands.push(command_display_with_env(env, argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
@@ -3192,6 +3524,7 @@ mod tests {
             &Instant::now(),
             None,
             false,
+            &[],
             |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
                 Err(anyhow::anyhow!(
                     "existing evidence must prevent test execution"
@@ -3291,6 +3624,7 @@ mod tests {
             &Instant::now(),
             None,
             false,
+            &[],
             |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
                 Err(anyhow::anyhow!(
                     "initial receipt must prevent rerunning the changed test"
@@ -3398,6 +3732,7 @@ mod tests {
             &args,
             &box_state,
             &Instant::now(),
+            &[],
             None,
         )?;
 

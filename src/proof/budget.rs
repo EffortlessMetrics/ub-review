@@ -174,7 +174,11 @@ fn focused_proof_budget_with_charges(
         .filter(|lease| lease.status == "granted")
         .fold(0_u64, |total, lease| total.saturating_add(charge(lease)));
     budget.max_focused_tests = budget.max_focused_tests.saturating_sub(granted);
-    budget.max_focused_test_files = budget.max_focused_test_files.saturating_sub(granted);
+    let granted_tests = focused_leases
+        .iter()
+        .filter(|lease| lease.status == "granted" && lease.kind == "focused-test")
+        .count();
+    budget.max_focused_test_files = budget.max_focused_test_files.saturating_sub(granted_tests);
     budget.max_total_seconds = budget.max_total_seconds.saturating_sub(granted_seconds);
     budget
 }
@@ -645,7 +649,7 @@ mod tests {
         );
 
         assert_eq!(remaining.max_focused_tests, 2);
-        assert_eq!(remaining.max_focused_test_files, 1);
+        assert_eq!(remaining.max_focused_test_files, 2);
         assert_eq!(remaining.max_total_seconds, 420);
         assert_eq!(remaining.per_command_timeout_sec, 300);
     }

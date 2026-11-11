@@ -6383,6 +6383,145 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
 }
 
 #[test]
+#[cfg(unix)]
+fn model_off_required_builds_precede_optional_impact_with_four_slots() -> Result<()> {
+    let _guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    write_file(
+        &repo.join("Cargo.toml"),
+        "[package]\nname = \"proof-fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )?;
+    write_file(&repo.join("src/lib.rs"), "pub fn value() -> u32 { 1 }\n")?;
+    write_file(&repo.join("tests/smoke.rs"), "#[test] fn smoke() {}\n")?;
+    write_file(
+        &repo.join("Cargo.lock"),
+        "version = 4\n\n[[package]]\nname = \"proof-fixture\"\nversion = \"0.1.0\"\n",
+    )?;
+    run(&repo, "git", &["init"])?;
+    run(
+        &repo,
+        "git",
+        &["config", "user.email", "fixture@example.invalid"],
+    )?;
+    run(&repo, "git", &["config", "user.name", "Fixture"])?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "base"])?;
+    write_file(&repo.join("src/lib.rs"), "pub fn value() -> u32 { 2 }\n")?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "change"])?;
+    let config = temp.path().join("config.toml");
+    let mut config_text = String::from(
+        "review_profile = \"bun-ub-v0\"\nprofile = \"gh-runner-full\"\n[repo]\nkind = \"rust\"\nledger = \"\"\nbase = \"HEAD~1\"\nhead = \"HEAD\"\n",
+    );
+    for (id, command, timeout) in [
+        ("policy", "cargo xtask policy-check", 300),
+        (
+            "check",
+            "cargo check --workspace --all-targets --locked",
+            600,
+        ),
+        ("doc", "cargo doc --workspace --no-deps --locked", 600),
+    ] {
+        config_text.push_str(&format!("\n[[proof.required]]\nid = \"{id}\"\nlanguages = [\"rust\"]\ndiff_classes = [\"source-general\"]\ncommand = \"{command}\"\nreason = \"Required fixture build\"\ncost = \"focused-build\"\ntimeout_sec = {timeout}\nrequired = true\n"));
+    }
+    write_file(&config, &config_text)?;
+    let fake_bin = temp.path().join("fake-bin");
+    write_fake_cargo(&fake_bin)?;
+    let metadata = serde_json::json!({"workspace_root": repo, "workspace_members": ["proof-fixture"], "packages": [{"name":"proof-fixture", "manifest_path":repo.join("Cargo.toml"), "targets":[{"name":"smoke", "kind":["test"], "src_path":repo.join("tests/smoke.rs")}], "dependencies":[]}], "resolve":{"nodes":[]}});
+    write_file(&fake_bin.join("metadata.json"), &metadata.to_string())?;
+    let fake_cargo = fake_bin.join("cargo");
+    let original = fs::read_to_string(&fake_cargo)?;
+    write_executable_fixture(&fake_cargo, &original.replacen("#!/bin/sh\n", "#!/bin/sh\nif [ \"$1\" = metadata ]; then cat \"$(dirname \"$0\")/metadata.json\"; exit 0; fi\n", 1))?;
+    let path = prepend_to_path(&fake_bin)?;
+    let log = temp.path().join("cargo.log");
+    write_fake_tool_config(&fake_bin, "cargo", &[("log", path_str(&log)?)])?;
+    let out = temp.path().join("packet");
+    run_with_env(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--mode",
+            "intelligent-ci",
+            "--no-github-summary",
+            "--model-mode",
+            "off",
+            "--tools",
+            "cargo-allow",
+        ],
+        &[("PATH", path.as_str())],
+    )?;
+    let receipts: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_receipts.json"))?)?;
+    assert!(receipts.len() >= 3);
+    assert!(receipts[..3].iter().all(|receipt| receipt["kind"] == "focused-build" && receipt["result"] == "head_passed"));
+    assert!(
+        receipts
+            .iter()
+            .skip(3)
+            .any(|receipt| receipt["kind"] == "focused-head")
+    );
+    let requests: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_requests.json"))?)?;
+    assert_eq!(
+        requests
+            .iter()
+            .filter(|request| request["required"] == true)
+            .count(),
+        3
+    );
+    for request in requests
+        .iter()
+        .filter(|request| request["required"] == true)
+    {
+        let id = json_str_field(request, "id")?;
+        assert!(receipts[..3].iter().any(|receipt| {
+            receipt["request_ids"]
+                .as_array()
+                .is_some_and(|ids| ids.iter().any(|value| value.as_str() == Some(id)))
+        }));
+    }
+    let gate: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/gate_outcome.json"))?)?;
+    assert!(
+        receipts[..3]
+            .iter()
+            .all(
+                |receipt| receipt["revision"]["digest"] == gate["revision"]["digest"]
+                    && receipt["revision"]["digest"].is_string()
+            )
+    );
+    assert_eq!(gate["planner_required_proofs"]["total"], 3);
+    // Current main deliberately excludes head-only receipts from planner
+    // accounting; this scheduling port does not change that policy.
+    assert_eq!(gate["planner_required_proofs"]["proven"], 0);
+    let scheduler: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/scheduler.json"))?)?;
+    let phases = json_array_field(&scheduler, "phases")?;
+    let required = phases
+        .iter()
+        .find(|phase| phase["stage"] == "seeded-required-broker")
+        .ok_or_else(|| anyhow::anyhow!("required phase missing"))?;
+    let impact = phases
+        .iter()
+        .find(|phase| phase["stage"] == "initial-diff-broker")
+        .ok_or_else(|| anyhow::anyhow!("impact phase missing"))?;
+    assert!(required["finished_at_offset_ms"].as_u64() <= impact["started_at_offset_ms"].as_u64());
+    Ok(())
+}
+
+#[test]
 fn model_auto_run_overlaps_seeded_required_proof_with_model_lanes() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
@@ -6538,7 +6677,7 @@ required = true
         .ok_or_else(|| anyhow::anyhow!("scheduler phases missing"))?;
     let seeded_phase = phases
         .iter()
-        .find(|phase| phase["loop_id"] == "proof" && phase["stage"] == "seeded-request-broker")
+        .find(|phase| phase["loop_id"] == "proof" && phase["stage"] == "seeded-required-broker")
         .ok_or_else(|| anyhow::anyhow!("seeded proof phase missing"))?;
     let model_phase = phases
         .iter()

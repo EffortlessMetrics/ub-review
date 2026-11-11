@@ -5235,25 +5235,18 @@ fn lane_turn_artifact_ref(lane: &str, turn: u32) -> String {
 }
 
 /// Acquire the checkout's shared Cargo target for proof execution by waiting
-/// for its late-sensor owner, then open the proof scheduler interval. Keeping
+/// for its late-sensor owner. Keeping
 /// this ordering in one helper makes model-on and model-off runs share the
 /// same no-overlap contract (#1257).
-fn start_initial_proof_after_late_sensors(
+fn join_late_sensors_before_proof(
     late_phase: Option<LateSensorPhase>,
     event_log: &EventLog,
     run_started: &Instant,
-) -> Result<(ActiveRunLoop, Option<RunLoopPhase>)> {
+) -> Result<Option<RunLoopPhase>> {
     let late_sensor_phase = late_phase
         .map(|phase| phase.join_phase(event_log, run_started))
         .transpose()?;
-    let proof_loop = start_run_loop(
-        event_log,
-        run_started,
-        "proof",
-        "proof",
-        "initial-diff-broker",
-    )?;
-    Ok((proof_loop, late_sensor_phase))
+    Ok(late_sensor_phase)
 }
 
 #[expect(
@@ -5379,12 +5372,8 @@ fn write_review_artifacts(
         let proof_late_phase = late_phase.take();
         thread::scope(|scope| -> Result<()> {
             let proof_handle = scope.spawn(move || {
-                let (initial_proof_loop, late_sensor_phase) =
-                    start_initial_proof_after_late_sensors(
-                        proof_late_phase,
-                        event_log,
-                        run_started,
-                    )?;
+                let late_sensor_phase =
+                    join_late_sensors_before_proof(proof_late_phase, event_log, run_started)?;
                 let (result, proof_phases) = run_seeded_proof_stream_v0(
                     root,
                     out,
@@ -5392,7 +5381,6 @@ fn write_review_artifacts(
                     profile,
                     args,
                     &seeded_proof_requests,
-                    initial_proof_loop,
                     event_log,
                     run_started,
                     box_state,
@@ -5591,8 +5579,8 @@ fn write_review_artifacts(
             model_loop,
             "skipped_model_mode_off",
         )?;
-        let (initial_proof_loop, late_sensor_phase) =
-            start_initial_proof_after_late_sensors(late_phase.take(), event_log, run_started)?;
+        let late_sensor_phase =
+            join_late_sensors_before_proof(late_phase.take(), event_log, run_started)?;
         if let Some(phase) = late_sensor_phase {
             run_loop_tracker.record(phase);
         }
@@ -5603,7 +5591,6 @@ fn write_review_artifacts(
             profile,
             args,
             &seeded_proof_requests,
-            initial_proof_loop,
             event_log,
             run_started,
             box_state,
@@ -5682,39 +5669,25 @@ fn write_review_artifacts(
         &proof_result.proof_receipts,
         &diff.head,
     ) {
-        let request_proof_loop = start_run_loop(
-            event_log,
-            run_started,
-            "proof",
-            "proof",
-            "model-request-broker",
-        )?;
-        let request_proof_result = run_request_proof_broker_v0(
-            root,
-            out,
-            diff,
-            profile,
-            &proof_requests,
-            &proof_result.proof_receipts,
-            &proof_result.resource_leases,
-            args,
-            box_state,
-            run_started,
-            proof_task_ledger,
-        );
-        let request_status = if request_proof_result.is_ok() {
-            "completed"
-        } else {
-            "failed"
-        };
-        finish_run_loop(
-            event_log,
-            run_started,
-            run_loop_tracker,
-            request_proof_loop,
-            request_status,
-        )?;
-        let request_proof_result = request_proof_result?;
+        let mut prior_catalog = focused_test_candidates_from_diff(diff, &[], Some(impact_plan_ref));
+        prior_catalog.extend(focused_test_candidates_from_requests(&proof_requests));
+        let request_proof_result =
+            run_model_request_proof_phase(event_log, run_started, run_loop_tracker, || {
+                run_request_proof_broker_v0(
+                    root,
+                    out,
+                    diff,
+                    profile,
+                    &proof_requests,
+                    &proof_result.proof_receipts,
+                    &proof_result.resource_leases,
+                    args,
+                    box_state,
+                    run_started,
+                    &prior_catalog,
+                    proof_task_ledger,
+                )
+            })?;
         proof_result
             .proof_receipts
             .extend(request_proof_result.proof_receipts);
@@ -5966,6 +5939,7 @@ fn write_review_artifacts(
         args,
         box_state,
         run_started,
+        &focused_test_candidates_from_diff(diff, &review.proof_requests, Some(impact_plan_ref)),
         proof_task_ledger,
     )?;
     let follow_up_proof_receipts = follow_up_proof_result.proof_receipts;
