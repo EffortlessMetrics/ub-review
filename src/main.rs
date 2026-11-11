@@ -5669,8 +5669,7 @@ fn write_review_artifacts(
         &proof_result.proof_receipts,
         &diff.head,
     ) {
-        let mut prior_catalog = focused_test_candidates_from_diff(diff, &[], Some(impact_plan_ref));
-        prior_catalog.extend(focused_test_candidates_from_requests(&proof_requests));
+        let prior_catalog = prior_proof_test_catalog(diff, &proof_requests, impact_plan_ref);
         let request_proof_result =
             run_model_request_proof_phase(event_log, run_started, run_loop_tracker, || {
                 run_request_proof_broker_v0(
@@ -5928,10 +5927,7 @@ fn write_review_artifacts(
     append_follow_up_proof_requests(&mut review.proof_requests, &follow_up_evidence);
     let follow_up_proof_loop =
         start_run_loop(event_log, run_started, "proof", "proof", "follow-up-broker")?;
-    let mut follow_up_catalog = focused_test_candidates_from_diff(diff, &[], Some(impact_plan_ref));
-    follow_up_catalog.extend(focused_test_candidates_from_requests(
-        &review.proof_requests,
-    ));
+    let follow_up_catalog = prior_proof_test_catalog(diff, &review.proof_requests, impact_plan_ref);
     let follow_up_proof_result = run_follow_up_proof_broker_v0(
         root,
         out,

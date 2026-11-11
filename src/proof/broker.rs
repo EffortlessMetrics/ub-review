@@ -69,11 +69,7 @@ pub(crate) fn run_initial_diff_proof_broker_v0(
     );
     let runtime = current_portfolio_runtime(profile, box_state, run_started)?;
     let tasks = focused_test_candidates_from_diff(diff, &[], Some(impact));
-    let mut catalog = tasks.clone();
-    merge_focused_test_candidates(
-        &mut catalog,
-        focused_test_candidates_from_requests(seeded_requests),
-    );
+    let catalog = prior_proof_test_catalog(diff, seeded_requests, impact);
     let (budget, prior_files) =
         prior_file_capacity(total_budget, budget, &prior.resource_leases, &catalog);
     let selection = select_proof_portfolio_with_prior_files(
@@ -170,11 +166,7 @@ pub(crate) fn run_seeded_proof_stream_v0(
         .filter(|request| request.required)
         .cloned()
         .collect::<Vec<_>>();
-    let mut prior_catalog = focused_test_candidates_from_diff(diff, &[], Some(impact));
-    merge_focused_test_candidates(
-        &mut prior_catalog,
-        focused_test_candidates_from_requests(seeded_proof_requests),
-    );
+    let prior_catalog = prior_proof_test_catalog(diff, seeded_proof_requests, impact);
     let mut proof_result = ProofBrokerResult::default();
     if has_unreceipted_proof_request_tasks(&required, &[], &diff.head) {
         let active = start_run_loop(
@@ -397,9 +389,7 @@ fn defer_unexecuted_final_selection(
     for decision in &mut selection.decisions {
         if decision.status == "selected" && decision.receipt_ids.is_empty() {
             decision.status = "deferred_by_safe_wind_down".to_owned();
-            decision.reason =
-                "broker phase ended before dispatch; work remains eligible for a later phase"
-                    .to_owned();
+            decision.reason = "broker phase ended before dispatch".to_owned();
         }
     }
     selection.test_tasks.clear();
@@ -445,6 +435,18 @@ fn prior_file_capacity(
     }
     remaining.max_focused_test_files = total.max_focused_test_files.saturating_sub(unknown);
     (remaining, files)
+}
+
+pub(crate) fn prior_proof_test_catalog(
+    diff: &DiffContext,
+    requests: &[ProofRequest],
+    impact: &ImpactPlan,
+) -> Vec<FocusedTestTask> {
+    let mut catalog = focused_test_candidates_from_diff(diff, &[], Some(impact));
+    // Keep head-only impact and red/green request identities separate even
+    // when both address the same test target.
+    catalog.extend(focused_test_candidates_from_requests(requests));
+    catalog
 }
 
 #[derive(Clone, Copy)]
@@ -1429,8 +1431,7 @@ fn merge_proof_portfolio_with_disk(
         .iter()
         .filter(|decision| {
             decision.status == "deferred_by_safe_wind_down"
-                && decision.reason
-                    == "broker phase ended before dispatch; work remains eligible for a later phase"
+                && decision.reason == "broker phase ended before dispatch"
         })
         .map(|decision| decision.task_id.as_str())
         .collect::<BTreeSet<_>>();
@@ -3058,8 +3059,7 @@ mod tests {
             task_id: "second".to_owned(),
             kind: "focused-head".to_owned(),
             status: "deferred_by_safe_wind_down".to_owned(),
-            reason: "broker phase ended before dispatch; work remains eligible for a later phase"
-                .to_owned(),
+            reason: "broker phase ended before dispatch".to_owned(),
             required: false,
             estimated_cost_sec: 300,
             request_ids: Vec::new(),
@@ -3093,6 +3093,64 @@ mod tests {
         );
         assert_eq!(later[0].status, "answered_by_existing_receipt");
         assert_eq!(later[0].receipt_ids, ["receipt-second"]);
+        Ok(())
+    }
+
+    #[test]
+    fn prior_catalog_retains_impact_and_requested_identities_for_same_target() -> Result<()> {
+        let diff = test_diff();
+        let impact = ImpactPlan {
+            schema: "ub-review.impact_plan.v1",
+            changed_files: diff.changed_files.clone(),
+            changed_packages: Vec::new(),
+            affected_packages: Vec::new(),
+            candidate_tasks: vec![ImpactCandidateTask {
+                target: "cli".to_owned(),
+                kind: "test".to_owned(),
+                reason: "fixture".to_owned(),
+                owning_package: "fixture".to_owned(),
+                test_package: "fixture".to_owned(),
+                estimated_cost: "low",
+                expected_value: "high",
+                rank: 100,
+                selection: "selected",
+            }],
+            evidence_gaps: Vec::new(),
+            selection_mode: "shadow",
+            cargo_lockfile: true,
+        };
+        let mut request = proof_request("requested-cli", true);
+        request.command = "cargo test --locked --package fixture --test cli".to_owned();
+        let catalog = prior_proof_test_catalog(&diff, std::slice::from_ref(&request), &impact);
+        let head = catalog
+            .iter()
+            .find(|task| task.mode == FocusedProofMode::HeadOnly)
+            .ok_or_else(|| anyhow::anyhow!("missing impact identity"))?;
+        let redgreen = catalog
+            .iter()
+            .find(|task| task.mode == FocusedProofMode::RedGreen)
+            .ok_or_else(|| anyhow::anyhow!("missing requested identity"))?;
+        assert_ne!(head.id, redgreen.id);
+        assert_eq!(head.file, redgreen.file);
+        let mut lease = granted_focused_test_lease("fixture", 1);
+        lease.consumer = head.id.clone();
+        let mut total = proof_budget_for_test(2, 600);
+        total.max_focused_test_files = 1;
+        let (remaining, files) = prior_file_capacity(total, total, &[lease], &catalog);
+        assert!(files.contains(&redgreen.file));
+        let selected = select_proof_portfolio_with_prior_files(
+            ProofPortfolioInput {
+                test_tasks: std::slice::from_ref(redgreen),
+                build_tasks: &[],
+                proof_requests: std::slice::from_ref(&request),
+                proof_receipts: &[],
+                head: &diff.head,
+                budget: remaining,
+                runtime: portfolio_runtime_for_test(600, 4, Some(8192), Some(20000)),
+            },
+            &files,
+        );
+        assert_eq!(selected.test_tasks.len(), 1, "{:?}", selected.decisions);
         Ok(())
     }
 
