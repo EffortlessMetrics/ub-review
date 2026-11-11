@@ -2004,6 +2004,128 @@ mod tests {
     }
 
     #[test]
+    fn bun_option_shaped_targets_are_rejected_before_admission() {
+        for file in [
+            "--preload=./test/parser.test.ts",
+            "--preload=test/parser.test.ts",
+            "-r/test/parser.test.ts",
+            "-test/tests/parser.test.ts",
+            "--/test/parser.test.ts",
+            "--preload=tests\\parser.test.ts",
+        ] {
+            assert!(!is_bun_focused_test_file(file), "{file}");
+            let diff = focused_test_diff(&[file]);
+            assert!(focused_test_candidates_from_diff(&diff, &[], None).is_empty());
+            for prefix in ["bun test", "bun bd test", "USE_SYSTEM_BUN=1 bun test"] {
+                let command = format!("{prefix} {file} -t parser");
+                assert!(!proof_request_allowed_v0(&command, "focused-test"));
+                assert_eq!(
+                    proof_request_status(&command, "focused-test"),
+                    "unsupported"
+                );
+                // Even a pre-labelled request is revalidated before a task can
+                // reach command construction, in both request generations.
+                let request = focused_test_request("option-target", &command, 1);
+                assert!(focused_test_candidates_from_requests(&[request]).is_empty());
+                assert!(
+                    focused_test_candidates_from_v2(&[v2_focused_test_request(&command)])
+                        .is_empty()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn bun_option_shaped_targets_never_schedule_or_execute() -> Result<()> {
+        let file = "--preload=./test/parser.test.ts";
+        let diff = focused_test_diff(&[file]);
+        let request = focused_test_request("option-target", &format!("bun test {file}"), 1);
+        let budget = ProofBudget {
+            max_focused_test_files: 1,
+            max_focused_tests: 1,
+            per_command_timeout_sec: 1,
+            max_total_seconds: 2,
+        };
+        assert!(
+            focused_proof_candidate_plans_from_diff(
+                &diff,
+                std::slice::from_ref(&request),
+                None,
+                budget,
+            )
+            .is_empty()
+        );
+        let tasks = focused_test_tasks_from_diff(&diff, &[request], None, budget);
+        assert!(tasks.is_empty());
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let mut profile = Profile::default();
+        profile.limits.tests = 1;
+        let args = crate::tests::test_run_args(out.clone());
+        let result = run_focused_red_green_proof_tasks_with_runner(
+            temp.path(),
+            &out,
+            &diff,
+            &profile,
+            &args,
+            budget,
+            tasks,
+            None,
+            ProofExecutionPhase::InitialImpact,
+            |_root, _argv, _env, _timeout, _stdout, _stderr, _observe| {
+                anyhow::bail!("an option-shaped target reached the command runner")
+            },
+            |_root, _out, _diff| {
+                anyhow::bail!("an option-shaped target reached base worktree preparation")
+            },
+        )?;
+        assert!(result.proof_receipts.is_empty());
+        assert!(result.resource_leases.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn bun_focused_targets_preserve_nested_paths_and_command_identity() {
+        for file in [
+            "test/parser.test.ts",
+            "tests/parser.test.js",
+            "packages/parser/test/parser.test.tsx",
+            "packages/parser/tests/parser.test.mjs",
+            "b/test/parser.test.cjs",
+            "test/-parser.test.jsx",
+        ] {
+            assert!(is_bun_focused_test_file(file), "{file}");
+            let diff = focused_test_diff(&[file]);
+            let candidates = focused_test_candidates_from_diff(&diff, &[], None);
+            assert_eq!(candidates.len(), 1);
+            assert_eq!(candidates[0].file, file);
+            for prefix in ["bun test", "bun bd test", "USE_SYSTEM_BUN=1 bun test"] {
+                let command = format!("{prefix} {file} -t parser");
+                assert!(proof_request_allowed_v0(&command, "focused-test"));
+                let request = focused_test_request("literal-target", &command, 1);
+                let tasks = focused_test_candidates_from_requests(&[request]);
+                assert_eq!(tasks.len(), 1);
+                let task = &tasks[0];
+                assert_eq!(task.file, file);
+                assert_eq!(task.request_ids, ["literal-target"]);
+                assert_eq!(
+                    proof_task_command_spec(task, "head").argv,
+                    ["bun", "bd", "test", file, "-t", "parser"]
+                );
+                let base = proof_task_command_spec(task, "base-plus-tests");
+                assert_eq!(base.argv, ["bun", "test", file, "-t", "parser"]);
+                assert_eq!(
+                    base.env.get("USE_SYSTEM_BUN").map(String::as_str),
+                    Some("1")
+                );
+            }
+        }
+        for file in ["./test/parser.test.ts", ".\\tests\\parser.test.js"] {
+            assert!(!is_bun_focused_test_file(file), "{file}");
+        }
+    }
+
+    #[test]
     fn proof_task_plan_command_formats_default_bun_and_explicit_command_specs() {
         let task = FocusedTestTask {
             id: "proof-red-green:test/js/bun/ffi/ffi.test.js:ffi toBuffer bad free".to_owned(),

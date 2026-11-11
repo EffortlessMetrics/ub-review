@@ -10,7 +10,9 @@ use std::collections::BTreeMap;
 
 pub(crate) fn is_bun_focused_test_file(path: &str) -> bool {
     let path = normalize_repo_path(path);
-    if !is_repo_relative_path(&path) {
+    // Focused targets occupy a positional argv slot after `bun [bd] test`.
+    // A repository-relative path can still be interpreted as a Bun option.
+    if path.starts_with('-') || !is_repo_relative_path(&path) {
         return false;
     }
     let lower = path.to_ascii_lowercase();
