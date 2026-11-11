@@ -5596,24 +5596,24 @@ fn write_review_artifacts(
         if let Some(phase) = late_sensor_phase {
             run_loop_tracker.record(phase);
         }
-        proof_result = run_initial_diff_proof_broker_v0(
+        let (seeded_result, proof_phases) = run_seeded_proof_stream_v0(
             root,
             out,
             diff,
             profile,
             args,
-            box_state,
+            &seeded_proof_requests,
+            initial_proof_loop,
+            event_log,
             run_started,
+            box_state,
             impact_plan_ref,
             proof_task_ledger,
         )?;
-        finish_run_loop(
-            event_log,
-            run_started,
-            run_loop_tracker,
-            initial_proof_loop,
-            "completed",
-        )?;
+        proof_result = seeded_result;
+        for phase in proof_phases {
+            run_loop_tracker.record(phase);
+        }
     }
     // #325 stream-as-it-lands join point: the late evidence phase lands here,
     // before anything downstream reads sensor state — the model-request proof
@@ -5701,20 +5701,26 @@ fn write_review_artifacts(
             box_state,
             run_started,
             proof_task_ledger,
+        );
+        let request_status = if request_proof_result.is_ok() {
+            "completed"
+        } else {
+            "failed"
+        };
+        finish_run_loop(
+            event_log,
+            run_started,
+            run_loop_tracker,
+            request_proof_loop,
+            request_status,
         )?;
+        let request_proof_result = request_proof_result?;
         proof_result
             .proof_receipts
             .extend(request_proof_result.proof_receipts);
         proof_result
             .resource_leases
             .extend(request_proof_result.resource_leases);
-        finish_run_loop(
-            event_log,
-            run_started,
-            run_loop_tracker,
-            request_proof_loop,
-            "completed",
-        )?;
     }
     // Order 9 (#678): the live reporter — the same-model coordinator. Runs
     // after the primary wave + proof broker, reads lane digests, makes one

@@ -56,16 +56,23 @@ pub(crate) fn run_initial_diff_proof_broker_v0(
     box_state: &BoxState,
     run_started: &Instant,
     impact: &ImpactPlan,
+    prior: &ProofBrokerResult,
     task_ledger: Option<&ProofTaskLedger>,
 ) -> Result<ProofBrokerResult> {
-    let budget = proof_budget(profile)?;
+    let total_budget = proof_budget(profile)?;
+    let budget = settled_focused_proof_budget(
+        total_budget,
+        &prior.resource_leases,
+        &prior.proof_receipts,
+        &diff.head,
+    );
     let runtime = current_portfolio_runtime(profile, box_state, run_started)?;
     let tasks = focused_test_candidates_from_diff(diff, &[], Some(impact));
     let selection = select_proof_portfolio(ProofPortfolioInput {
         test_tasks: &tasks,
         build_tasks: &[],
         proof_requests: &[],
-        proof_receipts: &[],
+        proof_receipts: &prior.proof_receipts,
         head: &diff.head,
         budget,
         runtime,
@@ -83,17 +90,24 @@ pub(crate) fn run_initial_diff_proof_broker_v0(
         run_command_to_files_with_spawn_observer,
         prepare_base_plus_tests_worktree,
     )?;
-    let final_budget = settled_focused_proof_budget(
-        budget,
+    let receipts = prior
+        .proof_receipts
+        .iter()
+        .chain(&result.proof_receipts)
+        .cloned()
+        .collect::<Vec<_>>();
+    let final_budget = remaining_focused_proof_budget_after(
+        total_budget,
+        &prior.resource_leases,
         &result.resource_leases,
-        &result.proof_receipts,
+        &receipts,
         &diff.head,
     );
     let final_selection = select_proof_portfolio(ProofPortfolioInput {
         test_tasks: &tasks,
         build_tasks: &[],
         proof_requests: &[],
-        proof_receipts: &result.proof_receipts,
+        proof_receipts: &receipts,
         head: &diff.head,
         budget: final_budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
@@ -129,6 +143,55 @@ pub(crate) fn run_seeded_proof_stream_v0(
     task_ledger: Option<&ProofTaskLedger>,
 ) -> Result<(ProofBrokerResult, Vec<RunLoopPhase>)> {
     let mut phases = Vec::new();
+    let required = seeded_proof_requests
+        .iter()
+        .filter(|request| request.required)
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut proof_result = ProofBrokerResult::default();
+    if has_unreceipted_proof_request_tasks(&required, &[], &diff.head) {
+        let active = start_run_loop(
+            event_log,
+            run_started,
+            "proof",
+            "proof",
+            "seeded-required-broker",
+        )?;
+        let result = run_request_proof_broker_v0_with_runners(
+            root,
+            out,
+            diff,
+            profile,
+            &required,
+            &[],
+            &[],
+            args,
+            box_state,
+            run_started,
+            task_ledger,
+            true,
+            run_command_to_files_with_spawn_observer,
+            prepare_base_plus_tests_worktree,
+            run_command_to_files_with_spawn_observer,
+        );
+        phases.push(finish_run_loop_phase(
+            event_log,
+            run_started,
+            active,
+            if result.is_ok() {
+                "completed"
+            } else {
+                "failed"
+            },
+        )?);
+        proof_result = match result {
+            Ok(result) => result,
+            Err(error) => {
+                finish_run_loop_phase(event_log, run_started, initial_proof_loop, "failed")?;
+                return Err(error);
+            }
+        };
+    }
     let initial_result = run_initial_diff_proof_broker_v0(
         root,
         out,
@@ -138,6 +201,7 @@ pub(crate) fn run_seeded_proof_stream_v0(
         box_state,
         run_started,
         impact,
+        &proof_result,
         task_ledger,
     );
     let initial_status = if initial_result.is_ok() {
@@ -151,7 +215,13 @@ pub(crate) fn run_seeded_proof_stream_v0(
         initial_proof_loop,
         initial_status,
     )?);
-    let mut proof_result = initial_result?;
+    let initial_result = initial_result?;
+    proof_result
+        .proof_receipts
+        .extend(initial_result.proof_receipts);
+    proof_result
+        .resource_leases
+        .extend(initial_result.resource_leases);
 
     if has_unreceipted_proof_request_tasks(
         seeded_proof_requests,
@@ -743,6 +813,7 @@ pub(crate) fn run_request_proof_broker_v0(
         box_state,
         run_started,
         task_ledger,
+        false,
         run_command_to_files_with_spawn_observer,
         prepare_base_plus_tests_worktree,
         run_command_to_files_with_spawn_observer,
@@ -765,6 +836,7 @@ fn run_request_proof_broker_v0_with_runners<F, G, H>(
     box_state: &BoxState,
     run_started: &Instant,
     task_ledger: Option<&ProofTaskLedger>,
+    required_only: bool,
     test_runner: F,
     prepare_base_plus_tests: G,
     build_runner: H,
@@ -804,7 +876,11 @@ where
     // Diff-derived Cargo candidates are owned by the initial diff broker and
     // already carry receipts by the time a request phase runs; this phase
     // re-plans requested work only.
-    let mut test_candidates = focused_test_candidates_from_diff(diff, &[], None);
+    let mut test_candidates = if required_only {
+        Vec::new()
+    } else {
+        focused_test_candidates_from_diff(diff, &[], None)
+    };
     merge_focused_test_candidates(
         &mut test_candidates,
         focused_test_candidates_from_v2(&v2_requests),
@@ -1795,6 +1871,7 @@ mod tests {
                 },
                 &Instant::now(),
                 None,
+                false,
                 |_root, argv, _env, _timeout, stdout, stderr, _observe| {
                     requested_commands.push(argv.to_vec());
                     fs::write(stdout, b"requested target fails\n")?;
@@ -1950,6 +2027,7 @@ mod tests {
                 &box_state,
                 &started,
                 Some(&ledger),
+                false,
                 |root, argv, env, timeout, stdout, stderr, observer| {
                     ensure!(argv.first().is_some_and(|arg| arg == "cargo"));
                     ensure!(timeout == 3);
@@ -2139,6 +2217,7 @@ mod tests {
             &BoxState::detect()?,
             &Instant::now(),
             None,
+            false,
             |_root, argv, _env, timeout, stdout, stderr, _observer| {
                 ensure!(argv.join(" ") == "cargo test --locked --package fixture --test probe");
                 ensure!(timeout == 3);
@@ -2703,6 +2782,120 @@ mod tests {
     }
 
     #[test]
+    fn seeded_required_builds_use_four_slot_consumer_budget_before_impact() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let mut diff = test_diff();
+        // A Bun candidate must not enter the required-only pass.
+        diff.changed_files.push("test/optional.test.ts".to_owned());
+        let specs = [
+            ("proof-0002-d2ae3e742e84", "cargo xtask policy-check", 300),
+            (
+                "proof-0000-291419f6f509",
+                "cargo check --workspace --all-targets --locked",
+                600,
+            ),
+            (
+                "proof-0001-d97c389baa65",
+                "cargo doc --workspace --no-deps --locked",
+                600,
+            ),
+        ];
+        let requests: Vec<_> = specs
+            .iter()
+            .map(|(id, command, timeout)| {
+                let mut request = proof_request(id, true);
+                request.command = (*command).to_owned();
+                request.cost = "focused-build".to_owned();
+                request.timeout_sec = *timeout;
+                request
+            })
+            .collect();
+        let mut profile = Profile::default();
+        profile.limits.tests = 1;
+        profile.limits.builds = 1;
+        profile.budgets.proof_max_focused_test_files = 6;
+        profile.budgets.proof_max_focused_tests = 4;
+        profile.budgets.proof_command_timeout_sec = 600;
+        profile.budgets.proof_total_timeout_sec = 1800;
+        let args = test_run_args(out.clone());
+        let state = BoxState {
+            cpus: 4,
+            free_mem_mb: Some(8192),
+            free_disk_mb: Some(20000),
+            load_1m: Some(0.25),
+            github_actions: false,
+        };
+        let result = run_request_proof_broker_v0_with_runners(
+            temp.path(),
+            &out,
+            &diff,
+            &profile,
+            &requests,
+            &[],
+            &[],
+            &args,
+            &state,
+            &Instant::now(),
+            None,
+            true,
+            |_root, _argv, _env, _timeout, _stdout, _stderr, _observe| {
+                Err(anyhow::anyhow!(
+                    "optional test must not run in required pass"
+                ))
+            },
+            |_root, _out, _diff| Err(anyhow::anyhow!("optional worktree must not be prepared")),
+            |_root, _argv, _env, _timeout, stdout, stderr, _observe| {
+                fs::write(stdout, b"fake build")?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    exit_code: Some(0),
+                    timed_out: false,
+                    success: true,
+                    reason: "fixture".to_owned(),
+                    duration_ms: 1000,
+                })
+            },
+        )?;
+        assert_eq!(result.proof_receipts.len(), 3);
+        assert!(
+            result
+                .resource_leases
+                .iter()
+                .all(|lease| lease.status == "granted")
+        );
+        for request in &requests {
+            assert!(
+                result
+                    .proof_receipts
+                    .iter()
+                    .any(|receipt| receipt.kind == "focused-build"
+                        && receipt.result == "head_passed"
+                        && receipt.head == diff.head
+                        && receipt.request_ids.contains(&request.id))
+            );
+        }
+        let remaining = settled_focused_proof_budget(
+            proof_budget(&profile)?,
+            &result.resource_leases,
+            &result.proof_receipts,
+            &diff.head,
+        );
+        assert_eq!(remaining.max_focused_tests, 1);
+        assert!(remaining.max_total_seconds > 0);
+        let mut wrong_head = result.proof_receipts.clone();
+        wrong_head[0].head = "stale".to_owned();
+        let stale_budget = settled_focused_proof_budget(
+            proof_budget(&profile)?,
+            &result.resource_leases,
+            &wrong_head,
+            &diff.head,
+        );
+        assert!(stale_budget.max_total_seconds < remaining.max_total_seconds);
+        Ok(())
+    }
+
+    #[test]
     fn seeded_proof_requests_require_a_receipt_for_the_current_head() -> Result<()> {
         let seeded_proof_requests = vec![proof_request("seeded", true)];
         let task = focused_test_candidates_from_requests(&seeded_proof_requests)
@@ -2864,6 +3057,7 @@ mod tests {
             &box_state,
             &Instant::now(),
             None,
+            false,
             |_root, argv, env, timeout, stdout, stderr, _observe_process| {
                 test_commands.push(command_display_with_env(env, argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
@@ -2997,6 +3191,7 @@ mod tests {
             &box_state,
             &Instant::now(),
             None,
+            false,
             |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
                 Err(anyhow::anyhow!(
                     "existing evidence must prevent test execution"
@@ -3095,6 +3290,7 @@ mod tests {
             &box_state,
             &Instant::now(),
             None,
+            false,
             |_root, _argv, _env, _timeout, _stdout, _stderr, _observe_process| {
                 Err(anyhow::anyhow!(
                     "initial receipt must prevent rerunning the changed test"
