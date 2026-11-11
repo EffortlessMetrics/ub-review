@@ -1688,7 +1688,14 @@ def require_cache_artifacts(root: pathlib.Path) -> None:
         fail("cache_manifest.json has wrong schema")
     if manifest.get("shared_context_hash") != shared_context_hash:
         fail("cache_manifest shared_context_hash does not match shared_context_hash.txt")
-    content_hash = hashlib.sha256((root / "review/shared_context.md").read_bytes()).hexdigest()
+    context_bytes = (root / "review/shared_context.md").read_bytes()
+    # The v1 producer always declares the raw byte length; missing is invalid.
+    declared_bytes = manifest.get("shared_context_bytes")
+    if type(declared_bytes) is not int or declared_bytes < 0:
+        fail("cache_manifest shared_context_bytes must be a nonnegative integer")
+    if declared_bytes != len(context_bytes):
+        fail("cache_manifest shared_context_bytes does not match shared_context.md byte length")
+    content_hash = hashlib.sha256(context_bytes).hexdigest()
     if content_hash != shared_context_hash:
         fail("shared_context.md content SHA256 does not match shared_context_hash.txt")
     cache_hash = hashlib.sha256((root / "review/shared_context_cache_block.md").read_bytes()).hexdigest()
@@ -10858,6 +10865,30 @@ def self_test_cache_artifact_integrity() -> None:
         for content in [b"context\n", b"", "context \u03bb\r\n".encode()]:
             write(content)
             require()
+
+        # v1 always declares raw UTF-8 bytes: omission is not legacy compatibility.
+        # Exercise booleans even when their numeric values equal the true length.
+        for content in [b"context\n", b"", b"x", "context λ\n".encode(), b"context\r\n"]:
+            for value in [len(content) + 1, -1, True, False, float(len(content)),
+                          str(len(content)), None, {}, []]:
+                manifest = write(content)
+                manifest["shared_context_bytes"] = value
+                write_self_test_json(review / "cache_manifest.json", manifest)
+                expect_self_test_failure("invalid cache byte length", "shared_context_bytes", require)
+            manifest = write(content)
+            del manifest["shared_context_bytes"]
+            write_self_test_json(review / "cache_manifest.json", manifest)
+            expect_self_test_failure("missing cache byte length", "shared_context_bytes", require)
+            write(content)
+            require()
+
+        # Equal character counts and normalized newlines are not byte lengths.
+        for content, wrong_length in [("context λ\n".encode(), len("context λ\n")),
+                                      (b"context\r\n", len("context\n"))]:
+            manifest = write(content)
+            manifest["shared_context_bytes"] = wrong_length
+            write_self_test_json(review / "cache_manifest.json", manifest)
+            expect_self_test_failure("normalized cache byte length", "shared_context_bytes", require)
 
         write()
         for name in ["shared_context.md", "shared_context_cache_block.md"]:
