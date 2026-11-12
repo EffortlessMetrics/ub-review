@@ -1900,6 +1900,7 @@ mod tests {
         let mut failures = Vec::new();
         for case in [
             "success",
+            "setup_stall",
             "failure",
             "timeout",
             "setup_failure",
@@ -1924,10 +1925,17 @@ mod tests {
             profile.budgets.proof_max_focused_tests = 3;
             profile.budgets.proof_command_timeout_sec = 4;
             profile.budgets.proof_total_timeout_sec = 6;
-            profile.budgets.hard_timeout_sec = 30;
+            // Setup can stall under full-suite load. This headroom is
+            // independent of the six-second proof accounting budget.
+            profile.budgets.hard_timeout_sec = 600;
             let args = test_run_args(out.clone());
             let box_state = BoxState::detect()?;
-            let started = Instant::now();
+            // Model a run already older than the former 30-second deadline.
+            let started = if case == "setup_stall" {
+                Instant::now() - std::time::Duration::from_secs(31)
+            } else {
+                Instant::now()
+            };
             let revision = RevisionRef {
                 digest: "a".repeat(64),
                 semantics: "candidate_head".to_owned(),
@@ -1938,6 +1946,8 @@ mod tests {
             let mut actual = Vec::new();
             let mut builds = 0;
             let mut build_started_ns = None;
+            let last_command_finished = std::cell::Cell::new(0_u64);
+            let mut setup_stall_observed = false;
             let result = run_request_proof_broker_v0_with_runners(
                 temp.path(),
                 &out,
@@ -1974,6 +1984,7 @@ mod tests {
                     let status = run_command_to_files_with_spawn_observer(
                         root, &fixture, env, timeout, stdout, stderr, observer,
                     );
+                    last_command_finished.set(started.elapsed().as_secs());
                     actual.push(serde_json::json!({
                         "argv": fixture, "timeout_sec": timeout,
                         "monotonic_duration_ns": clock.elapsed().as_nanos(),
@@ -1987,6 +1998,10 @@ mod tests {
                     status
                 },
                 |_root, _out, _diff| {
+                    if case == "setup_stall" {
+                        std::thread::sleep(std::time::Duration::from_millis(1_100));
+                        setup_stall_observed = true;
+                    }
                     let base = temp.path().join("base-plus-tests");
                     fs::create_dir_all(&base)?;
                     Ok(base)
@@ -1996,7 +2011,7 @@ mod tests {
                     builds += 1;
                     build_started_ns = Some(started.elapsed().as_nanos());
                     let build_fixture = exit_fixture_argv(0);
-                    run_command_to_files_with_spawn_observer(
+                    let status = run_command_to_files_with_spawn_observer(
                         root,
                         &build_fixture,
                         env,
@@ -2004,9 +2019,12 @@ mod tests {
                         stdout,
                         stderr,
                         observer,
-                    )
+                    );
+                    last_command_finished.set(started.elapsed().as_secs());
+                    status
                 },
             )?;
+            let broker_finished = started.elapsed().as_secs();
             let artifact: serde_json::Value =
                 serde_json::from_slice(&fs::read(out.join("review/proof_portfolio.json"))?)?;
             write_proof_receipt_artifacts(&out, &result.proof_receipts, Some(&revision))?;
@@ -2024,6 +2042,10 @@ mod tests {
                 "elapsed_ns": started.elapsed().as_nanos(),
             });
             eprintln!("ACCOUNTING_MATRIX {row}");
+            if case == "setup_stall" {
+                ensure!(setup_stall_observed);
+                ensure!(broker_finished >= 32);
+            }
             if builds != usize::from(case != "timeout") {
                 failures.push(format!("{case}: required build executions={builds}"));
             }
@@ -2053,7 +2075,7 @@ mod tests {
             }
             ensure!(result.resource_leases[0].timeout_sec == 6);
             if let Some(at) = build_started_ns {
-                ensure!(at < 30_000_000_000);
+                ensure!(at < u128::from(profile.budgets.hard_timeout_sec) * 1_000_000_000);
                 ensure!(result.resource_leases[1].timeout_sec == 4);
             }
             if matches!(
@@ -2065,13 +2087,31 @@ mod tests {
                         && first_receipt.result != "discriminating"
                 );
             }
-            ensure!(
-                artifact["runtime"]["deadline_remaining_seconds"]
-                    .as_u64()
-                    .is_some_and(|n| n > 0)
-            );
+            let remaining = artifact["runtime"]["deadline_remaining_seconds"]
+                .as_u64()
+                .context("missing deadline accounting")?;
+            let hard = profile.budgets.hard_timeout_sec;
+            ensure!(remaining >= hard.saturating_sub(broker_finished));
+            ensure!(remaining <= hard.saturating_sub(last_command_finished.get()));
         }
         ensure!(failures.is_empty(), "{}", failures.join("; "));
+        Ok(())
+    }
+
+    #[test]
+    fn portfolio_runtime_accounts_for_elapsed_and_expired_deadlines() -> Result<()> {
+        let mut profile = Profile::default();
+        profile.budgets.hard_timeout_sec = 30;
+        let box_state = BoxState::detect()?;
+        for elapsed in [7, 30, 45] {
+            let started = Instant::now() - std::time::Duration::from_secs(elapsed);
+            let before = started.elapsed().as_secs();
+            let remaining = current_portfolio_runtime(&profile, &box_state, &started)?
+                .deadline_remaining_seconds;
+            let after = started.elapsed().as_secs();
+            ensure!(remaining >= 30_u64.saturating_sub(after));
+            ensure!(remaining <= 30_u64.saturating_sub(before));
+        }
         Ok(())
     }
 
