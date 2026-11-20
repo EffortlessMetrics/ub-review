@@ -570,6 +570,170 @@ mod output_budget_tests {
 mod output_file_tests {
     use super::*;
 
+    const OUTPUT_HANDSHAKE: &str = "UB_REVIEW_OUTPUT_CHILD_HANDSHAKE";
+    const OUTPUT_ESCAPE_SECS: &str = "UB_REVIEW_OUTPUT_CHILD_ESCAPE_SECS";
+    const OUTPUT_READY_LIMIT: Duration = Duration::from_secs(30);
+
+    #[test]
+    fn child_output_handshake_fixture() -> Result<()> {
+        use std::io::{Read, Write};
+        use std::sync::mpsc::{self, RecvTimeoutError};
+        use std::time::Instant;
+
+        let Some(root) = std::env::var_os(OUTPUT_HANDSHAKE) else {
+            return Ok(());
+        };
+        let escape = Duration::from_secs(std::env::var(OUTPUT_ESCAPE_SECS)?.parse()?);
+        let root = Path::new(&root);
+        let mut stdout = fs::File::create(root.join("stdout"))?;
+        let mut stderr = fs::File::create(root.join("stderr"))?;
+        stdout.write_all(b"SYNTHETIC_RESPONSE_VALUE_7329")?;
+        stderr.write_all(b"SYNTHETIC_DIAGNOSTIC_VALUE_8421")?;
+
+        // A separate reader may stay blocked on stdin. The fixture's main
+        // test thread can still return and end the process at its own deadline.
+        let (send, receive) = mpsc::channel();
+        std::thread::Builder::new().spawn(move || {
+            let _ = send.send(std::io::stdin().read_exact(&mut [0]));
+        })?;
+        let deadline = Instant::now() + escape;
+        fs::write(root.join("ready"), b"ready")?;
+        match receive.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+            Ok(released) => released?,
+            Err(RecvTimeoutError::Timeout) => {
+                fs::write(root.join("escaped"), b"escaped")?;
+                bail!("output fixture reached its escape deadline");
+            }
+            Err(error) => return Err(error).context("output fixture reader disconnected"),
+        }
+        fs::write(root.join("finished"), b"finished")?;
+        Ok(())
+    }
+
+    fn stop_output_handshake_fixture(child: &mut Child) {
+        drop(child.stdin.take());
+        let _ = child.kill();
+        let _ = child.wait_timeout(Duration::from_secs(5));
+    }
+
+    fn spawn_output_handshake_fixture(
+        root: &Path,
+        escape_secs: u64,
+    ) -> Result<(Child, std::process::ChildStdin)> {
+        use std::{thread, time::Instant};
+
+        let mut child = ProcessCommand::new(std::env::current_exe()?)
+            .args([
+                "--exact",
+                "model_api::output_file_tests::child_output_handshake_fixture",
+            ])
+            .env(OUTPUT_HANDSHAKE, root)
+            .env(OUTPUT_ESCAPE_SECS, escape_secs.to_string())
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .context("spawn output handshake fixture")?;
+        let ready = root.join("ready");
+        let deadline = Instant::now() + OUTPUT_READY_LIMIT;
+        let setup = (|| -> Result<_> {
+            loop {
+                anyhow::ensure!(
+                    child.try_wait()?.is_none(),
+                    "output fixture exited before wait"
+                );
+                if ready.is_file() {
+                    break;
+                }
+                anyhow::ensure!(
+                    Instant::now() < deadline,
+                    "output fixture did not signal readiness"
+                );
+                thread::sleep(Duration::from_millis(10));
+            }
+            anyhow::ensure!(fs::read(root.join("stdout"))? == b"SYNTHETIC_RESPONSE_VALUE_7329");
+            anyhow::ensure!(fs::read(root.join("stderr"))? == b"SYNTHETIC_DIAGNOSTIC_VALUE_8421");
+            // Hold the writer outside Child so wait_timeout cannot close it.
+            child.stdin.take().context("take fixture stdin")
+        })();
+        match setup {
+            Ok(release) => Ok((child, release)),
+            Err(error) => {
+                stop_output_handshake_fixture(&mut child);
+                Err(error)
+            }
+        }
+    }
+
+    #[test]
+    fn unreleased_output_fixture_exits_at_its_own_deadline() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let (mut child, held_stdin) = spawn_output_handshake_fixture(temp.path(), 5)?;
+        // Model a failed termination by deliberately leaving the child alone.
+        // This outer wait is bounded even if the fixture deadline regresses.
+        let status = child.wait_timeout(Duration::from_secs(10));
+        drop(held_stdin);
+        if !matches!(status, Ok(Some(_))) {
+            stop_output_handshake_fixture(&mut child);
+        }
+        let status = status?.context("unreleased fixture failed to exit")?;
+        assert!(!status.success());
+        assert_eq!(fs::read(temp.path().join("escaped"))?, b"escaped");
+        assert!(!temp.path().join("finished").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn child_output_file_wait_reports_timeout_and_cleans_temp_files() -> Result<()> {
+        use std::io::Write;
+
+        for timeout in [true, false] {
+            let temp = tempfile::tempdir()?;
+            let stdout = temp.path().join("stdout");
+            let stderr = temp.path().join("stderr");
+            let finished = temp.path().join("finished");
+            // Keep an independent escape past the one-second transport wait.
+            let (mut child, mut release) = spawn_output_handshake_fixture(temp.path(), 20)?;
+            if !timeout && let Err(error) = release.write_all(b"r") {
+                drop(release);
+                stop_output_handshake_fixture(&mut child);
+                return Err(error).context("release output handshake fixture");
+            }
+
+            let result =
+                wait_for_child_output_files(child, &stdout, &stderr, if timeout { 1 } else { 30 });
+            assert!(
+                !temp.path().join("escaped").exists(),
+                "fixture escaped before termination"
+            );
+            if timeout {
+                let error = result.err().context("live output fixture must time out")?;
+                assert_eq!(
+                    error.to_string(),
+                    "process timed out after 1s; output omitted from diagnostic"
+                );
+                assert_eq!(classify_model_error(&error), "timed_out");
+                assert!(!format!("{error:#}").contains("SYNTHETIC_RESPONSE_VALUE_7329"));
+                assert!(!format!("{error:#}").contains("SYNTHETIC_DIAGNOSTIC_VALUE_8421"));
+                assert!(
+                    release.write_all(b"r").is_err(),
+                    "fixture still owns its stdin"
+                );
+                assert!(!finished.exists());
+            } else {
+                let output = result?;
+                assert!(output.status.success());
+                assert_eq!(output.stdout, b"SYNTHETIC_RESPONSE_VALUE_7329");
+                assert_eq!(output.stderr, b"SYNTHETIC_DIAGNOSTIC_VALUE_8421");
+                assert!(finished.is_file());
+            }
+            drop(release);
+            assert!(!stdout.exists());
+            assert!(!stderr.exists());
+        }
+        Ok(())
+    }
+
     #[test]
     fn output_read_failure_cleans_the_other_stream_and_recovers() -> Result<()> {
         let temp = tempfile::tempdir()?;
