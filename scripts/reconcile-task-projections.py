@@ -288,7 +288,8 @@ def observe_capacity_deferrals(packet: Packet, gate: dict, path: str, request_id
     if not request_ids or not isinstance(tasks, list) or len(tasks) > MAX_ROWS:
         return
     for index, task in enumerate(tasks):
-        if (not isinstance(task, dict) or task.get("status") != "deferred_by_safe_wind_down"
+        if (not isinstance(task, dict) or not isinstance(task.get("task_id"), str)
+                or not task["task_id"].strip() or task.get("status") != "deferred_by_safe_wind_down"
                 or task.get("reason") != "proof task capacity is exhausted"):
             continue
         linked = task.get("request_ids")

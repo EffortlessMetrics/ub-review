@@ -412,7 +412,7 @@ class Projections(unittest.TestCase):
         self.change(gate_path, lambda gate: gate["planner_required_proofs"]["unproven_tasks"][0].update(
             request_ids=["optional", "request-a", "unrelated", request_id]))
         self.assertEqual(observations(self.report()), observations(report))
-        for updates in ({"status": "selected"}, {"reason": "proof-time allocation is exhausted"},
+        for updates in ({"task_id": " "}, {"task_id": None}, {"status": "selected"}, {"reason": "proof-time allocation is exhausted"},
                         {"request_ids": ["request-a", "optional"]}):
             with self.subTest(updates=updates):
                 self.change(gate_path, lambda gate: gate["planner_required_proofs"].update(
