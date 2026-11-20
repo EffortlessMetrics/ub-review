@@ -155,7 +155,7 @@ fn stopped_child_receipt_after_start_delay(
                 &mut |child, timeout| {
                     if matches!(stop, Stop::MissingMarker) {
                         // Observe child readiness without requiring its startup marker.
-                        wait_for_start_marker(&ready, Duration::from_secs(5))?;
+                        wait_for_start_marker(&ready, Duration::from_secs(30))?;
                         child_was_running = child.try_wait()?.is_none();
                         #[cfg(target_os = "linux")]
                         {
@@ -277,6 +277,10 @@ fn stopped_child_receipt_after_start_delay(
     let command_task =
         ProofCommandTask::focused_test(&task, "head", 1, ProofExecutionPhase::ModelRequest);
     ensure!(ledger.receipt_pending(&command_task)?);
+    if matches!(stop, Stop::MissingMarker) {
+        // A surviving fixture would now attempt to write its proof marker.
+        fs::write(delayed.with_extension("release"), b"release")?;
+    }
     thread::sleep(Duration::from_millis(2300));
     ensure!(
         !delayed.exists(),
@@ -379,16 +383,22 @@ fn startup_marker_child() -> Result<()> {
     let ready =
         std::env::var_os("UB_LIFECYCLE_CHILD_READY").context("child ready marker missing")?;
     fs::write(ready, b"ready")?;
-    let delay_started = Instant::now();
-    thread::sleep(Duration::from_millis(delay));
-    if std::env::var("UB_LIFECYCLE_SKIP_START_MARKER")? != "true" {
+    if std::env::var("UB_LIFECYCLE_SKIP_START_MARKER")? == "true" {
+        // Remain live across parent scheduling gaps. Only a release after
+        // cleanup lets a surviving child attempt publication.
+        let release = Path::new(&delayed).with_extension("release");
+        wait_for_start_marker(&release, Duration::from_secs(60))
+            .context("missing-marker fixture was never released")?;
+    } else {
+        let delay_started = Instant::now();
+        thread::sleep(Duration::from_millis(delay));
         publish_start_observation(
             Path::new(&started),
             &format!("{delay} {}", delay_started.elapsed().as_millis()),
             |_| Ok(()),
         )?;
+        thread::sleep(Duration::from_secs(2));
     }
-    thread::sleep(Duration::from_secs(2));
     fs::write(delayed, b"still running")?;
     Ok(())
 }
