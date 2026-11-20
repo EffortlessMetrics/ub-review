@@ -268,7 +268,8 @@ the install phase after a Rust pin or lockfile change that makes the cache stale
 
 ### Run workspace commands with the repository pin
 
-Use the installed Cargo and rustc for the channel in `rust-toolchain.toml`.
+Use the installed Cargo, rustc, and rustdoc for the channel in
+`rust-toolchain.toml`.
 The image's `cargo` can come first on PATH, and an explicit
 `RUSTUP_TOOLCHAIN` can select another toolchain through a Rustup proxy. The
 task-shell preflight verifies the pinned binaries directly and leaves the
@@ -286,13 +287,19 @@ cd -- "$(git rev-parse --show-toplevel)"
 pin=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
 pinned_cargo=$(command rustup which --toolchain "$pin" cargo)
 pinned_rustc=$(command rustup which --toolchain "$pin" rustc)
-RUSTC="$pinned_rustc" "$pinned_cargo" check --workspace --locked --offline
+pinned_rustdoc=$(command rustup which --toolchain "$pin" rustdoc)
+RUSTUP_TOOLCHAIN="$pin" RUSTC="$pinned_rustc" RUSTDOC="$pinned_rustdoc" \
+  "$pinned_cargo" check --workspace --locked --offline
 )
 ```
 
-Substitute the workspace command you need for `check --workspace`. To use the
-moving stable compiler for general tooling, select it explicitly with
-`RUSTUP_AUTO_INSTALL=0 rustup run stable rustc --version`.
+For Cargo's built-in `test` or `doc` command, replace `check --workspace` with
+`test --workspace` or `doc --workspace`. The command-local `RUSTUP_TOOLCHAIN`
+also selects the pin for Rustup proxies started by Cargo. For external
+subcommands, use the pinned component directly. For example, resolve Clippy
+with `rustup which --toolchain "$pin" cargo-clippy` inside the same block.
+Use `RUSTUP_AUTO_INSTALL=0 rustup run stable rustc --version` to check the
+moving stable compiler for general tooling.
 
 ### Optional offline gate tools
 
