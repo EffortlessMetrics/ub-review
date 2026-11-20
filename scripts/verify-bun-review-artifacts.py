@@ -11151,16 +11151,16 @@ def self_test_coverage_sidecar_receipts() -> None:
             "TN:\nSF:src/lib.rs\nFNF:2\nFNH:1\nLF:4\nLH:3\nend_of_record\n",
             encoding="utf-8",
         )
+        # Only the fields consumed by the packet verifier are present.
+        # The separate coverage-upload job takes lcov.info alone.
         tool_status = {
             "status": "ok",
             "reason": "completed",
             "artifact_paths": [
-                "sensors/coverage/ub-review-sensor-status.json",
                 "sensors/coverage/status.json",
                 "sensors/coverage/coverage-summary.json",
                 "sensors/coverage/changed-lines.json",
                 "sensors/coverage/upload.json",
-                "sensors/coverage/lcov.info",
             ],
         }
         write_self_test_json(
@@ -11168,7 +11168,6 @@ def self_test_coverage_sidecar_receipts() -> None:
             {
                 "schema": "ub-review.coverage_summary.v1",
                 "status": "collected",
-                "reason": "lcov.info parsed",
                 "execution_surface_only": True,
                 "correctness_claim": False,
                 "lcov": {
@@ -11184,10 +11183,8 @@ def self_test_coverage_sidecar_receipts() -> None:
             {
                 "schema": "ub-review.coverage_changed_lines.v1",
                 "status": "not_collected",
-                "reason": "changed-line coverage is not computed by the local coverage sensor yet",
                 "execution_surface_only": True,
                 "correctness_claim": False,
-                "source_artifacts": ["sensors/coverage/lcov.info"],
             },
         )
         write_self_test_json(
@@ -11195,10 +11192,8 @@ def self_test_coverage_sidecar_receipts() -> None:
             {
                 "schema": "ub-review.coverage_upload.v1",
                 "status": "workflow_owned",
-                "reason": "Codecov upload is performed by the coverage workflow, not this local sensor",
                 "execution_surface_only": True,
                 "correctness_claim": False,
-                "source_artifacts": [],
             },
         )
         write_self_test_json(
@@ -11228,6 +11223,28 @@ def self_test_coverage_sidecar_receipts() -> None:
             },
         )
         require_coverage_status_artifact(root, tool_status)
+
+        # Diagnostic text can disagree with the structured receipts.
+        (coverage_dir / "stdout.txt").write_text("line totals: 0/0\n", encoding="utf-8")
+        (coverage_dir / "stderr.txt").write_text("upload failed\n", encoding="utf-8")
+        require_coverage_status_artifact(root, tool_status)
+
+        summary = coverage_dir / "coverage-summary.json"
+        summary_bytes = summary.read_bytes()
+        summary.unlink()
+        expect_self_test_failure(
+            "coverage diagnostics without the canonical summary",
+            "sensors/coverage/coverage-summary.json",
+            lambda: require_coverage_status_artifact(root, tool_status),
+        )
+        summary.write_bytes(summary_bytes)
+
+        (coverage_dir / "lcov.info").unlink()
+        expect_self_test_failure(
+            "coverage receipt with missing LCOV",
+            "coverage status.json lcov present does not match artifact",
+            lambda: require_coverage_status_artifact(root, tool_status),
+        )
 
 
 def self_test_late_phase_sensor_work_queue_task_stays_pending() -> None:
