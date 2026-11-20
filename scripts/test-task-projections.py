@@ -381,6 +381,54 @@ class Projections(unittest.TestCase):
         self.change("review/proof_receipts.json", lambda x: x[0].update(request_ids=[]))
         self.assertIn("pass_without_required_receipt", self.codes())
 
+    def test_required_doc_capacity_deferral_points_to_the_gate_task(self):
+        # Reduced from #1666, with the fixture's independent, successful receipt.
+        request_id = "proof-0001-d97c389baa65"
+        gate_path = "review/gate_outcome.json"
+        request_path = "review/proof_requests.json"
+        request = {"schema": "ub-review.proof_request.v1", "id": request_id,
+                   "lane": "intelligent-ci-policy", "required": True, "status": "deferred",
+                   "command": "cargo doc --workspace --no-deps --locked"}
+        self.change(request_path, lambda rows: rows.append(request))
+        task = {"task_id": "proof-build-f5e93291b352", "kind": "focused-build",
+                "status": "deferred_by_safe_wind_down", "reason": "proof task capacity is exhausted",
+                "request_ids": [request_id], "receipt_ids": [], "receipts_present": False}
+        self.change(gate_path, lambda gate: gate.update(
+            gate_result="not_proven", required_proof={"matched": 2, "passed": 1, "failed": 0, "skipped": 1},
+            planner_required_proofs={"total": 1, "proven": 0, "unproven": 1, "unproven_tasks": [task]}))
+        code = "required_request_reported_capacity_deferral"
+
+        def observations(report):
+            return [row for row in report["observations"] if row["code"] == code]
+
+        report = self.report()
+        self.assertEqual(observations(report), [
+            {"code": code, "artifact": gate_path + "#/planner_required_proofs/unproven_tasks/0",
+             "identity": request_id}])
+        self.assertIn({"code": "pass_without_required_receipt", "artifact": gate_path,
+                       "identity": request_id}, report["issues"])
+        # A shared task can serve optional and already-receipted requests too.
+        self.change(request_path, lambda rows: rows.append(dict(request, id="optional", required=False)))
+        self.change(gate_path, lambda gate: gate["planner_required_proofs"]["unproven_tasks"][0].update(
+            request_ids=["optional", "request-a", "unrelated", request_id]))
+        self.assertEqual(observations(self.report()), observations(report))
+        for updates in ({"task_id": " "}, {"task_id": None}, {"status": "selected"}, {"reason": "proof-time allocation is exhausted"},
+                        {"request_ids": ["request-a", "optional"]}):
+            with self.subTest(updates=updates):
+                self.change(gate_path, lambda gate: gate["planner_required_proofs"].update(
+                    unproven_tasks=[dict(task, **updates)]))
+                self.assertEqual(observations(self.report()), [])
+        self.change(gate_path, lambda gate: gate["planner_required_proofs"].update(unproven_tasks=[task]))
+        receipts = read_json(self.root, "review/proof_receipts.json")
+        for invalid in ([None], [dict(receipts[0], request_ids="invalid")], [{}]):
+            with self.subTest(invalid=invalid):
+                write_json(self.root, "review/proof_receipts.json", invalid)
+                self.assertEqual(observations(self.report()), [])
+        write_json(self.root, "review/proof_receipts.json", receipts)
+        self.change(gate_path, lambda gate: gate.update(
+            revision=dict(self.binding, digest="0" * 64), planner_required_proofs={"unproven_tasks": [task]}))
+        self.assertEqual(observations(self.report()), [])
+
     def test_accounting_coherence_is_not_a_product_pass(self):
         # A correctly accounted deterministic failure is coherent, not clean.
         changed = []

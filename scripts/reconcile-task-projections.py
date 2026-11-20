@@ -281,6 +281,26 @@ class Packet:
         return result
 
 
+def observe_capacity_deferrals(packet: Packet, gate: dict, path: str, request_ids: set[str]) -> None:
+    """Point to the gate's reported reason without rerunning planner admission."""
+    accounting = gate.get("planner_required_proofs")
+    tasks = accounting.get("unproven_tasks") if isinstance(accounting, dict) else None
+    if not request_ids or not isinstance(tasks, list) or len(tasks) > MAX_ROWS:
+        return
+    for index, task in enumerate(tasks):
+        if (not isinstance(task, dict) or not isinstance(task.get("task_id"), str)
+                or not task["task_id"].strip() or task.get("status") != "deferred_by_safe_wind_down"
+                or task.get("reason") != "proof task capacity is exhausted"):
+            continue
+        linked = task.get("request_ids")
+        if not isinstance(linked, list) or len(linked) > MAX_ROWS:
+            continue
+        for identity in linked:
+            if isinstance(identity, str) and identity in request_ids:
+                packet.observe("required_request_reported_capacity_deferral",
+                               f"{path}#/planner_required_proofs/unproven_tasks/{index}", identity)
+
+
 def capture_validation(packet: Packet, path: str, operation: Any) -> Any:
     # Existing fail() uses SystemExit. Keep its untrusted diagnostic prose out
     # of the public receipt; retain only a bounded, stable diagnostic code.
@@ -782,8 +802,11 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
         required_projection = packet.mapping(gate, gate_path, "required_proof")
         if required_projection.get("matched") != len(required_requests):
             packet.issue("required_request_count_mismatch", gate_path)
+        unreceipted = set()
         for request in required_requests:
             matching = [p for p in proofs if request.get("id") in p.get("request_ids", [])]
+            if not matching and isinstance(request.get("id"), str) and request["id"].strip():
+                unreceipted.add(request["id"])
             if len(matching) > 1:
                 packet.issue("ambiguous_required_receipt", receipt_path, request.get("id", ""))
             receipt_result = matching[0].get("result") if matching else None
@@ -798,6 +821,11 @@ def reconcile(root: Path, *, legacy: bool = False, kind: str = "review") -> dict
             if gate.get("conclusion") == "pass" and not successful:
                 packet.issue("pass_without_required_receipt", gate_path, request.get("id", ""))
 
+        if (binding is not None and gate.get("revision") == binding
+                and isinstance(proof_doc, list) and len(proofs) == len(proof_doc)
+                and all(p.get("schema") == "ub-review.proof_receipt.v1"
+                        and isinstance(p.get("request_ids"), list) for p in proofs)):
+            observe_capacity_deferrals(packet, gate, gate_path, unreceipted)
         if required_projection != classified:
             packet.issue("required_receipt_count_mismatch", gate_path)
 
