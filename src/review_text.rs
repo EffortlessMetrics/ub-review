@@ -1216,7 +1216,77 @@ mod github_review_serialization_tests {
 
 #[cfg(test)]
 mod output_degradation_tests {
-    use super::*;
+    use anyhow::Context as _;
+
+    use super::{
+        OUTPUT_DEGRADATION_SCHEMA, OutputTopic, cap_review_body, cap_review_body_bullets,
+        degrade_review_body, github_review_post_payload, normalize_output_topic,
+        output_topic_order, output_topic_rank, output_topics, render_output_topics,
+    };
+    use crate::GitHubReview;
+
+    #[test]
+    fn review_body_cap_preserves_utf8_boundary() {
+        let capped = cap_review_body("a🙂b🙂c".repeat(100), 64);
+
+        assert!(capped.ends_with("[review body truncated; see review artifacts]\n"));
+        assert!(capped.is_char_boundary(capped.len()));
+    }
+
+    #[test]
+    fn review_body_cap_drops_excess_bullets_without_failing_compilation() {
+        let body = (0..20)
+            .map(|index| format!("- finding {index}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let capped = cap_review_body_bullets(body, 12);
+        let bullets = capped.lines().filter(|line| line.starts_with("- ")).count();
+        assert_eq!(bullets, 12);
+        assert!(capped.contains("review body truncated"));
+    }
+
+    #[test]
+    fn output_degradation_is_value_ranked_and_arrival_order_independent() {
+        let first = "## Confirmed findings\n\n- Low-confidence parser note.\n- Executed receipt confirms the parser preserves the changed path.\n";
+        let reversed = "## Confirmed findings\n\n- Executed receipt confirms the parser preserves the changed path.\n- Low-confidence parser note.\n";
+        let (first_body, first_receipt) = degrade_review_body(first.to_owned(), 500, 1, "head-a");
+        let (reversed_body, reversed_receipt) =
+            degrade_review_body(reversed.to_owned(), 500, 1, "head-a");
+
+        assert_eq!(first_body, reversed_body);
+        assert_eq!(
+            first_receipt.retained_topic_ids,
+            reversed_receipt.retained_topic_ids
+        );
+        assert_eq!(first_receipt.original_item_count, 2);
+        assert_eq!(first_receipt.final_item_count, 1);
+        assert_eq!(first_receipt.selected_mode, "concise_summary");
+        assert!(first_body.contains("Executed receipt"));
+        assert!(!first_body.contains("Low-confidence"));
+        assert_eq!(first_receipt.exact_head_sha, "head-a");
+        assert!(
+            first_receipt
+                .dropped_topics
+                .iter()
+                .any(|topic| topic.reason.contains("bullet_budget"))
+        );
+    }
+
+    #[test]
+    fn output_degradation_uses_inline_only_when_no_body_fits() {
+        let (body, receipt) = degrade_review_body(
+            "## Confirmed findings\n\n- Executed receipt confirms the changed path.".to_owned(),
+            10,
+            12,
+            "head-b",
+        );
+
+        assert!(body.is_empty());
+        assert_eq!(receipt.selected_mode, "inline_only");
+        assert_eq!(receipt.original_item_count, 1);
+        assert_eq!(receipt.final_item_count, 0);
+        assert_eq!(receipt.final_bytes, 0);
+    }
 
     #[test]
     fn degradation_preserves_distinct_operator_claims_in_post_json() -> anyhow::Result<()> {
