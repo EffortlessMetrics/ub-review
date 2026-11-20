@@ -49,7 +49,7 @@ pub(crate) fn is_model_only_failed_objection(observation: &ObservationGroup) -> 
         && observation
             .sources
             .iter()
-            .all(|source| source == "model-failed-objection")
+            .all(|source| source == MODEL_FAILED_OBJECTION_SOURCE)
 }
 
 pub(crate) fn is_pr_body_artifact_only_observation(observation: &ObservationGroup) -> bool {
@@ -1052,6 +1052,65 @@ mod human_output_admission_tests {
         );
         observation.dedupe_key = "private-audit".to_owned();
         Ok(observation)
+    }
+
+    #[test]
+    fn same_key_failed_objection_preserves_public_finding_payload() -> Result<()> {
+        let lane = model_lane("correctness", "Review", &[], "Check the reader.");
+        let claim = "The reader drops the last record when the file ends without a newline.";
+        let private_reason = "The sample ends with a newline.";
+        let finding = validate_model_observation(
+            &lane,
+            serde_json::from_value(serde_json::json!({
+                "kind": "bug", "status": "open", "severity": "high", "confidence": "high",
+                "claim": claim, "evidence": ["reader.rs:18 emits only on newline"]
+            }))?,
+            0,
+        );
+        let audit = validate_failed_objection(
+            &lane,
+            serde_json::from_value(serde_json::json!({
+                "kind": "bug", "claim": "The sample drops a record",
+                "reason": private_reason
+            }))?,
+            1,
+        );
+        assert_eq!(finding.dedupe_key, audit.dedupe_key);
+        let summaries = [collision_finding(claim)];
+        let baseline = collision_review(&[], std::slice::from_ref(&finding))?;
+        assert!(baseline.should_prepare_github_review);
+        assert!(baseline.github_review.body.contains(claim));
+        let expected = serde_json::to_string_pretty(&baseline.github_review)?;
+        assert!(!expected.contains(private_reason));
+        for rows in [
+            [audit.clone(), finding.clone()],
+            [finding.clone(), audit.clone()],
+        ] {
+            let out = tempfile::tempdir()?;
+            write_observation_artifacts(out.path(), &rows)?;
+            let review_dir = out.path().join("review");
+            assert!(
+                fs::read_to_string(review_dir.join("observations.json"))?.contains(private_reason)
+            );
+            // The observation must carry the finding even without a summary
+            // that could independently render the same claim.
+            for summaries in [&[][..], summaries.as_slice()] {
+                let mixed = collision_review(summaries, &rows)?;
+                assert!(mixed.should_prepare_github_review);
+                write_github_review_payload(
+                    &review_dir,
+                    &mixed.github_review,
+                    &BTreeSet::new(),
+                    &ReviewBodyPolicy::default(),
+                    false,
+                )?;
+                assert_eq!(
+                    fs::read_to_string(review_dir.join("github-review.json"))?,
+                    expected
+                );
+            }
+        }
+        Ok(())
     }
 
     #[test]
