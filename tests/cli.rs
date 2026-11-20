@@ -5371,6 +5371,144 @@ fn model_outage_degrades_review_without_reddening_enforced_gate() -> Result<()> 
     Ok(())
 }
 
+#[test]
+fn usable_model_finding_cannot_override_required_sensor_gap() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let config = temp.path().join("config.toml");
+    let finding = "Add a regression test for the changed answer";
+    let response = serde_json::json!({
+        "summary": finding,
+        "inline_comments": [],
+        "summary_only_findings": [{
+            "severity": "medium",
+            "confidence": "high",
+            "reason": finding,
+            "evidence": "src/lib.rs changes answer from 41 to 42 without updating a test."
+        }]
+    });
+
+    for required in [false, true] {
+        // The same deliberately unavailable sensor is advisory in the control.
+        fs::write(
+            &config,
+            format!(
+                r#"[repo]
+kind = "rust"
+ledger = ""
+
+[review]
+enable_default_lanes = false
+
+[[lanes]]
+id = "correctness"
+role = "Correctness fixture"
+focus = "Inspect the changed answer"
+
+[tools.tokmd]
+enabled = false
+required = {required}
+"#
+            ),
+        )?;
+        let (provider_url, provider) = spawn_fake_openai_provider_with_contents(vec![
+            fake_openai_lane_content(),
+            response.to_string(),
+        ])?;
+        let out = temp.path().join(format!("required-{required}"));
+        // Produce a packet in both cases and enforce it through the Action's CLI consumer.
+        run_with_env(
+            temp.path(),
+            bin,
+            &[
+                "run",
+                "--dry-run",
+                "--config",
+                path_str(&config)?,
+                "--root",
+                path_str(&repo)?,
+                "--base",
+                "HEAD~1",
+                "--head",
+                "HEAD",
+                "--out",
+                path_str(&out)?,
+                "--mode",
+                "intelligent-ci",
+                "--fail-on-gate",
+                "false",
+                "--no-github-summary",
+                "--posting",
+                "artifact-only",
+                "--model-mode",
+                "auto",
+                "--provider-policy",
+                "minimax-only",
+                "--minimax-provider-kind",
+                "openai",
+                "--lanes",
+                "correctness",
+                "--tools",
+                "tokmd",
+                "--model-concurrency",
+                "1",
+                "--max-model-calls",
+                "1",
+                "--model-timeout-sec",
+                "10",
+            ],
+            &[
+                ("UB_REVIEW_MINIMAX_API_KEY", "dummy-local-gate-fixture"),
+                ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
+            ],
+        )?;
+        assert_eq!(join_fake_provider(provider)?.len(), 2);
+        let review_dir = out.join("review");
+        let review: serde_json::Value =
+            serde_json::from_slice(&fs::read(review_dir.join("review.json"))?)?;
+        assert_eq!(review["model_lanes"][0]["lane"], "correctness");
+        assert_eq!(review["model_lanes"][0]["status"], "ok");
+        assert!(fs::read_to_string(review_dir.join("review.md"))?.contains(finding));
+
+        let gate_path = review_dir.join("gate_outcome.json");
+        let gate: serde_json::Value = serde_json::from_slice(&fs::read(&gate_path)?)?;
+        assert_eq!(gate["analysis_result"], "findings");
+        assert_eq!(gate["model_coverage"]["lanes_usable"], 1);
+        let output = isolated_command(bin, temp.path())
+            .args([
+                "gate-check",
+                "--gate-outcome",
+                path_str(&gate_path)?,
+                "--mode",
+                "intelligent-ci",
+                "--fail-on-gate",
+                "true",
+            ])
+            .fixture_output()?;
+        let diagnostic = String::from_utf8(output.stdout)?;
+        if required {
+            assert_eq!(output.status.code(), Some(1), "{diagnostic}");
+            assert_eq!(gate["conclusion"], "inconclusive");
+            assert_eq!(gate["gate_result"], "not_proven");
+            assert_eq!(gate["evidence_gaps_blocking"], 1);
+            assert_eq!(gate["reasons"][0]["kind"], "required-sensor");
+            assert_eq!(gate["reasons"][0]["id"], "tokmd");
+            assert!(
+                diagnostic.contains("required evidence unavailable: tokmd"),
+                "{diagnostic}"
+            );
+        } else {
+            assert_eq!(output.status.code(), Some(0), "{diagnostic}");
+            assert_eq!(gate["conclusion"], "pass");
+            assert_eq!(gate["evidence_gaps_blocking"], 0);
+        }
+    }
+    Ok(())
+}
+
 /// A successful preflight does not grant credit to a later disconnected lane.
 /// Recovery reuses the same revision/output path so stale failure state cannot
 /// silently poison the next attempt. This is rerun recovery, not checkpointing.
