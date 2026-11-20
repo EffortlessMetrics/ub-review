@@ -195,13 +195,14 @@ pub(crate) fn render_pull_request_review_body(
     review_body_max_bytes: usize,
 ) -> String {
     let mut text = String::new();
-    // Model-only audit must not win claim selection or suppress a matching
-    // summary before it is withheld. Preserve other artifact-only groups:
-    // cross-lane conflict receipts still govern summary reconciliation.
-    let public_observations = unique_review_observations(observations)
-        .into_iter()
-        .filter(|observation| !is_model_only_failed_objection(observation))
-        .collect();
+    // A finding and a failed objection can share a default lane/kind key.
+    // Exclude the audit before it can supply the group's claim, evidence, or
+    // disposition. Cross-lane conflict receipts still govern reconciliation.
+    let public_observations = unique_review_observations(
+        observations
+            .iter()
+            .filter(|observation| observation.source != MODEL_FAILED_OBJECTION_SOURCE),
+    );
     let observation_items = unique_review_observations_by_claim(public_observations);
     let pr_observation_items = observation_items
         .iter()

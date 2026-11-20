@@ -88,6 +88,8 @@ pub(crate) fn validate_model_observation(
     })
 }
 
+pub(crate) const MODEL_FAILED_OBJECTION_SOURCE: &str = "model-failed-objection";
+
 pub(crate) fn validate_failed_objection(
     lane: &LanePlan,
     objection: ModelFailedObjection,
@@ -121,7 +123,7 @@ pub(crate) fn validate_failed_objection(
         None,
         None,
         index,
-        "model-failed-objection",
+        MODEL_FAILED_OBJECTION_SOURCE,
     ) {
         return observation;
     }
@@ -156,7 +158,7 @@ pub(crate) fn validate_failed_objection(
         line: None,
         evidence,
         dedupe_key: None,
-        source: "model-failed-objection",
+        source: MODEL_FAILED_OBJECTION_SOURCE,
     })
 }
 

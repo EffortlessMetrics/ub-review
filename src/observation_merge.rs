@@ -49,9 +49,9 @@ pub(crate) struct ObservationSummaryArtifacts {
     pub(crate) dropped: Vec<DroppedObservationRecord>,
 }
 
-pub(crate) fn observation_summary_artifacts(
-    observations: &[Observation],
-) -> ObservationSummaryArtifacts {
+pub(crate) fn unique_review_observations<'a>(
+    observations: impl IntoIterator<Item = &'a Observation>,
+) -> Vec<ObservationGroup> {
     let mut indexes = BTreeMap::new();
     let mut groups = Vec::<ObservationGroup>::new();
     for observation in observations {
@@ -80,6 +80,13 @@ pub(crate) fn observation_summary_artifacts(
             });
         }
     }
+    groups
+}
+
+pub(crate) fn observation_summary_artifacts(
+    observations: &[Observation],
+) -> ObservationSummaryArtifacts {
+    let groups = unique_review_observations(observations);
     let merged = groups
         .iter()
         .filter(|group| group.observation_ids.len() > 1)
@@ -124,10 +131,6 @@ pub(crate) fn observation_summary_artifacts(
         merged,
         dropped,
     }
-}
-
-pub(crate) fn unique_review_observations(observations: &[Observation]) -> Vec<ObservationGroup> {
-    observation_summary_artifacts(observations).unique
 }
 
 pub(crate) fn observation_group_key(observation: &Observation) -> String {
