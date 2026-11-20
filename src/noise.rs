@@ -1077,7 +1077,7 @@ mod human_output_admission_tests {
         );
         assert_eq!(finding.dedupe_key, audit.dedupe_key);
         let summaries = [collision_finding(claim)];
-        let baseline = collision_review(&summaries, std::slice::from_ref(&finding))?;
+        let baseline = collision_review(&[], std::slice::from_ref(&finding))?;
         assert!(baseline.should_prepare_github_review);
         assert!(baseline.github_review.body.contains(claim));
         let expected = serde_json::to_string_pretty(&baseline.github_review)?;
@@ -1092,19 +1092,23 @@ mod human_output_admission_tests {
             assert!(
                 fs::read_to_string(review_dir.join("observations.json"))?.contains(private_reason)
             );
-            let mixed = collision_review(&summaries, &rows)?;
-            assert!(mixed.should_prepare_github_review);
-            write_github_review_payload(
-                &review_dir,
-                &mixed.github_review,
-                &BTreeSet::new(),
-                &ReviewBodyPolicy::default(),
-                false,
-            )?;
-            assert_eq!(
-                fs::read_to_string(review_dir.join("github-review.json"))?,
-                expected
-            );
+            // The observation must carry the finding even without a summary
+            // that could independently render the same claim.
+            for summaries in [&[][..], summaries.as_slice()] {
+                let mixed = collision_review(summaries, &rows)?;
+                assert!(mixed.should_prepare_github_review);
+                write_github_review_payload(
+                    &review_dir,
+                    &mixed.github_review,
+                    &BTreeSet::new(),
+                    &ReviewBodyPolicy::default(),
+                    false,
+                )?;
+                assert_eq!(
+                    fs::read_to_string(review_dir.join("github-review.json"))?,
+                    expected
+                );
+            }
         }
         Ok(())
     }
