@@ -672,3 +672,35 @@ fn review_renderer_green_proof_does_not_answer_a_source_route_question() -> Resu
     ensure!(clean.github_review.body.is_empty());
     Ok(())
 }
+
+#[test]
+fn retained_finding_preserves_unicode_and_line_endings() -> Result<()> {
+    for separator in ["\n", "\r\n"] {
+        let note = format!("Résumé for café ☕.{separator}東京 keeps e\u{301} and 🦀.");
+        let mut case = one_inline_case();
+        let comment = &mut case.inline_comments[0];
+        comment.body = format!("[ub] {note}");
+        comment.severity = "low".to_owned();
+        let surface = case.compile()?;
+        let (_dir, args) = snapshot_post_args(&case)?;
+        validate_github_review_payload_for_post(&args, &surface.github_review)?;
+        let payload = github_review_post_payload(&surface.github_review)?;
+        let decoded: serde_json::Value = serde_json::from_slice(&serde_json::to_vec(&payload)?)?;
+        assert_eq!(decoded["event"], "COMMENT");
+        assert_eq!(decoded["comments"].as_array().map(Vec::len), Some(1));
+        assert_eq!(decoded["comments"][0]["body"], note);
+        let expected = format!("## Confirmed findings\n\n- {note}\n");
+        assert!(
+            surface.github_review.body.contains(&expected),
+            "{:?}",
+            surface.github_review.body
+        );
+        assert_eq!(decoded["body"], surface.github_review.body);
+        let (concise, receipt) = degrade_review_body(surface.github_review.body, 6000, 1, HEAD);
+        assert_eq!(receipt.selected_mode, "concise_summary");
+        assert_eq!(receipt.original_item_count, 2);
+        assert_eq!(receipt.final_item_count, 1);
+        assert_eq!(concise, expected);
+    }
+    Ok(())
+}

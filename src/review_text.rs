@@ -527,41 +527,60 @@ fn output_degradation_receipt(
 fn output_topics(text: &str) -> Vec<OutputTopic> {
     let mut section = String::new();
     let mut in_fenced_block = false;
-    let mut topics = text
-        .lines()
-        .filter_map(|line| {
-            let trimmed = line.trim();
-            if trimmed.starts_with("```") {
-                in_fenced_block = !in_fenced_block;
-                return None;
+    let mut topics = Vec::new();
+    let mut lines = text.split_inclusive('\n').peekable();
+    while let Some(line) = lines.next() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") {
+            in_fenced_block = !in_fenced_block;
+            continue;
+        }
+        if in_fenced_block {
+            continue;
+        }
+        if line.starts_with("## ") {
+            section = trimmed.to_owned();
+            continue;
+        }
+
+        let is_finding = matches!(
+            section.as_str(),
+            "## Confirmed findings" | "## Summary-only findings"
+        );
+        let text = if let Some(first) = line.trim_start().strip_prefix("- ") {
+            if first.trim().is_empty() {
+                continue;
             }
-            if in_fenced_block {
-                return None;
+            let mut bullet = first.to_owned();
+            // Ordinary continuation lines belong to the same finding. Keep
+            // their original line endings for rendering and duplicate identity.
+            while let Some(next) = lines.next_if(|next| {
+                let next = next.trim();
+                is_finding
+                    && !next.is_empty()
+                    && !["- ", "* ", "+ ", "#", "```", "~~~", ">"]
+                        .iter()
+                        .any(|prefix| next.starts_with(prefix))
+            }) {
+                bullet.push_str(next);
             }
-            if line.starts_with("## ") {
-                section = line.trim().to_owned();
-                return None;
-            }
-            let topic_text = line
-                .trim_start()
-                .strip_prefix("- ")
-                .or_else(|| (section == "## Reporter summary").then_some(line.trim()))?
-                .trim();
-            if topic_text.is_empty() {
-                return None;
-            }
-            // Ranking tokens discard syntax, but duplicate identity must retain
-            // operators, case and literal whitespace that can change a claim.
-            let normalized = topic_text.to_owned();
-            Some(OutputTopic {
-                id: String::new(),
-                content_key: normalized,
-                section: section.clone(),
-                text: topic_text.to_owned(),
-                rank: output_topic_rank(&section, topic_text),
-            })
-        })
-        .collect::<Vec<_>>();
+            bullet.trim().to_owned()
+        } else if section == "## Reporter summary" {
+            trimmed.to_owned()
+        } else {
+            continue;
+        };
+        if text.is_empty() {
+            continue;
+        }
+        topics.push(OutputTopic {
+            id: String::new(),
+            content_key: text.clone(),
+            section: section.clone(),
+            rank: output_topic_rank(&section, &text),
+            text,
+        });
+    }
     let mut occurrences = BTreeMap::<String, usize>::new();
     for topic in &mut topics {
         let occurrence = occurrences.entry(topic.content_key.clone()).or_default();
