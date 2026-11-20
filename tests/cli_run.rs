@@ -945,3 +945,156 @@ fn config_reading_subcommands_reject_explicit_missing_paths() -> Result<()> {
     assert!(!temp.path().join("packet").exists());
     Ok(())
 }
+
+#[test]
+fn compare_packets_keeps_proof_economics_and_missing_inputs_distinct() -> Result<()> {
+    let _guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let root = temp.path();
+    let repo = root.join("repo");
+    init_minimal_repo(&repo)?;
+    let config = root.join("config.toml");
+    write_file(
+        &config,
+        r#"
+profile = "gh-runner"
+[repo]
+kind = "rust"
+ledger = ""
+[[proof.required]]
+id = "cargo-check"
+languages = ["rust"]
+diff_classes = ["source-general"]
+command = "cargo check --workspace --locked"
+reason = "Retain the configured proof even on a profile without build leases."
+cost = "focused-build"
+required = true
+"#,
+    )?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let stable = root.join("stable");
+    let candidate = root.join("candidate");
+    for out in [&stable, &candidate] {
+        run(
+            root,
+            bin,
+            &[
+                "run",
+                "--root",
+                path_str(&repo)?,
+                "--base",
+                "HEAD~1",
+                "--head",
+                "HEAD",
+                "--config",
+                path_str(&config)?,
+                "--out",
+                path_str(out)?,
+                "--mode",
+                "intelligent-ci",
+                "--fail-on-gate",
+                "false",
+                "--model-mode",
+                "off",
+                "--tools",
+                "tokmd",
+                "--dry-run",
+                "--no-github-summary",
+            ],
+        )?;
+    }
+    let compare = || -> Result<serde_json::Value> {
+        let output = isolated_command(bin, root)
+            .args([
+                "compare-packets",
+                "--stable",
+                path_str(&stable)?,
+                "--candidate",
+                path_str(&candidate)?,
+            ])
+            .output()?;
+        anyhow::ensure!(
+            output.status.success(),
+            "comparison failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(serde_json::from_slice(&output.stdout)?)
+    };
+    let report = compare()?;
+    assert_eq!(report, compare()?);
+    assert_eq!(report["recorded_input"]["status"], "matched");
+    assert_eq!(report["proof"]["status"], "agreement");
+    let proof_path = candidate.join("review/proof_receipts.json");
+    let original = fs::read(&proof_path)?;
+    let mut proof: Vec<serde_json::Value> = serde_json::from_slice(&original)?;
+    let row = proof
+        .first_mut()
+        .ok_or_else(|| anyhow::anyhow!("expected the producer's policy proof receipt"))?;
+    let id = row["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("missing proof id"))?
+        .to_owned();
+    assert_eq!(
+        report["proof"]["candidate"]["value"][&id]["reported_result"],
+        "skipped_profile"
+    );
+    assert_eq!(
+        report["economics"]["fields"]["estimated_cost_usd"],
+        "unresolved"
+    );
+    assert_eq!(report["economics"]["fields"]["tokens"], "agreement");
+    assert_eq!(
+        report["verdicts"]["candidate"]["value"]["gate_result"],
+        "not_proven"
+    );
+
+    let verdict_path = candidate.join("review/gate_outcome.json");
+    let mut old: serde_json::Value = serde_json::from_slice(&fs::read(&verdict_path)?)?;
+    old.as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("expected verdict object"))?
+        .remove("gate_result");
+    fs::write(verdict_path, serde_json::to_vec(&old)?)?;
+    let legacy_verdict = compare()?;
+    assert_eq!(
+        legacy_verdict["verdicts"]["fields"]["conclusion"],
+        "agreement"
+    );
+    assert_eq!(
+        legacy_verdict["verdicts"]["fields"]["gate_result"],
+        "unresolved"
+    );
+    assert_eq!(legacy_verdict["verdicts"]["status"], "unresolved");
+
+    row.as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("expected receipt object"))?
+        .remove("revision");
+    fs::write(&proof_path, serde_json::to_vec(&proof)?)?;
+    let legacy = compare()?;
+    assert_eq!(legacy["proof"]["candidate"]["status"], "legacy_unbound");
+    assert_eq!(legacy["economics"], report["economics"]);
+
+    fs::write(&proof_path, b"[]")?;
+    let omission = compare()?;
+    assert_eq!(omission["proof"]["fields"][&id], "stable_only");
+    assert_eq!(omission["proof"]["status"], "different");
+    fs::write(&proof_path, original)?;
+    fs::remove_file(candidate.join("review/ub-review-cost.json"))?;
+    let missing_cost = compare()?;
+    assert_eq!(missing_cost["economics"]["candidate"]["status"], "missing");
+    assert_eq!(missing_cost["proof"], report["proof"]);
+
+    let config_path = candidate.join("effective-config.json");
+    let mut settings: serde_json::Value = serde_json::from_slice(&fs::read(&config_path)?)?;
+    settings["gate"]["target_minutes"] = serde_json::json!(71);
+    fs::write(config_path, serde_json::to_vec(&settings)?)?;
+    let drift = compare()?;
+    assert_eq!(drift["recorded_input"]["status"], "different");
+    assert_eq!(drift["proof"]["status"], "unresolved");
+    fs::write(candidate.join("input/diff.patch"), b"unbound replacement")?;
+    let stale = compare()?;
+    assert_eq!(
+        stale["recorded_input"]["candidate"]["status"],
+        "stale_revision"
+    );
+    Ok(())
+}
