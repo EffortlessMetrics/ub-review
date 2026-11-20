@@ -213,8 +213,8 @@ fn cmd_enable_with_resolver(args: EnableArgs, resolve: fn() -> ReleaseLookup) ->
     let config_path = root.join(CONFIG_RELATIVE_PATH);
 
     // Refuse to clobber an existing ub-review setup unless the user opted in
-    // with --force. Detecting existing ub-review workflows by name (not just
-    // the exact path) avoids leaving two competing workflows behind.
+    // with --force. Workflow names and action references can both indicate
+    // an existing setup.
     if !args.force {
         refuse_existing_config(&config_path)?;
         refuse_existing_workflow(root)?;
@@ -287,7 +287,16 @@ fn refuse_existing_config(config_path: &Path) -> Result<()> {
 /// filename, not just the default `ub-review.yml`.
 fn refuse_existing_workflow(root: &Path) -> Result<()> {
     for scan in scan_local_workflows(root)? {
-        if scan.path.contains("ub-review") {
+        if scan.path.contains("ub-review")
+            || scan.yaml_jobs.iter().flat_map(|job| &job.uses).any(|uses| {
+                uses.split_once('@').is_some_and(|(repository, reference)| {
+                    repository.eq_ignore_ascii_case(UBM_REPOSITORY)
+                        && !reference.is_empty()
+                        && !reference.contains(char::is_whitespace)
+                        && !reference.contains("${{")
+                })
+            })
+        {
             bail!(
                 "existing ub-review workflow found at {}; re-run with --force to overwrite",
                 scan.path

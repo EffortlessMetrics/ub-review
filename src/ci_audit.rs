@@ -913,9 +913,45 @@ pub(crate) fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
                 let mut permissions = None;
                 let mut uses_secrets = BTreeSet::new();
                 let mut cursor = index + 1;
+                let job_field_indent = lines.get(cursor).map(|(indent, _)| *indent);
+                let mut in_steps = false;
+                let mut step_item_indent = None;
+                let mut step_field_indent = None;
                 while cursor < lines.len() && lines[cursor].0 > expected {
-                    let body = lines[cursor].1.as_str();
-                    let body = body.strip_prefix("- ").unwrap_or(body);
+                    let (indent, line) = &lines[cursor];
+                    let indent = *indent;
+                    let line = line.as_str();
+                    let list_item = line
+                        .strip_prefix("- ")
+                        .or_else(|| (line == "-").then_some(""));
+                    let body = list_item.unwrap_or(line);
+                    let job_field = job_field_indent == Some(indent) && list_item.is_none();
+                    if job_field {
+                        in_steps = line.split_once(':').is_some_and(|(key, _)| {
+                            matches!(key, "steps" | "'steps'" | "\"steps\"")
+                        });
+                        step_item_indent = None;
+                        step_field_indent = None;
+                    }
+                    // Only job and step mapping keys can call actions or reusable
+                    // workflows. A nested input or script can spell `uses:` too.
+                    let step_field = if in_steps
+                        && list_item.is_some()
+                        && step_item_indent.is_none_or(|item| item == indent)
+                    {
+                        step_item_indent = Some(indent);
+                        let field = body.trim_start();
+                        step_field_indent =
+                            (!field.is_empty()).then_some(indent + line.len() - field.len());
+                        true
+                    } else if in_steps
+                        && list_item.is_none()
+                        && step_item_indent.is_some_and(|item| indent > item)
+                    {
+                        *step_field_indent.get_or_insert(indent) == indent
+                    } else {
+                        false
+                    };
                     ci_collect_secret_refs(body, &mut uses_secrets);
                     if let Some(rest) = body.strip_prefix("runs-on:") {
                         let (items, next) = ci_yaml_list_at(&lines, cursor, lines[cursor].0, rest);
@@ -935,7 +971,9 @@ pub(crate) fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
                         continue;
                     } else if let Some(rest) = body.strip_prefix("timeout-minutes:") {
                         timeout_minutes = rest.trim().parse::<u64>().ok().or(timeout_minutes);
-                    } else if let Some(rest) = body.strip_prefix("uses:") {
+                    } else if (job_field || step_field)
+                        && let Some(rest) = body.trim_start().strip_prefix("uses:")
+                    {
                         let reference = ci_yaml_unquote(rest);
                         if !reference.is_empty() {
                             uses.push(reference);

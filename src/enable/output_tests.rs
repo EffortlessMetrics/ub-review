@@ -287,7 +287,7 @@ fn enable_permits_unrelated_workflow_with_action_mentions() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let root = temp.path();
     let contents = review_workflow(&format!(
-        "      # uses: {PINNED_ACTION}\n      - uses: other/ub-review@v1\n      - uses: EffortlessMetrics/ub-review-extra@v1\n      - run: |\n          cat <<'EOF'\n          uses: {PINNED_ACTION}\n          EOF\n"
+        "      # uses: {PINNED_ACTION}\n      - uses: other/ub-review@v1\n        with:\n          uses: {PINNED_ACTION}\n      - uses: EffortlessMetrics/ub-review-extra@v1\n      - run: |\n          cat <<'EOF'\n          uses: {PINNED_ACTION}\n          EOF\n"
     ));
     prepare_workflow(root, NEUTRAL_WORKFLOW_PATH, &contents)?;
     let workflow = root.join(WORKFLOW_RELATIVE_PATH);
@@ -321,7 +321,8 @@ fn enable_existing_action_preserves_filename_config_and_force_controls() -> Resu
     let temp = tempfile::tempdir()?;
     let root = temp.path();
     let legacy_path = ".github/workflows/old-ub-review.yaml";
-    let neutral = review_workflow("      - uses: effortlessmetrics/UB-review@v1\n");
+    let neutral =
+        review_workflow("      - name: Run review\n        uses: effortlessmetrics/UB-review@v1\n");
     prepare_workflow(
         root,
         legacy_path,
@@ -344,6 +345,12 @@ fn enable_existing_action_preserves_filename_config_and_force_controls() -> Resu
     anyhow::ensure!(error.to_string().contains(&config.display().to_string()));
     anyhow::ensure!(inventory(root)? == before);
     anyhow::ensure!(fs::read(&config)? == b"profile = \"retained\"\n");
+
+    fs::remove_file(&config)?;
+    let error = cmd_enable_with_resolver(args(root, false, false), offline_release)
+        .err()
+        .context("existing action with a release tag should refuse enable")?;
+    anyhow::ensure!(error.to_string().contains(NEUTRAL_WORKFLOW_PATH));
 
     cmd_enable_with_resolver(args(root, false, true), offline_release)?;
     anyhow::ensure!(root.join(WORKFLOW_RELATIVE_PATH).is_file());
