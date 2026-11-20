@@ -265,6 +265,34 @@ The check resolves the installed Rust binaries before any version probe and
 checks the locked dependency cache without compiling the workspace. Refresh
 the install phase after a Rust pin or lockfile change that makes the cache stale.
 
+### Run workspace commands with the repository pin
+
+Use the installed Cargo and rustc for the channel in `rust-toolchain.toml`.
+The image's `cargo` can come first on PATH, and an explicit
+`RUSTUP_TOOLCHAIN` can select another toolchain through a Rustup proxy. The
+task-shell preflight verifies the pinned binaries directly and leaves the
+caller's toolchain selection in place.
+
+After activation, run this from the checkout for a pinned offline workspace
+check:
+
+```bash
+(
+set -euo pipefail
+export RUSTUP_AUTO_INSTALL=0
+
+cd -- "$(git rev-parse --show-toplevel)"
+pin=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+pinned_cargo=$(command rustup which --toolchain "$pin" cargo)
+pinned_rustc=$(command rustup which --toolchain "$pin" rustc)
+RUSTC="$pinned_rustc" "$pinned_cargo" check --workspace --locked --offline
+)
+```
+
+Substitute the workspace command you need for `check --workspace`. To use the
+moving stable compiler for general tooling, select it explicitly with
+`RUSTUP_AUTO_INSTALL=0 rustup run stable rustc --version`.
+
 ### Optional offline gate tools
 
 The base setup covers source work and locked Cargo commands. Provision the
