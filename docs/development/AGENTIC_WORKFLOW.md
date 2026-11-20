@@ -132,6 +132,7 @@ install_node_current() (
     printf 'Incomplete Node.js install at %s. Inspect and move it aside before rerunning setup.\n' "$install_dir" >&2
     exit 1
   fi
+  "$install_dir/bin/node" --version
   ln -sfnT -- "${archive%.tar.xz}" "$tools_dir/node-current"
 )
 
@@ -152,7 +153,6 @@ install_node_current
 download https://astral.sh/uv/install.sh |
   UV_UNMANAGED_INSTALL="$tools_dir/bin" sh
 
-"$tools_dir/node-current/bin/node" --version
 "$tools_dir/bin/uv" --version
 rustup run stable rustc --version
 rustc_version=$(rustup run "$pin" rustc --version)
@@ -183,8 +183,9 @@ project or release check that specifies them.
 
 The Linux image needs the libatomic runtime for [official Node.js 25 and later
 binaries][node-linux-binaries]. Debian and Ubuntu provide it as `libatomic1`.
-The Install script runs the prepared Node.js binary by path, so a missing
-runtime stops setup even when an older image-provided `node` still runs.
+The Install script checks the prepared Node.js binary before selecting it
+or installing uv. If the runtime is missing, setup stops and the previous
+Node.js selection stays in place.
 
 Installation needs outbound access to the official Rust, Node.js, uv and Cargo
 dependency sources permitted by the environment's network policy. Keep runtime
