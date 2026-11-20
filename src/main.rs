@@ -7940,6 +7940,88 @@ mod tests {
     }
 
     #[test]
+    fn lane_packet_quiet_specialist_preserves_required_receipt_failure() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        let mut sensor = sensor_plan("ast-grep", "ast-grep", true);
+        sensor.required = true;
+        let plan = test_plan(vec![sensor]);
+        let lane = LanePlan {
+            id: "tests".to_owned(),
+            role: "test oracle".to_owned(),
+            model: "custom:test".to_owned(),
+            model_display: "test model".to_owned(),
+            receives: vec!["ast-grep".to_owned()],
+            focus: "test focus".to_owned(),
+        };
+        let sensor_dir = out.join("sensors/ast-grep");
+        fs::create_dir_all(&sensor_dir)?;
+        let receipt_path = sensor_dir.join("ub-review-sensor-status.json");
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+
+        let (output, degraded) = crate::parse_lane_model_output_or_degrade(
+            r#"{"findings":[],"proof_intents":[],"internal_audit":{"surfaces_checked":["src/lib.rs"]}}"#,
+            &out.join("content.json"),
+        )?;
+        assert!(!degraded);
+        let audit = output
+            .internal_audit
+            .ok_or_else(|| anyhow::anyhow!("missing private audit"))?;
+        assert_eq!(audit.surfaces_checked, ["src/lib.rs"]);
+        assert!(output.summary.is_none());
+        assert!(output.inline_comments.is_empty());
+        assert!(output.candidate_findings.is_empty());
+        assert!(output.summary_only_findings.is_empty());
+        assert!(output.observations.is_empty());
+        assert!(output.failed_objections.is_empty());
+        assert!(output.proof_requests.is_empty());
+        assert!(output.proof_intents.is_empty());
+
+        for (status, reason, required_gap) in [
+            ("ok", "completed", false),
+            ("failed", "tool exited unsuccessfully", true),
+        ] {
+            let receipt = serde_json::to_vec(&serde_json::json!({
+                "sensor": "ast-grep",
+                "status": status,
+                "reason": reason,
+            }))?;
+            fs::write(&receipt_path, &receipt)?;
+            super::write_lane_packets(
+                out,
+                &test_diff(),
+                &plan,
+                std::slice::from_ref(&lane),
+                &test_pr_thread_context(),
+                &event_log,
+            )?;
+            let packet = fs::read_to_string(out.join("lanes/tests.md"))?;
+            assert!(packet.contains(&format!("- `ast-grep`: `{status}`")));
+            assert_eq!(fs::read(&receipt_path)?, receipt);
+            let issues = crate::collect_sensor_evidence_issues(out, &plan);
+            assert_eq!(
+                super::has_required_sensor_evidence_gap(&plan, &issues),
+                required_gap
+            );
+            assert_eq!(issues.len(), usize::from(required_gap));
+
+            let (_, instructions) = packet
+                .split_once("## Required output shape\n\n")
+                .ok_or_else(|| anyhow::anyhow!("missing lane packet output instructions"))?;
+            assert_eq!(
+                instructions,
+                concat!(
+                    "Start inline comments for this lane with `[tests]`. ",
+                    "When no actionable finding or material proof question remains, return empty public arrays. ",
+                    "Record checked surfaces and any rejected hypothesis or remaining uncertainty only in `internal_audit`. ",
+                    "Do not infer safety from missing or failed sensor receipts.\n",
+                ),
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn lane_packet_write_reports_unwritable_lane_directory() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");

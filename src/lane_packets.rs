@@ -766,7 +766,7 @@ pub(crate) fn write_lane_packets(
         text.push_str(review_posture_for_diff_class(diff.diff_class));
         text.push_str("\n\n## Required output shape\n\n");
         text.push_str(&format!(
-            "Start inline comments for this lane with `[{}]`. If no blocking finding exists, write an audit trail: what you checked, strongest failed objection, and residual risk. Do not infer safety from missing sensor receipts.\n",
+            "Start inline comments for this lane with `[{}]`. When no actionable finding or material proof question remains, return empty public arrays. Record checked surfaces and any rejected hypothesis or remaining uncertainty only in `internal_audit`. Do not infer safety from missing or failed sensor receipts.\n",
             lane.id
         ));
         let packet_path = lane_dir.join(format!("{}.md", sanitize_artifact_name(&lane.id)));
