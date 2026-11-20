@@ -40,6 +40,8 @@ fn stopped_child_receipt_after_start_delay(
     let started = temp.path().join("started");
     let ready = temp.path().join("child-ready");
     let delayed = temp.path().join("delayed");
+    let release = delayed.with_extension("release");
+    let escaped = delayed.with_extension("escaped");
     let out = temp.path().join("out");
     let revision = RevisionRef {
         digest: "a".repeat(64),
@@ -109,11 +111,32 @@ fn stopped_child_receipt_after_start_delay(
     let mut child_was_running = false;
     #[cfg(target_os = "linux")]
     let child_pid = std::cell::Cell::<Option<u32>>::new(None);
+    let exit_observed = std::cell::Cell::new(None);
+    let mut inspect_exit = |child: &mut std::process::Child| {
+        #[cfg(target_os = "linux")]
+        if Path::new("/proc").join(child.id().to_string()).exists() {
+            // try_wait could otherwise collect a zombie and hide a missing reap.
+            exit_observed.set(Some(Ok(false)));
+            return;
+        }
+        exit_observed.set(Some(child.try_wait().map(|status| status.is_some())));
+    };
     let mut cleanup_called = false;
     let mut stop_action_called = false;
     let mut cleanup = || {
         cleanup_called = true;
-        // Proof-root cleanup must occur only after termination and reaping.
+        // Inspect the actual child handle before allowing proof-root cleanup.
+        let exited = exit_observed
+            .take()
+            .context("child exit was not inspected")??;
+        if !exited && matches!(stop, Stop::MissingMarker) {
+            fs::write(&release, b"release")?;
+        }
+        ensure!(exited, "proof-root cleanup began before child exit");
+        ensure!(
+            !escaped.exists(),
+            "missing-marker fixture used its escape deadline"
+        );
         ensure!(started.is_file() != matches!(stop, Stop::MissingMarker));
         ensure!(!delayed.exists());
         #[cfg(target_os = "linux")]
@@ -151,6 +174,7 @@ fn stopped_child_receipt_after_start_delay(
                     stderr_path,
                     child_environment: ChildEnvironment::AmbientPlusExplicit,
                     observe_process,
+                    after_failed_wait: Some(&mut inspect_exit),
                 },
                 &mut |child, timeout| {
                     if matches!(stop, Stop::MissingMarker) {
@@ -277,15 +301,6 @@ fn stopped_child_receipt_after_start_delay(
     let command_task =
         ProofCommandTask::focused_test(&task, "head", 1, ProofExecutionPhase::ModelRequest);
     ensure!(ledger.receipt_pending(&command_task)?);
-    if matches!(stop, Stop::MissingMarker) {
-        // A surviving fixture would now attempt to write its proof marker.
-        fs::write(delayed.with_extension("release"), b"release")?;
-    }
-    thread::sleep(Duration::from_millis(2300));
-    ensure!(
-        !delayed.exists(),
-        "cancelled child survived long enough to publish proof"
-    );
     Ok(())
 }
 
@@ -384,11 +399,12 @@ fn startup_marker_child() -> Result<()> {
         std::env::var_os("UB_LIFECYCLE_CHILD_READY").context("child ready marker missing")?;
     fs::write(ready, b"ready")?;
     if std::env::var("UB_LIFECYCLE_SKIP_START_MARKER")? == "true" {
-        // Remain live across parent scheduling gaps. Only a release after
-        // cleanup lets a surviving child attempt publication.
+        // A release frees a survivor when the parent detects failed cleanup.
         let release = Path::new(&delayed).with_extension("release");
-        wait_for_start_marker(&release, Duration::from_secs(60))
-            .context("missing-marker fixture was never released")?;
+        if let Err(error) = wait_for_start_marker(&release, Duration::from_secs(60)) {
+            fs::write(Path::new(&delayed).with_extension("escaped"), b"escaped")?;
+            return Err(error).context("missing-marker fixture was never released");
+        }
     } else {
         let delay_started = Instant::now();
         thread::sleep(Duration::from_millis(delay));
