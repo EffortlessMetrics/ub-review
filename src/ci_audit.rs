@@ -452,6 +452,53 @@ pub(crate) fn ci_yaml_unquote(value: &str) -> String {
     unquoted.to_owned()
 }
 
+fn ci_yaml_quote_closes_on_line(value: &str, quote: char) -> bool {
+    let mut characters = value.chars().peekable();
+    while let Some(character) = characters.next() {
+        if quote == '"' && character == '\\' {
+            characters.next();
+        } else if character == quote {
+            if quote == '\'' && characters.peek() == Some(&quote) {
+                characters.next();
+            } else {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Count continuation lines for a quoted mapping value. The raw source is
+/// needed because an aligned continuation can contain both `#` and `uses:`.
+fn ci_yaml_quoted_continuation(raw_field: &str, following_lines: &[&str]) -> usize {
+    let raw_field = raw_field.trim_start();
+    let raw_field = raw_field.strip_prefix("- ").unwrap_or(raw_field);
+    let Some((_, value)) = raw_field.split_once(':') else {
+        return 0;
+    };
+    let mut value = value.trim_start();
+    while value.starts_with(['&', '!']) {
+        let Some((_, rest)) = value.split_once(char::is_whitespace) else {
+            return 0;
+        };
+        value = rest.trim_start();
+    }
+    let Some(quote) = value
+        .chars()
+        .next()
+        .filter(|quote| matches!(quote, '"' | '\''))
+    else {
+        return 0;
+    };
+    if ci_yaml_quote_closes_on_line(&value[quote.len_utf8()..], quote) {
+        return 0;
+    }
+    following_lines
+        .iter()
+        .position(|line| ci_yaml_quote_closes_on_line(line, quote))
+        .map_or(following_lines.len(), |index| index + 1)
+}
+
 pub(crate) fn ci_yaml_inline_list(value: &str) -> Option<Vec<String>> {
     let trimmed = value.trim();
     let inner = trimmed.strip_prefix('[')?.strip_suffix(']')?;
@@ -788,15 +835,19 @@ pub(crate) fn ci_yaml_strategy_matrix_size_at(
 /// `runs-on`, literal `strategy.matrix` dimensions, `timeout-minutes`, `name`,
 /// and `uses` references. Everything else is an explicit evidence gap.
 pub(crate) fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
-    let lines: Vec<(usize, String)> = text
-        .lines()
-        .filter_map(|raw| {
+    let raw_lines: Vec<_> = text.lines().collect();
+    let mut source_indices = Vec::new();
+    let lines: Vec<(usize, String)> = raw_lines
+        .iter()
+        .enumerate()
+        .filter_map(|(source_index, raw)| {
             let stripped = ci_yaml_strip_comment(raw);
             let trimmed_end = stripped.trim_end();
             if trimmed_end.trim().is_empty() {
                 return None;
             }
             let indent = trimmed_end.len() - trimmed_end.trim_start().len();
+            source_indices.push(source_index);
             Some((indent, trimmed_end.trim_start().to_owned()))
         })
         .collect();
@@ -913,9 +964,63 @@ pub(crate) fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
                 let mut permissions = None;
                 let mut uses_secrets = BTreeSet::new();
                 let mut cursor = index + 1;
-                while cursor < lines.len() && lines[cursor].0 > expected {
-                    let body = lines[cursor].1.as_str();
-                    let body = body.strip_prefix("- ").unwrap_or(body);
+                let job_field_indent = lines.get(cursor).map(|(indent, _)| *indent);
+                let mut in_steps = false;
+                let mut step_item_indent = None;
+                let mut step_field_indent = None;
+                let mut quoted_through = None;
+                while cursor < lines.len() {
+                    let source_index = source_indices[cursor];
+                    if quoted_through.is_some_and(|last| source_index <= last) {
+                        ci_collect_secret_refs(&lines[cursor].1, &mut uses_secrets);
+                        cursor += 1;
+                        continue;
+                    }
+                    let (indent, line) = &lines[cursor];
+                    if *indent <= expected {
+                        break;
+                    }
+                    let indent = *indent;
+                    let line = line.as_str();
+                    let list_item = line
+                        .strip_prefix("- ")
+                        .or_else(|| (line == "-").then_some(""));
+                    let body = list_item.unwrap_or(line);
+                    let job_field = job_field_indent == Some(indent) && list_item.is_none();
+                    if job_field {
+                        in_steps = line.split_once(':').is_some_and(|(key, _)| {
+                            matches!(key.trim_end(), "steps" | "'steps'" | "\"steps\"")
+                        });
+                        step_item_indent = None;
+                        step_field_indent = None;
+                    }
+                    // Only job and step mapping keys can call actions or reusable
+                    // workflows. A nested input or script can spell `uses:` too.
+                    let step_field = if in_steps
+                        && list_item.is_some()
+                        && step_item_indent.is_none_or(|item| item == indent)
+                    {
+                        step_item_indent = Some(indent);
+                        let field = body.trim_start();
+                        step_field_indent =
+                            (!field.is_empty()).then_some(indent + line.len() - field.len());
+                        true
+                    } else if in_steps
+                        && list_item.is_none()
+                        && step_item_indent.is_some_and(|item| indent > item)
+                    {
+                        *step_field_indent.get_or_insert(indent) == indent
+                    } else {
+                        false
+                    };
+                    let mapping_field = job_field || step_field;
+                    if mapping_field {
+                        let continuation = ci_yaml_quoted_continuation(
+                            raw_lines[source_index],
+                            &raw_lines[source_index + 1..],
+                        );
+                        quoted_through = (continuation > 0).then_some(source_index + continuation);
+                    }
                     ci_collect_secret_refs(body, &mut uses_secrets);
                     if let Some(rest) = body.strip_prefix("runs-on:") {
                         let (items, next) = ci_yaml_list_at(&lines, cursor, lines[cursor].0, rest);
@@ -935,7 +1040,10 @@ pub(crate) fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
                         continue;
                     } else if let Some(rest) = body.strip_prefix("timeout-minutes:") {
                         timeout_minutes = rest.trim().parse::<u64>().ok().or(timeout_minutes);
-                    } else if let Some(rest) = body.strip_prefix("uses:") {
+                    } else if mapping_field
+                        && let Some((key, rest)) = body.trim_start().split_once(':')
+                        && matches!(key.trim_end(), "uses" | "'uses'" | "\"uses\"")
+                    {
                         let reference = ci_yaml_unquote(rest);
                         if !reference.is_empty() {
                             uses.push(reference);

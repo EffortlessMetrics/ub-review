@@ -223,3 +223,183 @@ fn enable_directory_config_preserves_validation_precedence() -> Result<()> {
     }
     Ok(())
 }
+
+const NEUTRAL_WORKFLOW_PATH: &str = ".github/workflows/review.yml";
+const PINNED_ACTION: &str = "EffortlessMetrics/ub-review@0123456789abcdef0123456789abcdef01234567";
+
+fn prepare_workflow(root: &Path, path: &str, contents: &str) -> Result<()> {
+    prepare_source(root)?;
+    fs::create_dir_all(root.join(".github/workflows"))?;
+    fs::write(root.join(path), contents)?;
+    Ok(())
+}
+
+fn review_workflow(steps: &str) -> String {
+    format!(
+        "name: Review\non: pull_request\njobs:\n  review:\n    runs-on: ubuntu-latest\n    steps:\n{steps}"
+    )
+}
+
+#[test]
+fn enable_refuses_existing_action_under_neutral_workflow_name_before_resolving() -> Result<()> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static RESOLVER_CALLS: AtomicUsize = AtomicUsize::new(0);
+    let resolve = || {
+        RESOLVER_CALLS.fetch_add(1, Ordering::Relaxed);
+        offline_release()
+    };
+    let temp = tempfile::tempdir()?;
+    let root = temp.path();
+    let contents = review_workflow(&format!("      - uses: '{PINNED_ACTION}' # pinned\n"));
+    prepare_workflow(root, NEUTRAL_WORKFLOW_PATH, &contents)?;
+    let scans = scan_local_workflows(root)?;
+    anyhow::ensure!(matches!(
+        scans.as_slice(),
+        [scan] if scan.path == NEUTRAL_WORKFLOW_PATH
+            && matches!(scan.yaml_jobs.as_slice(), [job] if job.uses == [PINNED_ACTION])
+    ));
+    let before = inventory(root)?;
+    for _ in 0..2 {
+        let result = cmd_enable_with_resolver(args(root, false, false), resolve);
+        let paths = inventory(root)?;
+        let message = result.as_ref().err().map(ToString::to_string);
+        anyhow::ensure!(
+            message
+                .as_deref()
+                .is_some_and(|message| message.contains(NEUTRAL_WORKFLOW_PATH)
+                    && message.contains("--force"))
+                && RESOLVER_CALLS.load(Ordering::Relaxed) == 0
+                && paths == before
+                && !root.join(WORKFLOW_RELATIVE_PATH).exists()
+                && !root.join(CONFIG_RELATIVE_PATH).exists(),
+            "expected pre-resolver refusal for {NEUTRAL_WORKFLOW_PATH}, got {result:?}, {} resolver calls, paths {paths:?}",
+            RESOLVER_CALLS.load(Ordering::Relaxed),
+        );
+        anyhow::ensure!(fs::read(root.join(NEUTRAL_WORKFLOW_PATH))? == contents.as_bytes());
+        anyhow::ensure!(fs::read(root.join("src/lib.rs"))? == SOURCE);
+    }
+    Ok(())
+}
+
+#[test]
+fn enable_permits_unrelated_workflow_with_action_mentions() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let root = temp.path();
+    let contents = review_workflow(&format!(
+        "      # uses: {PINNED_ACTION}\n      - uses: other/ub-review@v1\n        with:\n          uses: {PINNED_ACTION}\n      - uses: EffortlessMetrics/ub-review-extra@v1\n      - run: |\n          cat <<'EOF'\n          uses: {PINNED_ACTION}\n          EOF\n"
+    ));
+    prepare_workflow(root, NEUTRAL_WORKFLOW_PATH, &contents)?;
+    let workflow = root.join(WORKFLOW_RELATIVE_PATH);
+    let config = root.join(CONFIG_RELATIVE_PATH);
+
+    cmd_enable_with_resolver(args(root, false, false), offline_release)?;
+    let rendered_workflow = fs::read(&workflow)?;
+    let rendered_config = fs::read(&config)?;
+    let parsed: toml::Value = toml::from_str(std::str::from_utf8(&rendered_config)?)?;
+    anyhow::ensure!(parsed.get("profile").and_then(toml::Value::as_str) == Some("gh-runner"));
+    anyhow::ensure!(
+        parsed
+            .get("gate")
+            .and_then(|gate| gate.get("required_check"))
+            .and_then(toml::Value::as_str)
+            == Some(REQUIRED_CHECK)
+    );
+
+    fs::remove_file(&workflow)?;
+    fs::remove_file(&config)?;
+    cmd_enable_with_resolver(args(root, false, false), offline_release)?;
+    anyhow::ensure!(fs::read(&workflow)? == rendered_workflow);
+    anyhow::ensure!(fs::read(&config)? == rendered_config);
+    anyhow::ensure!(fs::read(root.join(NEUTRAL_WORKFLOW_PATH))? == contents.as_bytes());
+    anyhow::ensure!(fs::read(root.join("src/lib.rs"))? == SOURCE);
+    Ok(())
+}
+
+#[test]
+fn enable_permits_aligned_action_text_inside_multiline_quoted_run() -> Result<()> {
+    for quote in ['"', '\''] {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path();
+        let escaped_quote = if quote == '"' { "\\\"" } else { "''" };
+        let contents = review_workflow(&format!(
+            "      - run: {quote}echo {escaped_quote}text\n        uses: {PINNED_ACTION}\n        # done{quote}\n      - uses: other/ub-review@v1\n"
+        ));
+        prepare_workflow(root, NEUTRAL_WORKFLOW_PATH, &contents)?;
+
+        cmd_enable_with_resolver(args(root, false, false), offline_release)?;
+        let scans = scan_local_workflows(root)?;
+        anyhow::ensure!(matches!(
+            scans.iter().find(|scan| scan.path == NEUTRAL_WORKFLOW_PATH),
+            Some(scan) if matches!(scan.yaml_jobs.as_slice(), [job] if job.uses == ["other/ub-review@v1"])
+        ));
+        anyhow::ensure!(root.join(WORKFLOW_RELATIVE_PATH).is_file());
+        anyhow::ensure!(root.join(CONFIG_RELATIVE_PATH).is_file());
+        anyhow::ensure!(fs::read(root.join(NEUTRAL_WORKFLOW_PATH))? == contents.as_bytes());
+    }
+    Ok(())
+}
+
+#[test]
+fn enable_refuses_existing_action_under_steps_key_with_space_before_colon() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let root = temp.path();
+    let contents = review_workflow(&format!("      - uses: {PINNED_ACTION}\n"))
+        .replace("    steps:\n", "    steps :\n");
+    prepare_workflow(root, NEUTRAL_WORKFLOW_PATH, &contents)?;
+    let before = inventory(root)?;
+
+    let error = cmd_enable_with_resolver(args(root, false, false), offline_release)
+        .err()
+        .context("steps with whitespace before the colon should still identify the action")?;
+    anyhow::ensure!(error.to_string().contains(NEUTRAL_WORKFLOW_PATH));
+    anyhow::ensure!(inventory(root)? == before);
+    anyhow::ensure!(fs::read(root.join(NEUTRAL_WORKFLOW_PATH))? == contents.as_bytes());
+
+    cmd_enable_with_resolver(args(root, false, true), offline_release)?;
+    anyhow::ensure!(root.join(WORKFLOW_RELATIVE_PATH).is_file());
+    anyhow::ensure!(fs::read(root.join(NEUTRAL_WORKFLOW_PATH))? == contents.as_bytes());
+    Ok(())
+}
+
+#[test]
+fn enable_existing_action_preserves_filename_config_and_force_controls() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let root = temp.path();
+    let legacy_path = ".github/workflows/old-ub-review.yaml";
+    let neutral =
+        review_workflow("      - name: Run review\n        uses: effortlessmetrics/UB-review@v1\n");
+    prepare_workflow(
+        root,
+        legacy_path,
+        "name: Legacy\non: pull_request\njobs: {}\n",
+    )?;
+
+    let error = cmd_enable_with_resolver(args(root, false, false), offline_release)
+        .err()
+        .context("legacy workflow name should refuse enable")?;
+    anyhow::ensure!(error.to_string().contains(legacy_path));
+    fs::remove_file(root.join(legacy_path))?;
+    fs::write(root.join(NEUTRAL_WORKFLOW_PATH), &neutral)?;
+
+    let config = root.join(CONFIG_RELATIVE_PATH);
+    fs::write(&config, "profile = \"retained\"\n")?;
+    let before = inventory(root)?;
+    let error = cmd_enable_with_resolver(args(root, false, false), offline_release)
+        .err()
+        .context("existing config should refuse enable first")?;
+    anyhow::ensure!(error.to_string().contains(&config.display().to_string()));
+    anyhow::ensure!(inventory(root)? == before);
+    anyhow::ensure!(fs::read(&config)? == b"profile = \"retained\"\n");
+
+    fs::remove_file(&config)?;
+    let error = cmd_enable_with_resolver(args(root, false, false), offline_release)
+        .err()
+        .context("existing action with a release tag should refuse enable")?;
+    anyhow::ensure!(error.to_string().contains(NEUTRAL_WORKFLOW_PATH));
+
+    cmd_enable_with_resolver(args(root, false, true), offline_release)?;
+    anyhow::ensure!(root.join(WORKFLOW_RELATIVE_PATH).is_file());
+    anyhow::ensure!(fs::read(root.join(NEUTRAL_WORKFLOW_PATH))? == neutral.as_bytes());
+    Ok(())
+}
