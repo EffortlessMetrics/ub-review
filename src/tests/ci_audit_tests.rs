@@ -491,6 +491,51 @@ fn ci_workflow_scan_extracts_triggers_paths_timeouts_and_uses() -> Result<()> {
 }
 
 #[test]
+fn ci_workflow_scan_reads_uses_after_a_bare_step_item() -> Result<()> {
+    let scan = crate::scan_workflow_text(
+        ".github/workflows/review.yml",
+        r"on: pull_request
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      -
+          name: Check out source
+          uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+",
+    );
+    let review = scan.yaml_jobs.first().context("review job")?;
+    assert_eq!(
+        review.uses,
+        ["actions/checkout@v4", "actions/upload-artifact@v4"]
+    );
+    Ok(())
+}
+
+#[test]
+fn ci_workflow_scan_ignores_step_shaped_lines_inside_a_script() -> Result<()> {
+    let scan = crate::scan_workflow_text(
+        ".github/workflows/review.yml",
+        r"on: pull_request
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          cat <<'EOF'
+          - uses: example/script-text@v1
+          EOF
+      - name: Check out source
+        uses: actions/checkout@v4
+",
+    );
+    let review = scan.yaml_jobs.first().context("review job")?;
+    assert_eq!(review.uses, ["actions/checkout@v4"]);
+    Ok(())
+}
+
+#[test]
 fn ci_workflow_scan_extracts_literal_matrix_size_with_gaps() -> Result<()> {
     let scan = crate::scan_workflow_text(".github/workflows/matrix.yml", CI_MATRIX_WORKFLOW);
     let test = scan
