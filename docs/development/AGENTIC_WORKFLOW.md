@@ -181,6 +181,11 @@ release Current or LTS. These copies live under
 This workspace has no Node.js or uv dependency pin. Use exact versions for any
 project or release check that specifies them.
 
+The Linux image needs the libatomic runtime for [official Node.js 25 and later
+binaries][node-linux-binaries]. Debian and Ubuntu provide it as `libatomic1`.
+The Install script runs the prepared Node.js binary by path, so a missing
+runtime stops setup even when an older image-provided `node` still runs.
+
 Installation needs outbound access to the official Rust, Node.js, uv and Cargo
 dependency sources permitted by the environment's network policy. Keep runtime
 checks offline.
@@ -269,3 +274,4 @@ offline gate. Tool ordering, model-on configuration, and credentials are
 separate from this bootstrap.
 
 [codex-cloud]: https://learn.chatgpt.com/codex/environments/cloud-environments#customize-installation-and-startup
+[node-linux-binaries]: https://github.com/nodejs/node/blob/v26.x/BUILDING.md#official-binary-platforms-and-toolchains
