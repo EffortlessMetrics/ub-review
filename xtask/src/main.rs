@@ -1,8 +1,9 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::env;
 use std::fs;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Output};
+use std::process::{Command, ExitStatus, Output, Stdio};
 
 use anyhow::{Context, Result, bail};
 use chrono::NaiveDate;
@@ -883,11 +884,8 @@ struct CommandReceipt {
     /// clean pass again.
     missing: bool,
     reason: Option<String>,
-    stdout: String,
-    stderr: String,
-    /// Captured streams are bounded (#317); true when output was clipped.
-    stdout_truncated: bool,
-    stderr_truncated: bool,
+    stdout: PrecommitStream,
+    stderr: PrecommitStream,
 }
 
 #[derive(Clone, Debug)]
@@ -1170,10 +1168,8 @@ fn skipped_receipt(name: &str, reason: &str) -> CommandReceipt {
         skipped: true,
         missing: false,
         reason: Some(reason.to_owned()),
-        stdout: String::new(),
-        stderr: String::new(),
-        stdout_truncated: false,
-        stderr_truncated: false,
+        stdout: PrecommitStream::default(),
+        stderr: PrecommitStream::default(),
     }
 }
 
@@ -1209,10 +1205,8 @@ fn missing_receipt(name: &str) -> CommandReceipt {
             "{name} not installed; install: {}",
             install_hint(name)
         )),
-        stdout: String::new(),
-        stderr: String::new(),
-        stdout_truncated: false,
-        stderr_truncated: false,
+        stdout: PrecommitStream::default(),
+        stderr: PrecommitStream::default(),
     }
 }
 
@@ -1656,6 +1650,7 @@ fn run_clippy_on_diff(
         receipt.name = format!("cargo clippy {}", package.name);
         for line in receipt
             .stdout
+            .text
             .lines()
             .filter(|line| !line.trim().is_empty())
         {
@@ -1831,7 +1826,10 @@ fn command_available(root: &Path, program: &str) -> Result<bool> {
     let output = Command::new(program)
         .arg("--version")
         .current_dir(root)
-        .output();
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
     match output {
         Ok(_) => Ok(true),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
@@ -1864,31 +1862,133 @@ fn command_output(root: &Path, program: &str, args: &[&str]) -> Result<CapturedO
 const CAPTURE_HEAD_BYTES: usize = 64 * 1024;
 const CAPTURE_TAIL_BYTES: usize = 16 * 1024;
 
-fn clip_capture(text: String) -> (String, bool) {
-    clip_text(
+#[derive(Debug, Default)]
+struct PrecommitStream {
+    text: String,
+    bytes: u64,
+    truncated: bool,
+}
+
+// Keep whole UTF-8 characters at a cut. Invalid bytes elsewhere are decoded
+// lossily only after counting the original bytes.
+fn character_at_cut(bytes: &[u8], cut: usize) -> std::ops::Range<usize> {
+    for start in cut.saturating_sub(3)..cut {
+        let window = &bytes[start..bytes.len().min(start + 4)];
+        if let Some(ch) = window
+            .utf8_chunks()
+            .next()
+            .and_then(|c| c.valid().chars().next())
+            && start + ch.len_utf8() > cut
+        {
+            return start..start + ch.len_utf8();
+        }
+    }
+    cut..cut
+}
+
+fn read_precommit_window(
+    mut reader: impl Read,
+    head: usize,
+    tail: usize,
+) -> io::Result<(Vec<u8>, u64)> {
+    // Three lookaround bytes on either side suffice for a split UTF-8 scalar.
+    let mut excerpt = Vec::new();
+    reader
+        .by_ref()
+        .take(head as u64 + 3)
+        .read_to_end(&mut excerpt)?;
+    let mut bytes = excerpt.len() as u64;
+    let tail_window = tail + 3;
+    let mut suffix = VecDeque::with_capacity(tail_window);
+    let mut buffer = [0; 8192];
+    loop {
+        let count = match reader.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(count) => count,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
+        };
+        bytes += count as u64;
+        let end = &buffer[count.saturating_sub(tail_window)..count];
+        let discard = (suffix.len() + end.len()).saturating_sub(tail_window);
+        suffix.drain(..discard);
+        suffix.extend(end.iter().copied());
+    }
+    excerpt.extend(suffix);
+    Ok((excerpt, bytes))
+}
+
+fn read_precommit_stream(
+    reader: impl Read,
+    head: usize,
+    tail: usize,
+) -> io::Result<PrecommitStream> {
+    let (excerpt, bytes) = read_precommit_window(reader, head, tail)?;
+    let truncated = bytes > head as u64 + tail as u64;
+    let text = if truncated {
+        let head_end = character_at_cut(&excerpt, head).start;
+        let tail_start = character_at_cut(&excerpt, excerpt.len() - tail).end;
+        let omitted = bytes - head_end as u64 - (excerpt.len() - tail_start) as u64;
+        format!(
+            "{}\n[... {omitted} bytes truncated by the precommit capture budget ...]\n{}",
+            String::from_utf8_lossy(&excerpt[..head_end]),
+            String::from_utf8_lossy(&excerpt[tail_start..])
+        )
+    } else {
+        String::from_utf8_lossy(&excerpt).into_owned()
+    };
+    Ok(PrecommitStream {
         text,
-        CAPTURE_HEAD_BYTES,
-        CAPTURE_TAIL_BYTES,
-        "the precommit capture",
-    )
+        bytes,
+        truncated,
+    })
 }
 
 fn run_capture(root: &Path, program: &str, args: &[&str]) -> Result<CommandReceipt> {
-    let output = command_output(root, program, args)?;
-    let (stdout, stdout_truncated) = clip_capture(output.stdout);
-    let (stderr, stderr_truncated) = clip_capture(output.stderr);
+    let command = format_command(program, args);
+    let mut child = Command::new(program)
+        .args(args)
+        .current_dir(root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("run {command}"))?;
+    // Drop both pipe readers and reap the child even on a read or thread error.
+    let streams = (|| -> Result<_> {
+        let stdout = child
+            .stdout
+            .take()
+            .context("missing precommit stdout pipe")?;
+        let stderr = child
+            .stderr
+            .take()
+            .context("missing precommit stderr pipe")?;
+        let worker = std::thread::Builder::new()
+            .spawn(move || read_precommit_stream(stdout, CAPTURE_HEAD_BYTES, CAPTURE_TAIL_BYTES))?;
+        let stderr = read_precommit_stream(stderr, CAPTURE_HEAD_BYTES, CAPTURE_TAIL_BYTES);
+        let stdout = worker
+            .join()
+            .map_err(|_| anyhow::anyhow!("stdout reader panicked"))?;
+        Ok((
+            stdout.context("read stdout")?,
+            stderr.context("read stderr")?,
+        ))
+    })();
+    let status = child
+        .wait()
+        .with_context(|| format!("wait for {command}"))?;
+    let (stdout, stderr) = streams.with_context(|| format!("capture {command}"))?;
     Ok(CommandReceipt {
         name: program.to_owned(),
-        command: format_command(program, args),
-        status: output.status.code(),
-        success: output.status.success(),
+        command,
+        status: status.code(),
+        success: status.success(),
         skipped: false,
         missing: false,
         reason: None,
         stdout,
         stderr,
-        stdout_truncated,
-        stderr_truncated,
     })
 }
 
@@ -1908,8 +2008,12 @@ fn write_tool_artifact(path: &Path, receipt: &CommandReceipt, command: &str) -> 
             "success": receipt.success,
             "skipped": receipt.skipped,
             "detail": receipt.reason,
-            "stdout": receipt.stdout,
-            "stderr": receipt.stderr,
+            "stdout": receipt.stdout.text,
+            "stdout_bytes": receipt.stdout.bytes,
+            "stdout_truncated": receipt.stdout.truncated,
+            "stderr": receipt.stderr.text,
+            "stderr_bytes": receipt.stderr.bytes,
+            "stderr_truncated": receipt.stderr.truncated,
         });
         fs::write(
             path,
@@ -1942,11 +2046,14 @@ fn receipt_markdown(receipt: &CommandReceipt) -> String {
 ",
         );
     }
-    if receipt.stdout_truncated || receipt.stderr_truncated {
-        text.push_str(
-            "- output truncated by capture budget
-",
-        );
+    if receipt.stdout.truncated || receipt.stderr.truncated {
+        text.push_str("- output truncated by capture budget\n");
+        for (name, stream) in [("stdout", &receipt.stdout), ("stderr", &receipt.stderr)] {
+            text.push_str(&format!(
+                "- {name}_bytes: {}\n- {name}_truncated: {}\n",
+                stream.bytes, stream.truncated
+            ));
+        }
     }
     if let Some(reason) = &receipt.reason {
         text.push_str("\n```text\n");
@@ -1956,15 +2063,15 @@ fn receipt_markdown(receipt: &CommandReceipt) -> String {
         }
         text.push_str("```\n");
     }
-    if !receipt.stdout.is_empty() || !receipt.stderr.is_empty() {
+    if !receipt.stdout.text.is_empty() || !receipt.stderr.text.is_empty() {
         text.push_str("\n## stdout\n\n```text\n");
-        text.push_str(&receipt.stdout);
-        if !receipt.stdout.ends_with('\n') {
+        text.push_str(&receipt.stdout.text);
+        if !receipt.stdout.text.ends_with('\n') {
             text.push('\n');
         }
         text.push_str("```\n\n## stderr\n\n```text\n");
-        text.push_str(&receipt.stderr);
-        if !receipt.stderr.ends_with('\n') {
+        text.push_str(&receipt.stderr.text);
+        if !receipt.stderr.text.ends_with('\n') {
             text.push('\n');
         }
         text.push_str("```\n");
@@ -2964,37 +3071,77 @@ mod tests {
     }
 
     #[test]
-    fn clip_capture_bounds_streams_with_head_tail_and_marker() {
-        // #317: under budget passes through untouched; over budget keeps
-        // the head and tail with a marker naming the elided byte count, so
-        // a 450 MB tool dump can never become a 450 MB receipt.
-        let small = "small output".to_owned();
-        let (kept, truncated) = clip_capture(small.clone());
-        assert_eq!(kept, small);
-        assert!(!truncated);
+    fn precommit_stream_uses_raw_byte_limits_before_rendering() -> Result<()> {
+        // Exercise the actual reader with the same bytes across different read boundaries.
+        let bytes = b"ABCD0123456789YZ";
+        for split in 0..=bytes.len() {
+            let input = || (&bytes[..split]).chain(&bytes[split..]);
+            let (window, observed) = read_precommit_window(input(), 4, 2)?;
+            assert_eq!(observed, 16);
+            assert_eq!(window, b"ABCD012789YZ"); // exact excerpt plus UTF-8 lookaround
+            let output = read_precommit_stream(input(), 4, 2)?;
+            assert_eq!(output.bytes, 16);
+            assert!(output.truncated);
+            assert_eq!(
+                output.text,
+                "ABCD\n[... 10 bytes truncated by the precommit capture budget ...]\nYZ"
+            );
+        }
 
-        let big = "a".repeat(CAPTURE_HEAD_BYTES + CAPTURE_TAIL_BYTES + 10_000);
-        let (clipped, truncated) = clip_capture(big);
-        assert!(truncated);
-        assert!(clipped.len() < CAPTURE_HEAD_BYTES + CAPTURE_TAIL_BYTES + 200);
-        assert!(
-            clipped.contains("10000 bytes truncated by the precommit capture budget"),
-            "marker names the elided bytes"
+        let empty = read_precommit_stream(&b""[..], 4, 2)?;
+        assert_eq!(empty.bytes, 0);
+        assert!(empty.text.is_empty());
+        assert!(!empty.truncated);
+
+        let exact = read_precommit_stream(&b"A\xffCDEZ"[..], 4, 2)?;
+        assert_eq!(exact.bytes, 6);
+        assert!(!exact.truncated);
+        assert_eq!(exact.text, "A\u{fffd}CDEZ");
+
+        let utf8 = read_precommit_stream("a雪bc🍐z".as_bytes(), 3, 2)?;
+        assert_eq!(utf8.bytes, 11);
+        assert_eq!(
+            utf8.text,
+            "a\n[... 9 bytes truncated by the precommit capture budget ...]\nz"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn precommit_receipt_reports_each_stream() -> Result<()> {
         let receipt = CommandReceipt {
-            name: "loud".to_owned(),
-            command: "loud".to_owned(),
-            status: Some(0),
-            success: true,
+            name: "fixture".into(),
+            command: "fixture".into(),
+            status: Some(1),
+            success: false,
             skipped: false,
             missing: false,
             reason: None,
-            stdout: clipped,
-            stderr: String::new(),
-            stdout_truncated: true,
-            stderr_truncated: false,
+            stdout: read_precommit_stream(&b"abcdXYZ"[..], 4, 2)?,
+            stderr: read_precommit_stream(&b"ok"[..], 4, 2)?,
         };
-        assert!(receipt_markdown(&receipt).contains("output truncated by capture budget"));
+        let rendered = receipt_markdown(&receipt);
+        assert!(rendered.contains("output truncated by capture budget"));
+        assert!(rendered.contains("- stdout_bytes: 7\n- stdout_truncated: true"));
+        assert!(rendered.contains("- stderr_bytes: 2\n- stderr_truncated: false"));
+        assert!(
+            rendered
+                .contains("abcd\n[... 1 bytes truncated by the precommit capture budget ...]\nYZ")
+        );
+        let root = temp_repo_root("precommit-streams")?;
+        let path = root.join("receipt.json");
+        write_tool_artifact(&path, &receipt, "fixture")?;
+        let json: JsonValue = serde_json::from_slice(&fs::read(path)?)?;
+        assert_eq!(json["stdout_bytes"], 7);
+        assert_eq!(json["stderr_bytes"], 2);
+        assert_eq!(json["stdout_truncated"], true);
+        assert_eq!(json["stderr_truncated"], false);
+        assert_eq!(json["stdout"], receipt.stdout.text);
+        assert_eq!(json["stderr"], "ok");
+        assert_eq!(json["status"], 1);
+        assert_eq!(json["success"], false);
+        fs::remove_dir_all(root)?;
+        Ok(())
     }
 
     fn temp_repo_root(name: &str) -> Result<PathBuf> {
