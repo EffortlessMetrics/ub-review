@@ -2697,6 +2697,174 @@ mod tests {
     }
 
     #[test]
+    fn serialized_gate_distinguishes_required_detective_and_advisory_tool_evidence() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let mut terminal = test_terminal_state("sufficient");
+        terminal.model_mode = "off".to_owned();
+        terminal.model_lanes = 0;
+        terminal.usable_model_lanes = 0;
+
+        let cases = [
+            (
+                "required",
+                true,
+                true,
+                true,
+                None,
+                Some("missing_evidence"),
+                "inconclusive",
+                "not_proven",
+                Some(("required-sensor", "review/terminal_state.json")),
+            ),
+            (
+                "detective selected",
+                false,
+                true,
+                true,
+                Some("ok"),
+                Some("failed"),
+                "fail",
+                "finding",
+                Some(("tool-gate", "review/tool-gate-outcomes.json#ripr")),
+            ),
+            (
+                "detective unselected",
+                false,
+                false,
+                true,
+                Some("ok"),
+                Some("not_evaluated"),
+                "pass",
+                "pass",
+                None,
+            ),
+            (
+                "advisory",
+                false,
+                true,
+                false,
+                Some("ok"),
+                None,
+                "pass",
+                "pass",
+                None,
+            ),
+        ];
+        for (
+            case,
+            required,
+            selected,
+            gated,
+            status,
+            outcome,
+            conclusion,
+            result,
+            expected_reason,
+        ) in cases
+        {
+            let temp = tempfile::tempdir()?;
+            let gate_policy = gated.then(|| ToolGatePolicy {
+                scope: Some("on-diff".to_owned()),
+                max_new_unsuppressed: Some(0),
+            });
+            let mut sensor = sensor_plan("ripr", "ripr", selected);
+            sensor.required = required;
+            sensor.gate = gate_policy.clone();
+            if let Some(status) = status {
+                write_sensor_status(
+                    temp.path(),
+                    &sensor,
+                    SensorStatusWrite {
+                        status,
+                        argv: &[],
+                        duration_ms: 0,
+                        reason: "fixture",
+                        exit_code: (status == "ok").then_some(0),
+                        timed_out: false,
+                    },
+                )?;
+                // The unselected case carries stale success and threshold
+                // receipts. All completed receipts use the same over-limit count.
+                fs::write(
+                    temp.path().join("sensors/ripr/gate-decision.json"),
+                    br#"{"new_unsuppressed":3}"#,
+                )?;
+            }
+            let mut plan = test_plan(vec![sensor]);
+            plan.lanes.clear();
+            let mut config = Config::default();
+            config.tools.clear();
+            config.tools.insert(
+                "ripr".to_owned(),
+                ToolPolicy {
+                    id: "ripr".to_owned(),
+                    gate: gate_policy,
+                    ..ToolPolicy::default()
+                },
+            );
+            let tool_gates = write_tool_status_artifacts(
+                temp.path(),
+                &config,
+                config.selected_profile()?,
+                &plan,
+            )?;
+            let sensor_issues = collect_sensor_evidence_issues(temp.path(), &plan);
+            let gate = serde_json::to_value(build_gate_outcome(GateOutcomeInput {
+                args: &args,
+                config: &config,
+                plan: &plan,
+                terminal_state: &terminal,
+                proof_requests: &[],
+                proof_receipts: &[],
+                tool_gate_outcomes: &tool_gates.outcomes,
+                missing_or_failed_sensor_evidence: &sensor_issues,
+                missing_or_failed_model_evidence: &[],
+                reporter_gate: ReporterGateInput::Absent,
+                planner_portfolio: None,
+                revision_digest: None,
+            }))?;
+
+            assert_eq!(gate["conclusion"], conclusion, "{case}");
+            assert_eq!(gate["gate_result"], result, "{case}");
+            assert_eq!(
+                gate["sensor_coverage"]["required_total"],
+                usize::from(required),
+                "{case}"
+            );
+            assert_eq!(
+                gate["evidence_gaps_blocking"],
+                usize::from(required),
+                "{case}"
+            );
+            assert_eq!(
+                gate["tool_gates"]["evaluated"],
+                usize::from(outcome == Some("failed")),
+                "{case}"
+            );
+            assert_eq!(
+                tool_gates
+                    .outcomes
+                    .first()
+                    .map(|entry| entry.outcome.as_str()),
+                outcome,
+                "{case}"
+            );
+            assert_eq!(
+                gate["reasons"].as_array().map(Vec::len),
+                Some(usize::from(expected_reason.is_some())),
+                "{case}"
+            );
+            if let Some((kind, receipt)) = expected_reason {
+                assert_eq!(gate["reasons"][0]["kind"], kind, "{case}");
+                assert_eq!(gate["reasons"][0]["id"], "ripr", "{case}");
+                assert_eq!(gate["reasons"][0]["receipt"], receipt, "{case}");
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn invalid_impact_mode_fails_gate_with_effective_config_receipt() -> anyhow::Result<()> {
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
         let plan = test_plan(Vec::new());
