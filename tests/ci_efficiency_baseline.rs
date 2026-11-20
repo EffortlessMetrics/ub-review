@@ -324,7 +324,9 @@ fn load(directory: &Path) -> Result<Corpus> {
             );
         }
     }
-    let manifest: Manifest = serde_json::from_value(value)?;
+    // Deserialize typed fields from the original bytes. Value collapses
+    // duplicate fields before the schema can reject an ambiguous identity.
+    let manifest: Manifest = serde_json::from_slice(&bytes)?;
     ensure!(
         manifest.files.len() == 1,
         "fixed projection inventory changed"
@@ -1675,6 +1677,39 @@ fn loader_rejects_digest_inventory_paths_and_size_drift() -> Result<()> {
             .to_string()
             .contains("exceeds byte budget"),
         "byte budget control failed"
+    );
+    Ok(())
+}
+
+#[test]
+fn loader_requires_one_exact_source_packet_identity() -> Result<()> {
+    let corpus = load(&root())?;
+    let unknown = "0".repeat(64);
+    rejected_manifest(
+        &corpus,
+        |manifest| {
+            manifest["source_packet_sha256"] = Value::String(unknown.clone());
+            Ok(())
+        },
+        "unsupported fixed fixture identity or scope",
+    )?;
+
+    let directory = copied_fixture()?;
+    let path = directory.path().join("manifest.json");
+    let manifest = fs::read_to_string(&path)?;
+    let fields = manifest
+        .strip_prefix('{')
+        .context("expected fixture manifest object")?;
+    fs::write(
+        &path,
+        format!("{{\"source_packet_sha256\":\"{unknown}\",{fields}"),
+    )?;
+    let error = load(directory.path())
+        .err()
+        .context("manifest with two source packet identities accepted")?;
+    ensure!(
+        format!("{error:#}").contains("duplicate field `source_packet_sha256`"),
+        "ambiguous identity rejected for the wrong reason: {error:#}"
     );
     Ok(())
 }
