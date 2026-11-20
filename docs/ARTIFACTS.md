@@ -123,3 +123,28 @@ after follow-up evidence; it is an audit receipt, not reviewer-facing text.
 
 See [Product state](PRODUCT_STATE.md) for the distinction between prepared review,
 confirmed delivery, and CI result authority.
+
+### Offline packet comparison
+
+Run `ub-review compare-packets --stable STABLE_DIR --candidate CANDIDATE_DIR`
+on two immutable directories produced by `ub-review run`. Standard output is
+a deterministic `ub-review.offline_packet_comparison.v1` JSON report. The exit
+status indicates whether the command produced a report. Inspect the field
+statuses to see which observations are comparable.
+
+The command validates each clean revision admission and checks the recorded
+patch and changed paths against it. It compares the recorded diff context,
+PR and claims inputs, thread context, the rendered shared context and its
+recorded digest, effective config, plan, resolved profile,
+tool plan, review options, and start-event mode. The input section records the
+file hashes and options used for this comparison. Different or unavailable
+inputs leave the comparison unresolved. Each file is limited to 8 MiB.
+
+The report compares recorded proof results and command sides by receipt ID,
+the legacy and split verdict fields, and cost v1 timing, cache, pricing and
+token observations. Each section identifies its source path and per-side
+SHA-256. Missing files, unbound legacy receipts, stale revisions and unknown
+measurements remain visible. An empty proof inventory describes zero recorded
+receipts. Agreement describes the reported fields only. Runtime binary
+attestation, full coordinator snapshot identity, independent qualification
+and promotion are outside this offline comparison.

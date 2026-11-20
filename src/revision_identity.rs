@@ -182,6 +182,10 @@ impl RevisionIdentity {
         self.head.commit_oid()
     }
 
+    pub(crate) fn matches_changed_paths(&self, paths: &[String]) -> bool {
+        Self::changed_paths_digest(paths) == self.changed_paths
+    }
+
     /// Independently bind recorded anchor text to this identity's diff bytes.
     pub(crate) fn matches_diff_bytes(&self, bytes: &[u8]) -> bool {
         Self::diff_digest(bytes) == self.diff

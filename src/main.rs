@@ -111,6 +111,7 @@ pub(crate) use cross_lane_messages::*;
 mod reporter;
 pub(crate) use reporter::*;
 mod calibration;
+mod compare_packets;
 pub(crate) use calibration::{
     CalibrationArtifact, read_messages_ndjson, write_calibration_artifact,
 };
@@ -213,6 +214,7 @@ fn main() -> Result<()> {
             }
             Ok(())
         }
+        Command::ComparePackets { stable, candidate } => compare_packets::run(&stable, &candidate),
         Command::Summary(args) => cmd_summary(args),
         Command::Post(args) => cmd_post(args),
         Command::AuditCi(args) => cmd_audit_ci(args),

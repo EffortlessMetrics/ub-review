@@ -17,6 +17,15 @@ pub(crate) struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
+    /// Compare recorded proof and cost observations from two offline run packets.
+    ComparePackets {
+        /// Stable packet directory produced by run.
+        #[arg(long)]
+        stable: PathBuf,
+        /// Candidate packet directory produced by run.
+        #[arg(long)]
+        candidate: PathBuf,
+    },
     /// Validate independently pinned recorded analyzer selection evidence.
     /// Read-only; never installs, executes or activates an analyzer.
     VerifyAnalyzerBundle(VerifyAnalyzerBundleArgs),
