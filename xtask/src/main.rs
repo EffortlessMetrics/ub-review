@@ -11,6 +11,9 @@ use serde_json::{Value as JsonValue, json};
 use toml::Value;
 use toml::map::Map;
 
+mod precommit_clippy;
+use precommit_clippy::ClippyOutput;
+
 use xtask::install_proof;
 use xtask::release_publish;
 
@@ -971,11 +974,9 @@ fn run_precommit(root: &Path, options: PrecommitOptions) -> Result<PrecommitRepo
             receipts.push(check);
         }
 
-        let (clippy_receipts, clippy_findings) =
+        let (clippy_receipts, clippy_failures) =
             run_clippy_on_diff(root, &out_dir, &affected, &changed)?;
-        if !clippy_findings.is_empty() {
-            blocking_failures += clippy_findings.len();
-        }
+        blocking_failures += clippy_failures;
         receipts.extend(clippy_receipts);
     }
 
@@ -1625,18 +1626,18 @@ fn run_clippy_on_diff(
     out_dir: &Path,
     affected: &[WorkspacePackage],
     changed: &[ChangedFile],
-) -> Result<(Vec<CommandReceipt>, Vec<ClippyDiagnostic>)> {
+) -> Result<(Vec<CommandReceipt>, usize)> {
     let changed_map = changed
         .iter()
         .map(|file| (file.path.clone(), file.lines.clone()))
         .collect::<BTreeMap<_, _>>();
     let mut receipts = Vec::new();
-    let mut all_messages = Vec::new();
-    let mut findings = Vec::new();
+    let mut output = ClippyOutput::default();
 
     for package in affected {
         let package_arg = format!("-p={}", package.name);
-        let mut receipt = run_capture(
+        let before = output.incomplete();
+        let mut receipt = run_capture_with_stdout(
             root,
             "cargo",
             &[
@@ -1646,27 +1647,24 @@ fn run_clippy_on_diff(
                 "--locked",
                 "--message-format=json",
             ],
+            |stdout| {
+                output.read(
+                    stdout,
+                    root,
+                    &package.name,
+                    &changed_map,
+                    CAPTURE_HEAD_BYTES,
+                    CAPTURE_TAIL_BYTES,
+                )
+            },
         )?;
         receipt.name = format!("cargo clippy {}", package.name);
-        for line in receipt
-            .stdout
-            .text
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-        {
-            match serde_json::from_str::<JsonValue>(line) {
-                Ok(value) => {
-                    collect_clippy_finding(
-                        root,
-                        &package.name,
-                        &value,
-                        &changed_map,
-                        &mut findings,
-                    );
-                    all_messages.push(value);
-                }
-                Err(_) => all_messages.push(json!({ "text": line })),
-            }
+        let incomplete = output.incomplete() - before;
+        if incomplete != 0 {
+            receipt.success = false;
+            receipt.reason = Some(format!(
+                "Incomplete Clippy evidence: {incomplete} unreadable JSON records"
+            ));
         }
         write_command_artifact(
             &out_dir.join(format!("clippy-{}.md", safe_name(&package.name))),
@@ -1676,15 +1674,7 @@ fn run_clippy_on_diff(
         receipts.push(receipt);
     }
 
-    fs::write(
-        out_dir.join("clippy.json"),
-        serde_json::to_string_pretty(&all_messages).context("serialize clippy json")? + "\n",
-    )?;
-    write_markdown(
-        &out_dir.join("clippy-on-diff.md"),
-        &render_clippy_on_diff(&findings),
-    )?;
-    Ok((receipts, findings))
+    Ok((receipts, output.write_artifacts(out_dir)?))
 }
 
 fn collect_clippy_finding(
@@ -1692,7 +1682,7 @@ fn collect_clippy_finding(
     package: &str,
     value: &JsonValue,
     changed: &BTreeMap<String, BTreeSet<u64>>,
-    findings: &mut Vec<ClippyDiagnostic>,
+    mut record: impl FnMut(ClippyDiagnostic),
 ) {
     if value.get("reason").and_then(JsonValue::as_str) != Some("compiler-message") {
         return;
@@ -1733,7 +1723,7 @@ fn collect_clippy_finding(
             .get(&normalized)
             .is_some_and(|lines| lines.contains(&line))
         {
-            findings.push(ClippyDiagnostic {
+            record(ClippyDiagnostic {
                 package: package.to_owned(),
                 path: normalized,
                 line,
@@ -1742,26 +1732,6 @@ fn collect_clippy_finding(
             });
         }
     }
-}
-
-fn render_clippy_on_diff(findings: &[ClippyDiagnostic]) -> String {
-    let mut text = String::new();
-    text.push_str("# Clippy on diff\n\n");
-    text.push_str(
-        "Clippy ran at affected package/target granularity. This receipt gates only diagnostics whose primary span touches changed files and changed lines.\n\n",
-    );
-    if findings.is_empty() {
-        text.push_str("No Clippy diagnostics touched changed lines.\n");
-    } else {
-        text.push_str("## Blocking diagnostics\n\n");
-        for finding in findings {
-            text.push_str(&format!(
-                "- {}:{} [{}] {} ({})\n",
-                finding.path, finding.line, finding.level, finding.message, finding.package
-            ));
-        }
-    }
-    text
 }
 
 fn run_relevant_tool(
@@ -1945,6 +1915,17 @@ fn read_precommit_stream(
 }
 
 fn run_capture(root: &Path, program: &str, args: &[&str]) -> Result<CommandReceipt> {
+    run_capture_with_stdout(root, program, args, |stdout| {
+        read_precommit_stream(stdout, CAPTURE_HEAD_BYTES, CAPTURE_TAIL_BYTES)
+    })
+}
+
+fn run_capture_with_stdout(
+    root: &Path,
+    program: &str,
+    args: &[&str],
+    read_stdout: impl FnOnce(std::process::ChildStdout) -> io::Result<PrecommitStream> + Send,
+) -> Result<CommandReceipt> {
     let command = format_command(program, args);
     let mut child = Command::new(program)
         .args(args)
@@ -1955,7 +1936,7 @@ fn run_capture(root: &Path, program: &str, args: &[&str]) -> Result<CommandRecei
         .spawn()
         .with_context(|| format!("run {command}"))?;
     // Drop both pipe readers and reap the child even on a read or thread error.
-    let streams = (|| -> Result<_> {
+    let streams = std::thread::scope(|scope| -> Result<_> {
         let stdout = child
             .stdout
             .take()
@@ -1964,8 +1945,8 @@ fn run_capture(root: &Path, program: &str, args: &[&str]) -> Result<CommandRecei
             .stderr
             .take()
             .context("missing precommit stderr pipe")?;
-        let worker = std::thread::Builder::new()
-            .spawn(move || read_precommit_stream(stdout, CAPTURE_HEAD_BYTES, CAPTURE_TAIL_BYTES))?;
+        let worker =
+            std::thread::Builder::new().spawn_scoped(scope, move || read_stdout(stdout))?;
         let stderr = read_precommit_stream(stderr, CAPTURE_HEAD_BYTES, CAPTURE_TAIL_BYTES);
         let stdout = worker
             .join()
@@ -1974,7 +1955,7 @@ fn run_capture(root: &Path, program: &str, args: &[&str]) -> Result<CommandRecei
             stdout.context("read stdout")?,
             stderr.context("read stderr")?,
         ))
-    })();
+    });
     let status = child
         .wait()
         .with_context(|| format!("wait for {command}"))?;
@@ -3144,7 +3125,7 @@ mod tests {
         Ok(())
     }
 
-    fn temp_repo_root(name: &str) -> Result<PathBuf> {
+    pub(super) fn temp_repo_root(name: &str) -> Result<PathBuf> {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .context("system time before unix epoch")?
@@ -3653,7 +3634,9 @@ reason = "whitespace-only owner violates the suppression-health contract"
         });
         let mut findings = Vec::new();
 
-        collect_clippy_finding(&root, "xtask", &diagnostic, &changed, &mut findings);
+        collect_clippy_finding(&root, "xtask", &diagnostic, &changed, |finding| {
+            findings.push(finding)
+        });
 
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].path, "xtask/src/main.rs");
@@ -3680,7 +3663,9 @@ reason = "whitespace-only owner violates the suppression-health contract"
         });
         let mut findings = Vec::new();
 
-        collect_clippy_finding(&root, "ub-review", &diagnostic, &changed, &mut findings);
+        collect_clippy_finding(&root, "ub-review", &diagnostic, &changed, |finding| {
+            findings.push(finding)
+        });
 
         assert!(findings.is_empty());
         fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
