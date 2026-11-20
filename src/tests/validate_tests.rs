@@ -853,11 +853,13 @@ index 1111111..2222222 100644
             && observation.dedupe_key == "markdown-red-green-witness"
             && observation.source == "model-observation"
     }));
-    assert!(observations.iter().any(|observation| {
-        observation.kind == "false-premise"
-            && observation.status == "refuted"
-            && observation.source == "model-failed-objection"
-    }));
+    let rejected_allocation = observations
+        .iter()
+        .find(|observation| observation.dedupe_key == BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY)
+        .context("allocation objection did not reach the false-premise guard")?;
+    assert_eq!(rejected_allocation.kind, "false-premise");
+    assert_eq!(rejected_allocation.status, "refuted");
+    assert_eq!(rejected_allocation.source, MODEL_FAILED_OBJECTION_SOURCE);
     assert_eq!(proof_requests.len(), 1);
     assert_eq!(proof_requests[0].schema, "ub-review.proof_request.v1");
     assert_eq!(proof_requests[0].status, "requested");
