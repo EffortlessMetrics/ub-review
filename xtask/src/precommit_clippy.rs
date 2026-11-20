@@ -256,13 +256,16 @@ mod tests {
         let changed = BTreeMap::from([("src/lib.rs".into(), BTreeSet::from([7]))]);
         // Exactly at the limit, the JSON value is valid. One byte over, even
         // a suffix that is a diagnostic must be skipped to the next newline.
-        let exact = format!("\"{}\"", "x".repeat(RECORD_BYTES - 2));
-        let input = format!(
-            "{exact}\n{exact} {}\n{}\r\ninvalid\n{{\"unfinished\":",
+        let exact = format!("\"{}\"", "x".repeat(256 * 1024 - 2));
+        let prefix = format!("{exact}\n{exact} ");
+        let rest = format!(
+            "{}\n{}\r\ninvalid\n{{\"unfinished\":",
             diagnostic(7),
             diagnostic(7)
         );
-        output.read(input.as_bytes(), Path::new("."), "pkg", &changed, 3, 2)?;
+        // Force the false diagnostic to arrive in a new read after overflow.
+        let input = prefix.as_bytes().chain(rest.as_bytes());
+        output.read(input, Path::new("."), "pkg", &changed, 3, 2)?;
         assert_eq!(
             (output.oversized, output.incomplete(), output.findings),
             (1, 3, 1)
@@ -279,6 +282,31 @@ mod tests {
         let markdown = fs::read_to_string(dir.join("clippy-on-diff.md"))?;
         assert!(markdown.contains("1 oversized, 1 partial and 1 malformed"));
         assert!(markdown.contains("src/lib.rs:7"));
+        fs::remove_dir_all(dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn incomplete_stream_and_artifact_io_errors_reach_the_caller() -> Result<()> {
+        struct BrokenPipe;
+        impl Read for BrokenPipe {
+            fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+                Err(io::ErrorKind::BrokenPipe.into())
+            }
+        }
+        let mut output = ClippyOutput::default();
+        let changed = BTreeMap::new();
+        let broken = b"{}".as_slice().chain(BrokenPipe);
+        let error = output
+            .read(broken, Path::new("."), "pkg", &changed, 4, 2)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("expected a pipe error"))?;
+        assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
+        let dir = crate::tests::temp_repo_root("clippy-artifact-io")?;
+        // A directory in place of the Markdown file fails the second write.
+        fs::create_dir(dir.join("clippy-on-diff.md"))?;
+        assert!(output.write_artifacts(&dir).is_err());
+        assert_eq!(fs::read(dir.join("clippy.json"))?, b"[]\n");
         fs::remove_dir_all(dir)?;
         Ok(())
     }
