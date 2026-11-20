@@ -82,43 +82,72 @@ fn terminal_projection_rejects_malformed_proof_receipts() -> Result<()> {
 fn terminal_projection_validates_sensor_receipts() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let out = temp.path();
-    write_plan(out, vec![sensor_task("alpha", "planned")])?;
+    let mut sensor = crate::tests::sensor_plan("ast-grep", "ast-grep", true);
+    sensor.required = true;
+    let plan = crate::tests::test_plan(vec![sensor]);
+    write_work_queue_artifacts(out, &plan, &[])?;
 
-    write_sensor_receipt_value(
-        out,
-        "alpha",
-        &serde_json::json!({"sensor": "beta", "status": "ok"}),
-    )?;
-    let error = write_terminal_work_queue_artifacts(out, &[])
-        .err()
-        .context("mismatched sensor receipt identity unexpectedly succeeded")?;
-    assert!(format!("{error:#}").contains("identity does not match"));
+    let queue_path = out.join(TERMINAL_QUEUE_FILE);
+    let events_path = out.join(TERMINAL_EVENTS_FILE);
+    let receipt_path = "sensors/ast-grep/ub-review-sensor-status.json";
+    write_terminal_work_queue_artifacts(out, &[])?;
+    let queue: serde_json::Value = serde_json::from_slice(&fs::read(&queue_path)?)?;
+    assert_eq!(queue["tasks"][0]["id"], "sensor-ast-grep");
+    assert_eq!(
+        queue["tasks"][0]["plan_task"]["gate_policy"],
+        "gate-required"
+    );
+    assert_eq!(queue["tasks"][0]["status"], "missing_receipt");
+    assert_eq!(queue["source_receipts"], serde_json::json!([]));
 
-    write_sensor_receipt_value(out, "alpha", &serde_json::json!({"sensor": "alpha"}))?;
-    let error = write_terminal_work_queue_artifacts(out, &[])
-        .err()
-        .context("missing sensor receipt status unexpectedly succeeded")?;
-    assert!(format!("{error:#}").contains("no string status"));
+    for (body, expected) in [
+        (
+            r#"{"status":"ok"}"#,
+            "sensor receipt identity does not match terminal queue task sensor-ast-grep",
+        ),
+        (
+            r#"{"sensor":"ripr","status":"ok"}"#,
+            "sensor receipt identity does not match terminal queue task sensor-ast-grep",
+        ),
+        (
+            r#"{"sensor":"ast-grep"}"#,
+            "sensor receipt has no string status",
+        ),
+        (
+            r#"{"sensor":"ast-grep","status":"queued"}"#,
+            "unsupported terminal status queued",
+        ),
+        ("{not-json", "parse sensor receipt"),
+    ] {
+        write_sensor_receipt(out, "ast-grep", "ok")?;
+        write_terminal_work_queue_artifacts(out, &[])?;
+        let queue: serde_json::Value = serde_json::from_slice(&fs::read(&queue_path)?)?;
+        let event: serde_json::Value = serde_json::from_slice(&fs::read(&events_path)?)?;
+        assert_eq!(queue["tasks"][0]["id"], "sensor-ast-grep");
+        assert_eq!(
+            queue["tasks"][0]["plan_task"]["gate_policy"],
+            "gate-required"
+        );
+        assert_eq!(queue["tasks"][0]["status"], "ok");
+        assert_eq!(queue["tasks"][0]["receipt_path"], receipt_path);
+        assert_eq!(queue["source_receipts"], serde_json::json!([receipt_path]));
+        assert_eq!(event["task_id"], "sensor-ast-grep");
+        assert_eq!(event["status"], "ok");
 
-    write_sensor_receipt_value(
-        out,
-        "alpha",
-        &serde_json::json!({"sensor": "alpha", "status": "queued"}),
-    )?;
-    let error = write_terminal_work_queue_artifacts(out, &[])
-        .err()
-        .context("unsupported sensor receipt status unexpectedly succeeded")?;
-    assert!(format!("{error:#}").contains("unsupported terminal status queued"));
-
-    let path = out
-        .join("sensors")
-        .join("alpha")
-        .join("ub-review-sensor-status.json");
-    fs::write(path, b"{not-json")?;
-    let error = write_terminal_work_queue_artifacts(out, &[])
-        .err()
-        .context("malformed sensor receipt unexpectedly succeeded")?;
-    assert!(format!("{error:#}").contains("parse sensor receipt"));
+        fs::write(out.join(receipt_path), body)?;
+        let error = write_terminal_work_queue_artifacts(out, &[])
+            .err()
+            .with_context(|| format!("invalid sensor receipt unexpectedly succeeded: {body}"))?;
+        assert!(format!("{error:#}").contains(expected), "{error:#}");
+        assert!(
+            !queue_path.exists(),
+            "invalid receipt retained the terminal queue"
+        );
+        assert!(
+            !events_path.exists(),
+            "invalid receipt retained the terminal events"
+        );
+    }
     Ok(())
 }
 
