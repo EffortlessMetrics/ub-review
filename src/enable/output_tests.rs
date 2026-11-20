@@ -317,6 +317,52 @@ fn enable_permits_unrelated_workflow_with_action_mentions() -> Result<()> {
 }
 
 #[test]
+fn enable_permits_aligned_action_text_inside_multiline_quoted_run() -> Result<()> {
+    for quote in ['"', '\''] {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path();
+        let escaped_quote = if quote == '"' { "\\\"" } else { "''" };
+        let contents = review_workflow(&format!(
+            "      - run: {quote}echo {escaped_quote}text\n        uses: {PINNED_ACTION}\n        # done{quote}\n      - uses: other/ub-review@v1\n"
+        ));
+        prepare_workflow(root, NEUTRAL_WORKFLOW_PATH, &contents)?;
+
+        cmd_enable_with_resolver(args(root, false, false), offline_release)?;
+        let scans = scan_local_workflows(root)?;
+        anyhow::ensure!(matches!(
+            scans.as_slice(),
+            [scan] if matches!(scan.yaml_jobs.as_slice(), [job] if job.uses == ["other/ub-review@v1"])
+        ));
+        anyhow::ensure!(root.join(WORKFLOW_RELATIVE_PATH).is_file());
+        anyhow::ensure!(root.join(CONFIG_RELATIVE_PATH).is_file());
+        anyhow::ensure!(fs::read(root.join(NEUTRAL_WORKFLOW_PATH))? == contents.as_bytes());
+    }
+    Ok(())
+}
+
+#[test]
+fn enable_refuses_existing_action_under_steps_key_with_space_before_colon() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let root = temp.path();
+    let contents = review_workflow(&format!("      - uses: {PINNED_ACTION}\n"))
+        .replace("    steps:\n", "    steps :\n");
+    prepare_workflow(root, NEUTRAL_WORKFLOW_PATH, &contents)?;
+    let before = inventory(root)?;
+
+    let error = cmd_enable_with_resolver(args(root, false, false), offline_release)
+        .err()
+        .context("steps with whitespace before the colon should still identify the action")?;
+    anyhow::ensure!(error.to_string().contains(NEUTRAL_WORKFLOW_PATH));
+    anyhow::ensure!(inventory(root)? == before);
+    anyhow::ensure!(fs::read(root.join(NEUTRAL_WORKFLOW_PATH))? == contents.as_bytes());
+
+    cmd_enable_with_resolver(args(root, false, true), offline_release)?;
+    anyhow::ensure!(root.join(WORKFLOW_RELATIVE_PATH).is_file());
+    anyhow::ensure!(fs::read(root.join(NEUTRAL_WORKFLOW_PATH))? == contents.as_bytes());
+    Ok(())
+}
+
+#[test]
 fn enable_existing_action_preserves_filename_config_and_force_controls() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let root = temp.path();
