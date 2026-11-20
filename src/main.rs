@@ -8013,7 +8013,8 @@ mod tests {
                 concat!(
                     "Start inline comments for this lane with `[tests]`. ",
                     "When no actionable finding or material proof question remains, return empty public arrays. ",
-                    "Record checked surfaces and any rejected hypothesis or remaining uncertainty only in `internal_audit`. ",
+                    "Use `proof_intents` for material proof questions. ",
+                    "Record checked surfaces, rejected hypotheses, and uncertainty that does not warrant proof only in `internal_audit`. ",
                     "Do not infer safety from missing or failed sensor receipts.\n",
                 ),
             );
