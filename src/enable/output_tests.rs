@@ -330,8 +330,8 @@ fn enable_permits_aligned_action_text_inside_multiline_quoted_run() -> Result<()
         cmd_enable_with_resolver(args(root, false, false), offline_release)?;
         let scans = scan_local_workflows(root)?;
         anyhow::ensure!(matches!(
-            scans.as_slice(),
-            [scan] if matches!(scan.yaml_jobs.as_slice(), [job] if job.uses == ["other/ub-review@v1"])
+            scans.iter().find(|scan| scan.path == NEUTRAL_WORKFLOW_PATH),
+            Some(scan) if matches!(scan.yaml_jobs.as_slice(), [job] if job.uses == ["other/ub-review@v1"])
         ));
         anyhow::ensure!(root.join(WORKFLOW_RELATIVE_PATH).is_file());
         anyhow::ensure!(root.join(CONFIG_RELATIVE_PATH).is_file());
