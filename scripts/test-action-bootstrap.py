@@ -330,6 +330,41 @@ if os.environ.get("BOOTSTRAP_TEST_NO_BINARY") != "1":
             self.assertTrue(sep)
             self.assertIn(key, DECLARED_PATH_OUTPUTS)
 
+    def test_ripr_cache_requires_the_complete_successful_version_report(self) -> None:
+        ripr = self.fake_bin / "ripr"
+        ripr.write_text(
+            '#!/bin/sh\n[ "$1" = --version ] || exit 2\n'
+            'printf "%s\\n" "$FIXTURE_REPORT"\nexit "$FIXTURE_STATUS"\n'
+        )
+        ripr.chmod(0o755)
+        cargo = self.fake_bin / "cargo"
+        cargo.write_text(
+            '#!/bin/sh\nif [ "$2" = ripr ]; then printf "%s\\n" "$@" > "$BOOTSTRAP_TEST_LOG"; fi\n'
+        )
+        cases = [
+            ("ripr 0.10.0", "0", True),
+            ("ripr 0.10.0-rc.1", "0", False),
+            ("ripr 0.10.0+build.1", "0", False),
+            ("ripr 0.9.9 (compatible with 0.10.0)", "0", False),
+            ("other-tool 0.10.0", "0", False),
+            ("ripr 0.10.0", "1", False),
+        ]
+        for report, status, cached in cases:
+            with self.subTest(report=report, status=status):
+                self.log.unlink(missing_ok=True)
+                result = subprocess.run(
+                    ["/bin/bash", str(ROOT / "scripts/install-gh-runner-tools.sh")],
+                    env={**self.env, "PATH": str(self.fake_bin),
+                         "FIXTURE_REPORT": report, "FIXTURE_STATUS": status},
+                    capture_output=True, text=True, timeout=15, check=True,
+                )
+                self.assertEqual("::notice::ripr 0.10.0 already available" in result.stdout, cached)
+                if cached:
+                    self.assertFalse(self.log.exists())
+                else:
+                    self.assertEqual(self.log.read_text().splitlines(),
+                                     ["install", "ripr", "--locked", "--version", "0.10.0", "--force"])
+
     def test_dogfood_cache_and_bootstrap_use_the_same_isolated_directory(self) -> None:
         workflow = (ROOT / ".github/workflows/ub-review-gate.yml").read_text()
         target = "${{ runner.temp }}/ub-review-bootstrap-target"

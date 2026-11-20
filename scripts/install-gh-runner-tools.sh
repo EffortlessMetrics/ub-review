@@ -7,15 +7,24 @@ set -euo pipefail
 
 bundle="${UB_REVIEW_TOOL_BUNDLE:-core}"
 
+cached_cargo_version_matches() {
+  local bin="$1" version="$2" reported
+  if [[ "$bin" == ripr ]]; then
+    reported="$("$bin" --version 2>/dev/null)" || return 1
+    [[ "$reported" == "ripr $version" ]]
+  else
+    reported="$("$bin" --version 2>/dev/null || true)"
+    [[ "$reported" == *"$version"* ]]
+  fi
+}
+
 install_cargo_bin() {
   local bin="$1"
   local crate="$2"
   local version="${3:-}"
   if command -v "$bin" >/dev/null 2>&1; then
     if [[ -n "$version" ]]; then
-      local current_version
-      current_version="$("$bin" --version 2>/dev/null || true)"
-      if [[ "$current_version" == *"$version"* ]]; then
+      if cached_cargo_version_matches "$bin" "$version"; then
         echo "::notice::$bin $version already available"
         return 0
       fi
