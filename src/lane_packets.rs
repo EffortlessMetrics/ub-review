@@ -251,6 +251,8 @@ pub(crate) fn run_command_to_files_with_spawn_observer(
         stderr_path,
         child_environment: ChildEnvironment::ProofWorkerAllowlist,
         observe_process,
+        #[cfg(test)]
+        after_failed_wait: None,
     })
 }
 
@@ -313,6 +315,8 @@ pub(crate) fn run_sensor_command_to_files_with_spawn_observer(
         stderr_path,
         child_environment: ChildEnvironment::SensorAllowlist,
         observe_process,
+        #[cfg(test)]
+        after_failed_wait: None,
     })
 }
 
@@ -337,6 +341,9 @@ enum ChildEnvironment {
     ProofWorkerAllowlist,
 }
 
+#[cfg(test)]
+type FailedWaitObserver<'a> = &'a mut dyn FnMut(&mut std::process::Child);
+
 struct CommandRun<'a> {
     root: &'a Path,
     argv: &'a [String],
@@ -347,6 +354,8 @@ struct CommandRun<'a> {
     stderr_path: &'a Path,
     child_environment: ChildEnvironment,
     observe_process: &'a mut dyn FnMut(CommandProcessObservation),
+    #[cfg(test)]
+    after_failed_wait: Option<FailedWaitObserver<'a>>,
 }
 
 fn run_command_to_files_inner(run: CommandRun<'_>) -> Result<CommandStatus> {
@@ -370,6 +379,8 @@ fn run_command_to_files_inner_with_wait(
         stderr_path,
         child_environment,
         observe_process,
+        #[cfg(test)]
+        after_failed_wait,
     } = run;
     let Some((program, args)) = argv.split_first() else {
         bail!("empty command");
@@ -410,28 +421,31 @@ fn run_command_to_files_inner_with_wait(
         .spawn()
         .with_context(|| format!("spawn {program}"))?;
     observe_process(CommandProcessObservation::Spawned);
-    let status = match wait_for_child(&mut child, Duration::from_secs(timeout_sec)) {
-        Ok(Some(status)) => status,
-        Ok(None) => {
-            return reconcile_command_timeout(&mut child, observe_process, timeout_sec, started);
+    let result = match wait_for_child(&mut child, Duration::from_secs(timeout_sec)) {
+        Ok(Some(status)) => {
+            return Ok(CommandStatus {
+                exit_code: status.code(),
+                timed_out: false,
+                success: status.success(),
+                reason: if status.success() {
+                    "completed".to_owned()
+                } else if status.code().is_none() {
+                    format!("process terminated without an exit code: {status}")
+                } else {
+                    format!("exit code {:?}", status.code())
+                },
+                duration_ms: started.elapsed().as_millis(),
+            });
         }
-        Err(wait_error) => {
-            return reconcile_wait_failure(&mut child, observe_process, wait_error);
-        }
+        Ok(None) => reconcile_command_timeout(&mut child, observe_process, timeout_sec, started),
+        Err(wait_error) => reconcile_wait_failure(&mut child, observe_process, wait_error),
     };
-    Ok(CommandStatus {
-        exit_code: status.code(),
-        timed_out: false,
-        success: status.success(),
-        reason: if status.success() {
-            "completed".to_owned()
-        } else if status.code().is_none() {
-            format!("process terminated without an exit code: {status}")
-        } else {
-            format!("exit code {:?}", status.code())
-        },
-        duration_ms: started.elapsed().as_millis(),
-    })
+    // The lifecycle fixture inspects this handle before proof-root cleanup.
+    #[cfg(test)]
+    if let Some(inspect) = after_failed_wait {
+        inspect(&mut child);
+    }
+    result
 }
 
 fn reconcile_command_timeout(
@@ -1202,6 +1216,7 @@ mod tests {
                 stderr_path: &stderr,
                 child_environment: ChildEnvironment::AmbientPlusExplicit,
                 observe_process: &mut |event| observations.push(event),
+                after_failed_wait: None,
             },
             &mut wait_for_child,
         );

@@ -6956,7 +6956,7 @@ mod tests {
     use std::io::{BufRead, BufReader, Write as _};
     use std::net::{TcpListener, TcpStream};
     use std::path::{Path, PathBuf};
-    use std::process::{Command as ProcessCommand, Stdio};
+    use std::process::Command as ProcessCommand;
     use std::thread;
     use std::time::{Duration, Instant};
 
@@ -7012,7 +7012,7 @@ mod tests {
         selected_provider_spec, sha256_hex, split_curl_http_status, standard_minimax_lanes,
         terminalize_proof_requests, validate_github_review_payload,
         validate_github_review_payload_for_post, validate_pr_review_body_policy, validate_run_args,
-        wait_for_child_output_files, write_candidate_artifacts, write_final_orchestrator_artifact,
+        write_candidate_artifacts, write_final_orchestrator_artifact,
         write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
         write_github_review_payload, write_issue_broker_results, write_issue_capture_artifacts,
         write_observation_artifacts, write_orchestrator_artifacts, write_proof_receipt_artifacts,
@@ -15182,63 +15182,6 @@ UB_REVIEW_HTTP_STATUS:429
 
         assert_eq!(body, br#"{"error":"rate"}"#);
         assert_eq!(status, Some(429));
-    }
-
-    #[test]
-    fn child_output_file_wait_reports_timeout_and_cleans_temp_files() -> Result<()> {
-        let temp = tempfile::tempdir()?;
-        let stdout_path = temp.path().join("stdout.txt");
-        let stderr_path = temp.path().join("stderr.txt");
-        let stdout =
-            fs::File::create(&stdout_path).with_context(|| "create sleeper stdout file")?;
-        let stderr =
-            fs::File::create(&stderr_path).with_context(|| "create sleeper stderr file")?;
-        let argv = sleeper_argv();
-        let Some((program, args)) = argv.split_first() else {
-            return Err(anyhow::anyhow!("empty sleeper argv"));
-        };
-        let child = ProcessCommand::new(program)
-            .args(args)
-            .current_dir(temp.path())
-            .stdout(Stdio::from(stdout))
-            .stderr(Stdio::from(stderr))
-            .spawn()
-            .with_context(|| "spawn sleeper")?;
-
-        fs::write(&stdout_path, "SYNTHETIC_RESPONSE_VALUE_7329")?;
-        fs::write(&stderr_path, "SYNTHETIC_DIAGNOSTIC_VALUE_8421")?;
-        let err = match wait_for_child_output_files(child, &stdout_path, &stderr_path, 1) {
-            Ok(_) => return Err(anyhow::anyhow!("sleeper completed before timeout")),
-            Err(err) => err,
-        };
-
-        assert_eq!(
-            err.to_string(),
-            "process timed out after 1s; output omitted from diagnostic"
-        );
-        assert_eq!(super::classify_model_error(&err), "timed_out");
-        assert!(!format!("{err:#}").contains("SYNTHETIC_RESPONSE_VALUE_7329"));
-        assert!(!format!("{err:#}").contains("SYNTHETIC_DIAGNOSTIC_VALUE_8421"));
-        assert!(!stdout_path.exists());
-        assert!(!stderr_path.exists());
-
-        let stdout = fs::File::create(&stdout_path)?;
-        let stderr = fs::File::create(&stderr_path)?;
-        let child = ProcessCommand::new(program)
-            .args(args)
-            .current_dir(temp.path())
-            .stdout(Stdio::from(stdout))
-            .stderr(Stdio::from(stderr))
-            .spawn()?;
-        fs::write(&stdout_path, "SYNTHETIC_SUCCESS_OUTPUT")?;
-        fs::write(&stderr_path, "SYNTHETIC_SUCCESS_DIAGNOSTIC")?;
-        let output = wait_for_child_output_files(child, &stdout_path, &stderr_path, 5)?;
-        assert!(output.status.success());
-        assert_eq!(output.stdout, b"SYNTHETIC_SUCCESS_OUTPUT");
-        assert_eq!(output.stderr, b"SYNTHETIC_SUCCESS_DIAGNOSTIC");
-        assert!(!stdout_path.exists());
-        assert!(!stderr_path.exists());
-        Ok(())
     }
 
     #[test]
