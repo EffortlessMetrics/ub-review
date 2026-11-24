@@ -161,17 +161,29 @@ UB_PORTABILITY_RECEIPTS=/absolute/private-parent/new-portability-output \
 cargo test --locked --offline --test archive_onboarding selected_archive_portability -- --ignored --nocapture
 ```
 
-Preparation terminates with `prepared_only`. Run mode currently refuses before
-Docker inspection or launch because no filesystem-confined packet verifier is
-available. Canonical tar member names do not constrain paths referenced inside
-packet JSON, and Python isolated mode does not confine filesystem access.
-Before enabling run mode, validate a verifier that can see only the admitted
-packet and its vetted interpreter and script, without network, credentials,
-checkout, or a writable host mount.
+Preparation terminates with `prepared_only`. To attempt a synthetic run, use a
+new output directory, `UB_PORTABILITY_MODE=run`, and
+`UB_PORTABILITY_IMAGE_ID=sha256:…` for the independently selected Ubuntu 24.04
+x86_64 consumer. Also set `UB_PORTABILITY_VERIFIER_IMAGE_ID=sha256:…` to a
+separately selected, trusted local Linux amd64 image with `/usr/bin/env` and
+`/usr/bin/python3` with its standard library. The operator may pin the same
+image for both roles if it meets both requirements. Both images must be
+pre-existing and declare no volumes. Missing verifier pin, failed image
+inspection, or failed mount-free interpreter preflight refuses before the
+consumer starts.
 
-After that boundary is implemented, use a new output directory, `UB_PORTABILITY_MODE=run`, and
-`UB_PORTABILITY_IMAGE_ID=sha256:…`, pointing to the immutable local image ID
-for the independently selected Ubuntu 24.04 x86_64 consumer. The image must
+The verifier runs in a separately owned, network-disabled container with a
+read-only root, dropped capabilities, disabled health checks and IPC, and a
+cleared process environment. It receives only two read-only binds, the admitted
+packet directory and an exact copy of the verifier's compiled-in bytes. It
+receives no checkout, Cargo, credentials, or writable host mount. Host
+subprocess limits bound its output and deadline. Preflight, consumer, and packet
+verification each retain their own container identity, exit and cleanup logs.
+The receipt records both image pins, the verifier script digest, and whether
+packet verification passed. The controller has local inert tests. A synthetic
+run on the pinned Docker images is still needed to validate the full path.
+
+The image must
 already have Bash, git and standard archive/coreutils commands and have no
 Cargo, rustc or rustup. Record the provisioning/image provenance separately.
 The controller checks the actual local image ID, architecture, Ubuntu version

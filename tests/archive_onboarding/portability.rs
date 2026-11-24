@@ -451,20 +451,11 @@ fn reconcile_cleanup(
     Ok(())
 }
 
-// This capability must confine packet-controlled path reads independently of
-// tar admission. A direct checkout-side Python invocation is not a provider.
-type ConfinedPacketVerifier = fn(&Path, &Path, &Path) -> Result<()>;
-
-fn run_container(
-    root: &Path,
-    bundle: &Path,
-    output: &Path,
-    image: &str,
-    consumer_args: [&str; 4],
-    confined_verifier: Option<ConfinedPacketVerifier>,
-) -> Result<()> {
-    let verify = confined_verifier
-        .context("filesystem-confined packet verifier unavailable; run refused")?;
+fn inspect_image(root: &Path, image: &str) -> Result<()> {
+    ensure!(
+        image_id(image),
+        "expected an immutable local sha256 image ID"
+    );
     docker(
         root,
         "image",
@@ -478,28 +469,175 @@ fn run_container(
         10,
     )
     .context("required pinned local image unavailable")?;
-    check_local_image(&fs::read(root.join("image.stdout"))?, image)?;
+    check_local_image(&fs::read(root.join("image.stdout"))?, image)
+}
+
+fn owned_container(
+    root: &Path,
+    args: &[&str],
+    start_log: &str,
+    deadline: u64,
+    mut command: impl FnMut(&str, &[&str], u64) -> Result<()>,
+) -> Result<()> {
     let nonce = tempfile::tempdir_in(root)?;
     let label = format!(
         "ub-review.portability={}",
         nonce.path().file_name().context("nonce")?.to_string_lossy()
     );
     let label_filter = format!("label={label}");
+    write(
+        &root.join("cleanup.state"),
+        "uncertain: create not yet reconciled\n",
+    )?;
+    let mut create = vec!["create", "--label", &label];
+    create.extend_from_slice(args);
+    let created = command("container-create", &create, 15);
+    let mut known_id = None;
+    let result = created.and_then(|()| {
+        let id = fs::read_to_string(root.join("container-create.stdout"))?;
+        let id = id.trim();
+        ensure!(
+            image_id(&format!("sha256:{id}")),
+            "invalid created container ID"
+        );
+        known_id = Some(id.to_owned());
+        write(&root.join("container.id"), id)?;
+        command(start_log, &["start", "--attach", id], deadline)?;
+        command(
+            "container-exit",
+            &[
+                "container",
+                "inspect",
+                "--format",
+                "{{.State.Status}} {{.State.ExitCode}}",
+                id,
+            ],
+            10,
+        )?;
+        ensure!(
+            fs::read_to_string(root.join("container-exit.stdout"))?.trim() == "exited 0",
+            "owned container did not exit successfully"
+        );
+        Ok(())
+    });
+    reconcile_cleanup(root, &label_filter, known_id.as_deref(), command)?;
+    result
+}
+
+fn verifier_create_args(image: &str, user: &str, inputs: Option<(&str, &str)>) -> Vec<String> {
+    let mut args: Vec<_> = [
+        "--pull=never",
+        "--platform=linux/amd64",
+        "--network=none",
+        "--read-only",
+        "--cap-drop=ALL",
+        "--security-opt=no-new-privileges",
+        "--no-healthcheck",
+        "--ipc=none",
+        "--log-driver=none",
+        "--pids-limit=32",
+        "--user",
+        user,
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect();
+    if let Some((packet, script)) = inputs {
+        args.extend([
+            "--mount".into(),
+            format!("type=bind,src={packet},dst=/packet,readonly,bind-recursive=disabled"),
+            "--mount".into(),
+            format!("type=bind,src={script},dst=/verify.py,readonly,bind-recursive=disabled"),
+        ]);
+    }
+    args.extend(
+        [
+            "--entrypoint",
+            "/usr/bin/env",
+            image,
+            "-i",
+            "PATH=/usr/bin:/bin",
+            "HOME=/nonexistent",
+            "LC_ALL=C",
+            "/usr/bin/python3",
+            "-I",
+            "-B",
+        ]
+        .into_iter()
+        .map(str::to_owned),
+    );
+    let invocation: &[&str] = if inputs.is_some() {
+        &["/verify.py", "/packet", "--expected-repo-kind", "rust"]
+    } else {
+        &[
+            "-c",
+            "import argparse, json, pathlib; print('verifier-python-ready')",
+        ]
+    };
+    args.extend(invocation.iter().map(|arg| (*arg).to_owned()));
+    args
+}
+
+fn run_verifier_container(root: &Path, image: &str, inputs: Option<(&str, &str)>) -> Result<()> {
+    let user = format!(
+        "{}:{}",
+        rustix::process::getuid().as_raw(),
+        rustix::process::getgid().as_raw()
+    );
+    let create = verifier_create_args(image, &user, inputs);
+    let args: Vec<_> = create.iter().map(String::as_str).collect();
+    owned_container(root, &args, "verifier", 30, |name, args, timeout| {
+        docker(root, name, args, timeout)
+    })
+}
+
+fn verify_admitted_packet(root: &Path, packet: &Path, retained: &Path, image: &str) -> Result<()> {
+    ensure!(
+        fs::symlink_metadata(packet)?.is_dir(),
+        "admitted packet directory required"
+    );
+    ensure!(
+        fs::symlink_metadata(retained)?.is_file() && fs::read(retained)? == VERIFIER,
+        "retained verifier differs from compiled bytes"
+    );
+    let copy = root.join("verify.py");
+    write(&copy, VERIFIER)?;
+    run_verifier_container(root, image, Some((string(packet)?, string(&copy)?)))
+}
+
+fn run_container(
+    root: &Path,
+    bundle: &Path,
+    output: &Path,
+    image: &str,
+    consumer_args: [&str; 4],
+    verifier_image: Option<&str>,
+) -> Result<()> {
+    let verifier_image =
+        verifier_image.context("independently pinned verifier image required; run refused")?;
+    let verifier_root = root.join("packet-verifier");
+    fs::create_dir(&verifier_root)?;
+    inspect_image(&verifier_root, verifier_image)
+        .context("pinned verifier image preflight failed")?;
+    inspect_image(root, image)?;
+    let verifier_probe = verifier_root.join("preflight");
+    fs::create_dir(&verifier_probe)?;
+    run_verifier_container(&verifier_probe, verifier_image, None)
+        .context("confined verifier interpreter preflight failed")?;
+    ensure!(
+        fs::read_to_string(verifier_probe.join("verifier.stdout"))?.trim()
+            == "verifier-python-ready",
+        "verifier interpreter preflight did not produce its expected output"
+    );
     let input_mount = format!("type=bind,src={},dst=/input,readonly", bundle.display());
     let user = format!(
         "{}:{}",
         rustix::process::getuid().as_raw(),
         rustix::process::getgid().as_raw()
     );
-    write(
-        &root.join("cleanup.state"),
-        "uncertain: create not yet reconciled\n",
-    )?;
-    let created = docker(
+    let result = owned_container(
         root,
-        "container-create",
         &[
-            "create",
             "--pull=never",
             "--platform=linux/amd64",
             "--network=none",
@@ -510,8 +648,6 @@ fn run_container(
             "--pids-limit=128",
             "--user",
             &user,
-            "--label",
-            &label,
             "--tmpfs",
             "/tmp:rw,exec,nosuid,nodev,size=128m",
             "--mount",
@@ -531,53 +667,21 @@ fn run_container(
             consumer_args[2],
             consumer_args[3],
         ],
-        15,
+        "container",
+        90,
+        |name, args, timeout| docker(root, name, args, timeout),
     );
-    let mut known_id = None;
-    let result = created.and_then(|()| {
-        let id = fs::read_to_string(root.join("container-create.stdout"))?;
-        let id = id.trim();
-        ensure!(
-            image_id(&format!("sha256:{id}")),
-            "invalid created container ID"
-        );
-        known_id = Some(id.to_owned());
-        write(&root.join("container.id"), id)?;
-        docker(root, "container", &["start", "--attach", id], 90)?;
-        docker(
-            root,
-            "consumer-exit",
-            &[
-                "container",
-                "inspect",
-                "--format",
-                "{{.State.Status}} {{.State.ExitCode}}",
-                id,
-            ],
-            10,
-        )?;
-        ensure!(
-            fs::read_to_string(root.join("consumer-exit.stdout"))?.trim() == "exited 0",
-            "consumer did not exit successfully"
-        );
-        Ok(())
-    });
-    reconcile_cleanup(
-        root,
-        &label_filter,
-        known_id.as_deref(),
-        |name, args, deadline| docker(root, name, args, deadline),
-    )?;
     // A failed consumer can still yield an admissible archive of partial evidence.
     let stream = root.join("container.stdout");
     if stream.is_file() && fs::metadata(&stream)?.len() > 0 {
         let admitted = admit_evidence(root, &stream, output);
         result?;
         admitted?;
-        verify(
-            root,
-            &root.join("verify-bun-review-artifacts.py"),
+        verify_admitted_packet(
+            &verifier_root,
             &output.join("packet"),
+            &root.join("verify-bun-review-artifacts.py"),
+            verifier_image,
         )
     } else {
         result?;
@@ -586,7 +690,7 @@ fn run_container(
 }
 
 #[test]
-#[ignore = "requires retained #1340 custody inputs and a private output parent; run mode needs a pinned local image"]
+#[ignore = "requires retained #1340 custody inputs and a private output parent; run needs pinned local consumer and verifier images"]
 fn selected_archive_portability() -> Result<()> {
     let mode = std::env::var("UB_PORTABILITY_MODE")?;
     ensure!(
@@ -618,7 +722,7 @@ fn selected_archive_portability() -> Result<()> {
         "schema":"ub-review.portability.local.v1", "phase":phase, "distribution":distribution,
         "requested_ubuntu":distro, "mode":mode, "network":"none", "source_mount":false,
         "resolver_receipt":"consumer/resolver.status", "packet":"consumer/packet",
-        "packet_verification":"filesystem_confined_verifier_unavailable"
+        "packet_verification":"not_run"
     });
     let result = (|| -> Result<()> {
         fs::create_dir(&bundle)?;
@@ -701,6 +805,12 @@ fn selected_archive_portability() -> Result<()> {
             "expected an immutable local sha256 image ID"
         );
         evidence["image_id"] = json!(image);
+        let verifier_image = match std::env::var("UB_PORTABILITY_VERIFIER_IMAGE_ID") {
+            Ok(id) => Some(id),
+            Err(std::env::VarError::NotPresent) => None,
+            Err(error) => return Err(error.into()),
+        };
+        evidence["verifier_image_id"] = json!(verifier_image);
         let tag = campaign.manifest["tag"].as_str().context("admitted tag")?;
         let version = campaign.manifest["version"]
             .as_str()
@@ -711,8 +821,9 @@ fn selected_archive_portability() -> Result<()> {
             &output,
             &image,
             [&distro, tag, bin_digest, version],
-            None, // No locally validated filesystem-confined verifier is available.
+            verifier_image.as_deref(),
         )?;
+        evidence["packet_verification"] = json!("confined_verifier_passed");
         ensure!(
             fs::read_to_string(output.join("resolver.status"))?.trim()
                 == "strict_release_installed_no_fallback"
@@ -732,6 +843,19 @@ fn selected_archive_portability() -> Result<()> {
     evidence["manifest"] = campaign.manifest;
     if root.join("cleanup.state").is_file() {
         evidence["cleanup"] = json!(fs::read_to_string(root.join("cleanup.state"))?.trim());
+    }
+
+    for (key, path) in [
+        (
+            "verifier_preflight_cleanup",
+            "packet-verifier/preflight/cleanup.state",
+        ),
+        ("verifier_cleanup", "packet-verifier/cleanup.state"),
+    ] {
+        let path = root.join(path);
+        if path.is_file() {
+            evidence[key] = json!(fs::read_to_string(path)?.trim());
+        }
     }
 
     evidence["status"] = json!(if result.is_err() {
@@ -957,8 +1081,118 @@ fn portability_run_refuses_before_docker_without_confined_verifier() -> Result<(
     assert!(
         error
             .to_string()
-            .contains("filesystem-confined packet verifier unavailable")
+            .contains("independently pinned verifier image required")
     );
     assert_eq!(fs::read_dir(root)?.count(), 0);
+    Ok(())
+}
+
+#[test]
+fn portability_verifier_argv_uses_only_read_only_admitted_inputs() {
+    let id = format!("sha256:{}", "a".repeat(64));
+    let preflight = verifier_create_args(&id, "1000:1000", None);
+    assert!(!preflight.iter().any(|arg| arg == "--mount"));
+    let run = verifier_create_args(
+        &id,
+        "1000:1000",
+        Some(("/private/admitted/packet", "/private/verify.py")),
+    );
+    for argv in [&run, &preflight] {
+        for flag in [
+            "--pull=never",
+            "--network=none",
+            "--read-only",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--ipc=none",
+            "--no-healthcheck",
+        ] {
+            assert!(argv.iter().any(|arg| arg == flag));
+        }
+        assert!(argv.windows(2).any(|pair| pair == [id.as_str(), "-i"]));
+        assert!(
+            !argv
+                .iter()
+                .any(|arg| arg == "--tmpfs" || arg == "--env" || arg == "--privileged")
+        );
+    }
+    let mounts: Vec<_> = run
+        .windows(2)
+        .filter(|pair| pair[0] == "--mount")
+        .map(|pair| pair[1].as_str())
+        .collect();
+    assert_eq!(
+        mounts,
+        [
+            "type=bind,src=/private/admitted/packet,dst=/packet,readonly,bind-recursive=disabled",
+            "type=bind,src=/private/verify.py,dst=/verify.py,readonly,bind-recursive=disabled",
+        ]
+    );
+    assert!(run.ends_with(&[
+        "/verify.py".into(),
+        "/packet".into(),
+        "--expected-repo-kind".into(),
+        "rust".into()
+    ]));
+}
+
+#[test]
+fn portability_owned_verifier_lifecycle_checks_exit_and_cleans_after_start_failure() -> Result<()> {
+    let id = "a".repeat(64);
+    for failure in [None, Some("start"), Some("exit")] {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path();
+        let result = owned_container(
+            root,
+            &["inert-image"],
+            "verifier",
+            30,
+            |name, args, deadline| {
+                let stdout = root.join(format!("{name}.stdout"));
+                match name {
+                    "container-create" => write(&stdout, &id)?,
+                    "verifier" => {
+                        assert_eq!(deadline, 30);
+                        assert_eq!(args, ["start", "--attach", &id]);
+                        assert_eq!(fs::read_to_string(root.join("container.id"))?, id);
+                        if failure == Some("start") {
+                            anyhow::bail!("inert start failure");
+                        }
+                    }
+                    "container-exit" => write(
+                        &stdout,
+                        if failure == Some("exit") {
+                            "exited 1"
+                        } else {
+                            "exited 0"
+                        },
+                    )?,
+                    "cleanup-remove-known" => assert_eq!(args, ["container", "rm", "-f", &id]),
+                    _ => write(&stdout, "")?,
+                }
+                Ok(())
+            },
+        );
+        assert_eq!(result.is_err(), failure.is_some());
+        assert!(fs::read_to_string(root.join("cleanup.state"))?.starts_with("confirmed"));
+    }
+    Ok(())
+}
+
+#[test]
+fn portability_verifier_refuses_unadmitted_packet_and_modified_script() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let root = temp.path();
+    let packet = root.join("packet");
+    let script = root.join("retained.py");
+    let id = format!("sha256:{}", "a".repeat(64));
+    assert!(verify_admitted_packet(root, &packet, &script, &id).is_err());
+    fs::create_dir(&packet)?;
+    write(&script, "inert fixture")?;
+    let error = verify_admitted_packet(root, &packet, &script, &id)
+        .err()
+        .context("modified verifier accepted")?;
+    assert!(error.to_string().contains("differs from compiled bytes"));
+    assert!(!root.join("container-create.stdout").exists());
     Ok(())
 }
