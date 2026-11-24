@@ -132,3 +132,51 @@ retains separate ELF, pinned Ubuntu consumer, and model-off execution and packet
 evidence. Public release mode (#811 after #817), previous-supported-binary
 upgrade and rollback, the full leaf regression matrix, generated workflow
 execution and live provider delivery require separate proof.
+
+## Local Ubuntu portability preparation (#1071)
+
+Use the same independently retained ZIPs and custody file described above. The
+opt-in host controller reuses intake and the exact production resolver step.
+It retains the full Action file and its digest on the host along with the
+extracted step, inert adapter, model-off config, packet verifier and their
+digests. Host `readelf -hW -lW -dW -VW` records the executable header,
+interpreter, needed libraries and version requirements for the verified archive
+member. The host does not execute that member to discover requirements.
+
+```sh
+UB_CANDIDATE_BYTES_ZIP=/absolute/candidate.zip \
+UB_CANDIDATE_PACKET_ZIP=/absolute/packet.zip \
+UB_CANDIDATE_FACTS=/absolute/custody.json \
+UB_CANDIDATE_PROVENANCE=synthetic_fixture \
+UB_PORTABILITY_MODE=prepare UB_PORTABILITY_OS=24.04 \
+UB_PORTABILITY_RECEIPTS=/absolute/private-parent/new-portability-output \
+cargo test --locked --offline --test archive_onboarding selected_archive_portability -- --ignored --nocapture
+```
+
+Preparation terminates with `prepared_only`. For later consumer validation use
+a new output directory, `UB_PORTABILITY_MODE=run`, and
+`UB_PORTABILITY_IMAGE_ID=sha256:…`, pointing to the immutable local image ID
+for the independently selected Ubuntu 24.04 x86_64 consumer. The image must
+already have Bash, git and standard archive/coreutils commands and have no
+Cargo, rustc or rustup. Record the provisioning/image provenance separately.
+The controller checks the actual local image ID, architecture, Ubuntu version
+and glibc. Docker uses no network or pulls and mounts only the read-only
+prepared bundle and the dedicated writable evidence directory. It runs as the
+host caller's UID/GID, so the daemon must be able to mount and write the
+caller-owned output without broadening its permissions.
+
+The container keeps missing-download and bad-checksum exit/output controls
+separate from the positive strict resolver receipt and installed digest.
+Model-off executes against a tiny generated git diff, with tokenless artifact
+completion, zero transport calls and host-side packet verification. Retain
+the container's stdout/stderr, resolver files, ELF output, model-off packet,
+verifier result and Docker cleanup files together. A timeout bounds the host
+Docker client and cleanup targets only the container label created for this
+run. It does not establish general process-tree or output-size containment.
+
+Run again with an independently pinned 22.04 x86_64 image and
+`UB_PORTABILITY_OS=22.04` or retain the release owner's explicit bounded
+exclusion based on evidence for the exact executable. Historical v0.1.0 results
+do not establish the current floor. A real candidate run also needs fresh
+#816 custody and the producer image identity. Synthetic labels never qualify
+the selected candidate or public distribution.

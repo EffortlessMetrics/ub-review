@@ -229,3 +229,13 @@ reason = "Issue #1340 offline Rust integration intake streams fixed members from
 created = "2026-11-24"
 review_after = "2027-02-24"
 expires = "2027-05-24"
+
+[[exception]]
+id = "archive-portability-local-controller"
+kind = "test-process-spawn"
+path = "tests/archive_onboarding/portability.rs"
+owner = "ub-review/tests"
+reason = "Issue #1071 opt-in host-only controller reuses candidate admission, runs bounded local tar/readelf and packet verification, and permits only an immutable pre-existing Docker image with no network, pull, checkout mount or provider credentials. The controller retains per-command and owned-container cleanup results. Ordinary tests exercise image-pin validation without Docker."
+created = "2026-11-24"
+review_after = "2027-02-24"
+expires = "2027-05-24"

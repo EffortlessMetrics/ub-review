@@ -67,7 +67,10 @@ fn inventory(root: &Path) -> Result<BTreeMap<String, String>> {
     Ok(out)
 }
 fn resolver_shell() -> Result<String> {
-    let text = fs::read_to_string(Path::new(SOURCE).join("action.yml"))?;
+    resolver_shell_from(&fs::read_to_string(Path::new(SOURCE).join("action.yml"))?)
+}
+
+fn resolver_shell_from(text: &str) -> Result<String> {
     let marker = "    - name: Resolve ub-review runner\n";
     ensure!(text.matches(marker).count() == 1, "resolver step changed");
     let step = text
