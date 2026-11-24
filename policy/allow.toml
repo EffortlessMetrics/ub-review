@@ -219,3 +219,13 @@ reason = "Issue #1465 preparatory source installation runs one fixed python3 -B 
 created = "2026-10-18"
 review_after = "2027-01-18"
 expires = "2027-04-18"
+
+[[exception]]
+id = "archive-onboarding-candidate-zip-reader"
+kind = "test-process-spawn"
+path = "tests/archive_onboarding/candidate.rs"
+owner = "ub-review/tests"
+reason = "Issue #1340 offline Rust integration intake streams fixed members from privately copied, digest-checked Actions ZIPs using bounded GNU timeout and unzip. Synthetic fixtures exercise the same caller with local tar and zip, inert resolver transport and fixed version scripts. No network, provider credentials or publication authority."
+created = "2026-11-24"
+review_after = "2027-02-24"
+expires = "2027-05-24"

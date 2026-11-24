@@ -27,7 +27,7 @@ pub const SCHEMA: &str = "ub-review.authorized_release.v1";
 pub const ASSET: &str = "ub-review-x86_64-unknown-linux-gnu.tar.gz";
 pub const CHECKSUM_ASSET: &str = "ub-review-x86_64-unknown-linux-gnu.tar.gz.sha256";
 pub const MAX_ARCHIVE_BYTES: usize = 64 * 1024 * 1024;
-const MAX_PACKET_BYTES: usize = 16 * 1024;
+pub const MAX_PACKET_BYTES: usize = 16 * 1024;
 const MAX_TAR_BYTES: usize = MAX_ARCHIVE_BYTES + 4096;
 
 /// Versioned candidate packet. #1344's non-publishing package job emits this
@@ -64,7 +64,8 @@ pub struct Packet {
     pub verifier: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Producer {
     pub repository: String,
     pub head_sha: String,
@@ -212,6 +213,54 @@ pub fn validate(
     now: u64,
 ) -> Result<VerifiedPublication, Rejection> {
     let packet = parse_packet(packet_bytes)?;
+    validate_packet_fields(&packet)?;
+    let Observation::Success(source) = producer else {
+        return Err(Rejection::AvailabilityUnknown);
+    };
+    bind_producer(&packet, source, now)?;
+    let Observation::Success(unused) = tag else {
+        return Err(Rejection::TagAbsenceUnknown);
+    };
+    if unused.repository != packet.repository
+        || unused.tag != packet.proposed_tag
+        || unused.peeled_commit != packet.peeled_commit
+    {
+        return Err(Rejection::Identity("unused_tag"));
+    }
+    let Authority::Trusted(auth) = authority else {
+        return Err(Rejection::UntrustedAuthority);
+    };
+    if auth.expires_at <= now {
+        return Err(Rejection::Expired);
+    }
+    let digest = packet_digest(&packet)?;
+    if auth.record != packet.authorization_record
+        || auth.verifier != packet.verifier
+        || !hex(&auth.packet_sha256, 64)
+        || auth.packet_sha256 != digest
+    {
+        return Err(Rejection::AuthorizationMismatch);
+    }
+    verify_asset_bytes(&packet, archive, checksum)?;
+    Ok(VerifiedPublication {
+        packet,
+        packet_sha256: digest,
+        archive: archive.into(),
+        checksum: checksum.into(),
+        validated_authority: auth.clone(),
+    })
+}
+/// Bind packet identity to independently retained producer facts for an offline replay.
+pub fn verify_candidate_source(
+    packet: &Packet,
+    producer: &Producer,
+    now: u64,
+) -> Result<(), Rejection> {
+    validate_packet_fields(packet)?;
+    bind_producer(packet, producer, now)
+}
+
+fn validate_packet_fields(packet: &Packet) -> Result<(), Rejection> {
     if !hex(&packet.head_sha, 40)
         || !hex(&packet.tree_sha, 40)
         || !hex(&packet.peeled_commit, 40)
@@ -265,9 +314,10 @@ pub fn validate(
     {
         return Err(Rejection::Identity("producer_ref"));
     }
-    let Observation::Success(source) = producer else {
-        return Err(Rejection::AvailabilityUnknown);
-    };
+    Ok(())
+}
+
+fn bind_producer(packet: &Packet, source: &Producer, now: u64) -> Result<(), Rejection> {
     macro_rules! bind {
         ($field:ident) => {
             if packet.$field != source.$field {
@@ -294,29 +344,16 @@ pub fn validate(
     if packet.retained_until <= now {
         return Err(Rejection::Expired);
     }
-    let Observation::Success(unused) = tag else {
-        return Err(Rejection::TagAbsenceUnknown);
-    };
-    if unused.repository != packet.repository
-        || unused.tag != packet.proposed_tag
-        || unused.peeled_commit != packet.peeled_commit
-    {
-        return Err(Rejection::Identity("unused_tag"));
-    }
-    let Authority::Trusted(auth) = authority else {
-        return Err(Rejection::UntrustedAuthority);
-    };
-    if auth.expires_at <= now {
-        return Err(Rejection::Expired);
-    }
-    let digest = packet_digest(&packet)?;
-    if auth.record != packet.authorization_record
-        || auth.verifier != packet.verifier
-        || !hex(&auth.packet_sha256, 64)
-        || auth.packet_sha256 != digest
-    {
-        return Err(Rejection::AuthorizationMismatch);
-    }
+    Ok(())
+}
+
+/// Verify the archive and checksum named by a packet and return the digest of
+/// its executable member. Source identity is checked separately.
+pub fn verify_asset_bytes(
+    packet: &Packet,
+    archive: &[u8],
+    checksum: &[u8],
+) -> Result<String, Rejection> {
     if archive.len() > MAX_ARCHIVE_BYTES || archive.len() as u64 != packet.archive_length {
         return Err(Rejection::ArchiveLength);
     }
@@ -335,15 +372,9 @@ pub fn validate(
     if checksum != expected.as_bytes() && checksum != producer_checksum.as_bytes() {
         return Err(Rejection::ChecksumContents);
     }
-    inventory(archive)?;
-    Ok(VerifiedPublication {
-        packet,
-        packet_sha256: digest,
-        archive: archive.into(),
-        checksum: checksum.into(),
-        validated_authority: auth.clone(),
-    })
+    inventory(archive)
 }
+
 fn valid_version(value: &str) -> bool {
     let parts: Vec<_> = value.split('.').collect();
     parts.len() == 3
@@ -356,7 +387,7 @@ fn valid_version(value: &str) -> bool {
 
 /// Fixed release archive layout: one nonempty regular `ub-review` at archive root.
 /// Reject extensions, directories, links, duplicates, traversal and concatenation.
-fn inventory(archive: &[u8]) -> Result<(), Rejection> {
+fn inventory(archive: &[u8]) -> Result<String, Rejection> {
     let mut decoder = GzDecoder::new(Cursor::new(archive));
     let mut tar = Vec::new();
     decoder
@@ -411,7 +442,7 @@ fn inventory(archive: &[u8]) -> Result<(), Rejection> {
     {
         return Err(Rejection::ArchiveLayout);
     }
-    Ok(())
+    Ok(sha256(&tar[512..512 + size as usize]))
 }
 fn cstring(bytes: &[u8]) -> Option<&[u8]> {
     let end = bytes

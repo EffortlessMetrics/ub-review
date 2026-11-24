@@ -1,4 +1,4 @@
-# Preliminary archive onboarding rehearsal (#1340)
+# Archive onboarding rehearsal (#1340)
 
 Owner: ub-review/tests. The Linux x86_64 Rust integration target
 `tests/archive_onboarding.rs` executes the resolver shell extracted from the
@@ -23,6 +23,8 @@ and a physically persisted failed/timed-out/reaped receipt. The Python fixture
 has no descendants and self-exits on a bounded socket timeout if kill is omitted;
 negative controls still perform test-side kill/reap after inspecting the result.
 This is runner-oracle coverage, not a production process-containment repair.
+
+## Preliminary local archive
 
 Supply a frozen directory containing:
 
@@ -79,12 +81,46 @@ inputs and an explicitly reviewed full Action SHA for a contained evaluation.
 These generated-default/pinning boundaries stay visible for the existing owners;
 this test lane changes no production generator.
 
-Final #816 candidate acceptance remains pending after selected source/docs and
-installer fixes are merged and its exact archive exists. A final run requires
-fresh identities and a separately reviewed candidate-phase manifest contract;
-this first target deliberately accepts only preliminary inputs. Public-release
-mode (#811 after #817), previous-supported-binary upgrade/rollback, the full leaf
-regression matrix, workflow execution, live provider/delivery and platform
-portability remain unproven. A merged harness cannot close #1340 or #816.
-No release/tag/package, credentials, branch protection, Required gate, default,
-pin, workflow or remote publication mutation is part of this lane.
+## Selected candidate intake
+
+Retain both original Actions ZIP downloads and a separate custody JSON file.
+Populate the custody file from the independently observed producer run, commit,
+tree, package version and artifact metadata. Record the raw receipt SHA-256
+independently before handoff. The harness uses this file as its trust input.
+Keep it outside the ZIPs and retain it read-only.
+
+| JSON key | Required fields |
+| --- | --- |
+| `producer` | `repository`, `head_sha`, `tree_sha`, `workflow`, `producer_ref`, `run_id`, `run_attempt`, `artifact_id`, `artifact_name`, `retained_until` |
+| `bytes_artifact`, `packet_artifact` | `id`, `name`, `run_id`, `run_attempt`, `retained_until`, `length`, `sha256` for each ZIP |
+| `package_version`, `raw_packet_sha256` | Version from the producer commit and digest of the original `authorized-release-packet.json` bytes |
+
+Use numeric IDs, lengths in bytes, retention times in Unix seconds and lowercase
+hex digests. The bytes artifact holds the fixed release archive, checksum and
+release notes. The packet artifact holds the original producer receipt. The
+selected candidate path additionally requires GNU `timeout` and `unzip`. Its
+automatic synthetic controls also use `zip` and GNU `tar`.
+
+```console
+UB_CANDIDATE_BYTES_ZIP=/absolute/candidate.zip \
+UB_CANDIDATE_PACKET_ZIP=/absolute/packet.zip \
+UB_CANDIDATE_FACTS=/absolute/independent-custody.json \
+UB_ARCHIVE_RECEIPTS=/absolute/new-receipts \
+  cargo test --locked --test archive_onboarding selected_candidate_archive_onboarding -- --ignored --nocapture
+```
+
+Before the resolver starts, intake verifies both ZIPs and the raw packet,
+checks producer identity and retention, verifies the archive and checksum, and
+derives the single executable member's digest. The existing resolver and
+onboarding campaign then run against private copies of those admitted bytes.
+Every campaign CLI call checks the installed path and digest. Synthetic controls
+exercise the same intake and resolver and label their receipts
+`synthetic_fixture`. Set `UB_CANDIDATE_PROVENANCE=synthetic_fixture` when
+running the full entry point with substitute artifacts.
+
+The #816 release qualification still requires the selected producer's retained
+bytes and a real onboarding run. #1071 can use the same candidate intake but
+retains separate ELF, pinned Ubuntu consumer, and model-off execution and packet
+evidence. Public release mode (#811 after #817), previous-supported-binary
+upgrade and rollback, the full leaf regression matrix, generated workflow
+execution and live provider delivery require separate proof.

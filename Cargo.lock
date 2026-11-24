@@ -758,6 +758,7 @@ dependencies = [
  "tokio",
  "toml",
  "wait-timeout",
+ "xtask",
 ]
 
 [[package]]

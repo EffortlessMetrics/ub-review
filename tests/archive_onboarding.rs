@@ -13,6 +13,9 @@ use std::process::{Command, Output, Stdio};
 use std::time::Duration;
 use wait_timeout::ChildExt;
 
+#[path = "archive_onboarding/candidate.rs"]
+mod candidate;
+
 const ASSET: &str = "ub-review-x86_64-unknown-linux-gnu.tar.gz";
 const SOURCE: &str = env!("CARGO_MANIFEST_DIR");
 
@@ -91,7 +94,25 @@ fn resolver_shell() -> Result<String> {
         .map(|lines| lines.join("\n"))
 }
 
+#[derive(Clone, Copy)]
+enum Provenance {
+    Preliminary,
+    Candidate,
+    Synthetic,
+}
+
+impl Provenance {
+    fn receipt_labels(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Preliminary => ("preliminary_local_archive", "candidate_rehearsal"),
+            Self::Candidate => ("selected_candidate_intake", "candidate_rehearsal"),
+            Self::Synthetic => ("synthetic_candidate_intake", "synthetic_fixture"),
+        }
+    }
+}
+
 struct Campaign {
+    provenance: Provenance,
     root: PathBuf,
     path: PathBuf,
     frozen: PathBuf,
@@ -188,14 +209,16 @@ impl Campaign {
         self.receipt("running", None)
     }
     fn receipt(&self, status: &str, error: Option<String>) -> Result<()> {
+        let (phase, distribution) = self.provenance.receipt_labels();
         write(
             &self.root.join("receipt.json"),
             serde_json::to_vec_pretty(&json!({
-                "schema":"ub-review.archive_onboarding_rehearsal.v1", "phase":"preliminary_local_archive",
-                "distribution":"candidate_rehearsal", "platform":"Linux x86_64", "status":status,"error":error,
+                "schema":"ub-review.archive_onboarding_rehearsal.v1", "phase":phase,
+                "distribution":distribution, "platform":"Linux x86_64", "status":status,"error":error,
                 "frozen_manifest":self.manifest, "harness_sha256":digest(include_bytes!("archive_onboarding.rs")),
+                "candidate_intake_sha256":digest(include_bytes!("archive_onboarding/candidate.rs")),
                 "action_sha256":digest(&fs::read(Path::new(SOURCE).join("action.yml"))?), "commands":self.rows,"scenarios":self.scenarios,
-                "unproven":["final #816 archive", "public distribution", "previous supported release upgrade", "generated workflow execution", "live provider/delivery", "all #1340 leaf regression controls", "general process-tree containment"]
+                "unproven":["final #816 release qualification", "public distribution", "previous supported release upgrade", "generated workflow execution", "live provider/delivery", "all #1340 leaf regression controls", "general process-tree containment"]
             }))?,
         )
     }
@@ -335,6 +358,7 @@ fn frozen_archive_onboarding() -> Result<()> {
     fs::create_dir(&root)?;
     let manifest: Value = serde_json::from_slice(&fs::read(frozen.join("manifest.json"))?)?;
     let mut campaign = Campaign {
+        provenance: Provenance::Preliminary,
         path: root.join("bin"),
         root,
         frozen,
@@ -342,7 +366,7 @@ fn frozen_archive_onboarding() -> Result<()> {
         rows: vec![],
         scenarios: BTreeMap::new(),
     };
-    let result = rehearse(&mut campaign);
+    let result = validate_preliminary(&campaign).and_then(|()| rehearse(&mut campaign));
     campaign.receipt(
         if result.is_ok() {
             "bounded_pass"
@@ -353,7 +377,7 @@ fn frozen_archive_onboarding() -> Result<()> {
     )?;
     result
 }
-fn rehearse(c: &mut Campaign) -> Result<()> {
+fn validate_preliminary(c: &Campaign) -> Result<()> {
     ensure!(
         c.manifest["phase"] == "preliminary_local_archive",
         "only preliminary inputs admitted in first slice"
@@ -385,6 +409,10 @@ fn rehearse(c: &mut Campaign) -> Result<()> {
             == c.manifest["checksum_sha256"],
         "checksum digest mismatch"
     );
+    Ok(())
+}
+
+fn prepare_resolver(c: &Campaign) -> Result<()> {
     fs::create_dir(&c.path)?;
     for tool in [
         "awk",
@@ -409,6 +437,11 @@ fn rehearse(c: &mut Campaign) -> Result<()> {
             "#!/bin/bash\nprintf '%s\\n' \"$0 $*\" >> \"${POISON_LOG:?}\"\nexit 93\n",
         )?;
     }
+    Ok(())
+}
+
+fn rehearse(c: &mut Campaign) -> Result<()> {
+    prepare_resolver(c)?;
     for attempt in 1..=2 {
         let failed = c.resolve("release", "1")?;
         ensure!(!failed.status.success(), "missing archive accepted");
@@ -450,20 +483,7 @@ fn rehearse(c: &mut Campaign) -> Result<()> {
         "workspace substitute accepted"
     );
     c.proven("workspace_selection_rejected")?;
-    let positive = c.resolve("release", "0")?;
-    success(&positive)?;
-    let bin = c.selected()?;
-    let root = c.root.clone();
-    let version = c.cli(&root, &bin, &["--version"])?;
-    success(&version)?;
-    ensure!(
-        String::from_utf8_lossy(&version.stdout).trim()
-            == format!(
-                "ub-review {}",
-                c.manifest["version"].as_str().context("version")?
-            ),
-        "binary version mismatch"
-    );
+    let bin = install_and_check_version(c)?;
     c.proven("frozen_resolver_digest_and_version")?;
     // Replacing the installed bytes must be rejected before a command can execute.
     let original = fs::read(&bin)?;
@@ -488,6 +508,24 @@ fn rehearse(c: &mut Campaign) -> Result<()> {
     c.proven("no_compiler_source_fallback_or_remote_mutation")?;
     Ok(())
 }
+fn install_and_check_version(c: &mut Campaign) -> Result<PathBuf> {
+    let positive = c.resolve("release", "0")?;
+    success(&positive)?;
+    let bin = c.selected()?;
+    let root = c.root.clone();
+    let version = c.cli(&root, &bin, &["--version"])?;
+    success(&version)?;
+    ensure!(
+        String::from_utf8_lossy(&version.stdout).trim()
+            == format!(
+                "ub-review {}",
+                c.manifest["version"].as_str().context("version")?
+            ),
+        "binary version mismatch"
+    );
+    Ok(bin)
+}
+
 fn assert_preserved_inventory(root: &Path, expected: &BTreeMap<String, String>) -> Result<()> {
     ensure!(
         inventory(root)? == *expected,
@@ -696,6 +734,7 @@ fn command_receipts_retain_spawn_failure_and_nonzero_exit() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let root = temp.path().to_path_buf();
     let mut c = Campaign {
+        provenance: Provenance::Preliminary,
         path: root.join("bin"),
         frozen: root.join("frozen"),
         root: root.clone(),
@@ -739,6 +778,7 @@ fn inventories_detect_directory_mode_and_identity_rejects_substitutes() -> Resul
     let binary = root.join("runtime/ub-review-action-release/ub-review");
     write(&binary, b"frozen bytes")?;
     let c = Campaign {
+        provenance: Provenance::Preliminary,
         root: root.to_path_buf(),
         path: root.join("bin"),
         frozen: root.join("frozen"),
@@ -815,6 +855,7 @@ fn ready_child_timeout_is_killed_reaped_and_retained() -> Result<()> {
     let listener = UnixListener::bind(&socket)?;
     listener.set_nonblocking(true)?;
     let mut c = Campaign {
+        provenance: Provenance::Preliminary,
         path: root.join("bin"),
         frozen: root.join("frozen"),
         root: root.clone(),
