@@ -349,7 +349,7 @@ mod campaign {
     use std::os::unix::fs::{PermissionsExt, symlink};
     use std::path::{Path, PathBuf};
     use std::process::{Command, Stdio};
-    use std::time::Duration;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
     use wait_timeout::ChildExt;
 
     use super::oracle::{
@@ -371,6 +371,7 @@ mod campaign {
         "model-off",
         "required-gap",
     ];
+    const VERIFIER_BYTES: &[u8] = include_bytes!("../scripts/verify-bun-review-artifacts.py");
     const VERIFIER_ARGS: [&str; 2] = ["--expected-repo-kind", "rust"];
 
     fn sha(bytes: &[u8]) -> String {
@@ -611,6 +612,13 @@ sys.exit(22 if status >= 400 else 0)
             packet: &Path,
             cwd: &Path,
         ) -> Result<(bool, String)> {
+            if let Some(input) = &self.archive_input {
+                ensure!(
+                    fs::symlink_metadata(verifier)?.is_file()
+                        && json!(sha(&fs::read(verifier)?)) == input["verifier_sha256"],
+                    "staged verifier digest mismatch"
+                );
+            }
             let mut args = vec![verifier.display().to_string(), packet.display().to_string()];
             args.extend(strings(&VERIFIER_ARGS));
             self.invoke(Path::new("/usr/bin/python3"), cwd, &args, &[])
@@ -1397,8 +1405,14 @@ sys.exit(22 if status >= 400 else 0)
             symlink(format!("/usr/bin/{tool}"), c.root.join("bin").join(tool))?;
         }
         script(&c.root.join("bin/curl"), TRANSPORT)?;
-        let verifier =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/verify-bun-review-artifacts.py");
+        let verifier = if let Some(input) = &mut c.archive_input {
+            let path = c.root.join("verify-bun-review-artifacts.py");
+            write(&path, VERIFIER_BYTES)?;
+            input["verifier_sha256"] = json!(sha(VERIFIER_BYTES));
+            path
+        } else {
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/verify-bun-review-artifacts.py")
+        };
         let expected_version = format!(
             "ub-review {}",
             c.candidate_version().context("candidate version")?
@@ -1515,14 +1529,17 @@ sys.exit(22 if status >= 400 else 0)
         Ok(path)
     }
 
-    fn stage_archive_input(c: &mut Campaign) -> Result<()> {
+    fn stage_archive_input(
+        c: &mut Campaign,
+        source: &Path,
+        expected: &str,
+        custody_path: &Path,
+        wall_time: impl FnOnce() -> Result<u64>,
+    ) -> Result<()> {
         use xtask::release_bytes::{ASSET, CHECKSUM_ASSET, MAX_ARCHIVE_BYTES, MAX_PACKET_BYTES};
 
         // The caller retains this digest independently from the receipt bytes.
-        let expected = std::env::var("UB_ONBOARDING_RECEIPT_SHA256")
-            .context("independently retained UB_ONBOARDING_RECEIPT_SHA256 required")?;
         c.archive_input = Some(json!({"expected_onboarding_receipt_sha256": expected}));
-        let source = input_path("UB_ONBOARDING_RECEIPTS")?;
         let receipt_bytes = retained_bytes(&source.join("receipt.json"), 1024 * 1024)?;
         let receipt_sha256 = sha(&receipt_bytes);
         ensure!(
@@ -1574,11 +1591,42 @@ sys.exit(22 if status >= 400 else 0)
                 "onboarding manifest is missing {key}"
             );
         }
-        let custody = retained_bytes(&input_path("UB_CANDIDATE_FACTS")?, MAX_PACKET_BYTES)?;
+        let custody = retained_bytes(custody_path, MAX_PACKET_BYTES)?;
         ensure!(
             sha(&custody) == receipt["frozen_manifest"]["custody_facts_sha256"],
             "custody facts digest mismatch"
         );
+        if receipt["phase"] == "selected_candidate_intake" {
+            let observed = wall_time()?;
+            let evidence = c.archive_input.as_mut().context("archive input evidence")?;
+            evidence["observed_wall_time_unix_seconds"] = json!(observed);
+            let custody: Value = serde_json::from_slice(&custody)?;
+            let packet_expiry = &receipt["frozen_manifest"]["retained_until"];
+            let bytes_expiry = &custody["bytes_artifact"]["retained_until"];
+            let receipt_expiry = &custody["packet_artifact"]["retained_until"];
+            evidence["retention_horizons_unix_seconds"] = json!({
+                "packet": packet_expiry,
+                "bytes_artifact": bytes_expiry,
+                "packet_artifact": receipt_expiry,
+            });
+            let packet_expiry = packet_expiry
+                .as_u64()
+                .context("numeric packet expiry required")?;
+            let bytes_expiry = bytes_expiry
+                .as_u64()
+                .context("numeric bytes artifact horizon required")?;
+            let receipt_expiry = receipt_expiry
+                .as_u64()
+                .context("numeric packet artifact horizon required")?;
+            ensure!(
+                packet_expiry <= bytes_expiry && packet_expiry <= receipt_expiry,
+                "packet expiry exceeds independent artifact horizon"
+            );
+            ensure!(
+                observed < packet_expiry,
+                "selected candidate retention has expired"
+            );
+        }
         for (name, hash, length, limit) in [
             (ASSET, "archive_sha256", "archive_length", MAX_ARCHIVE_BYTES),
             (CHECKSUM_ASSET, "checksum_sha256", "checksum_length", 512),
@@ -1609,13 +1657,8 @@ sys.exit(22 if status >= 400 else 0)
         Ok(())
     }
 
-    #[test]
-    #[ignore = "requires an independently retained #1340 receipt, custody facts and private output parent"]
-    fn staged_archive_advisory_campaign() -> Result<()> {
-        let _cli_subprocess_guard = cli_subprocess_test_lock()?;
-        let root = input_path("UB_ADVISORY_RECEIPTS")?;
-        fs::DirBuilder::new().mode(0o700).create(&root)?;
-        let mut campaign = Campaign {
+    fn staged_campaign(root: PathBuf) -> Campaign {
+        Campaign {
             bin: root.join("admitted-ub-review"),
             root,
             binary_sha256: String::new(),
@@ -1623,8 +1666,141 @@ sys.exit(22 if status >= 400 else 0)
             fixture_head: String::new(),
             commands: vec![],
             scenarios: pending_scenarios(),
-        };
-        let result = stage_archive_input(&mut campaign).and_then(|()| campaign_run(&mut campaign));
+        }
+    }
+
+    #[test]
+    fn selected_candidate_retention_checks_exact_clock_and_artifact_boundaries() -> Result<()> {
+        use xtask::release_bytes::{ASSET, CHECKSUM_ASSET};
+
+        let fixture = tempfile::tempdir()?;
+        let root = fixture.path();
+        let executable = b"synthetic executable bytes, never run in this control";
+        write(
+            &root.join("runtime/ub-review-action-release/ub-review"),
+            executable,
+        )?;
+        write(&root.join("frozen").join(ASSET), b"synthetic archive")?;
+        write(
+            &root.join("frozen").join(CHECKSUM_ASSET),
+            b"synthetic checksum",
+        )?;
+        let facts_path = root.join("custody.json");
+        for (index, (now, packet, bytes, packet_artifact, refusal)) in [
+            (99, json!(100), json!(100), json!(100), None),
+            (
+                100,
+                json!(100),
+                json!(100),
+                json!(100),
+                Some("retention has expired"),
+            ),
+            (
+                101,
+                json!(100),
+                json!(100),
+                json!(100),
+                Some("retention has expired"),
+            ),
+            (
+                99,
+                json!(100),
+                json!(99),
+                json!(101),
+                Some("exceeds independent artifact horizon"),
+            ),
+            (
+                99,
+                json!(100),
+                json!(101),
+                json!(99),
+                Some("exceeds independent artifact horizon"),
+            ),
+            (
+                99,
+                json!("100"),
+                json!(101),
+                json!(101),
+                Some("numeric packet expiry"),
+            ),
+            (
+                99,
+                json!(100),
+                json!(null),
+                json!(101),
+                Some("numeric bytes artifact horizon"),
+            ),
+            (
+                99,
+                json!(100),
+                json!(101),
+                json!(-1),
+                Some("numeric packet artifact horizon"),
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let custody = serde_json::to_vec(&json!({
+                "bytes_artifact": {"retained_until": bytes},
+                "packet_artifact": {"retained_until": packet_artifact}
+            }))?;
+            write(&facts_path, &custody)?;
+            let receipt = serde_json::to_vec(&json!({
+                "schema": "ub-review.archive_onboarding_rehearsal.v1",
+                "phase": "selected_candidate_intake",
+                "distribution": "candidate_rehearsal",
+                "status": "bounded_pass",
+                "frozen_manifest": {
+                    "source_commit": "synthetic commit", "source_tree": "synthetic tree", "version": "0.1.2",
+                    "archive_sha256": sha(b"synthetic archive"), "archive_length": b"synthetic archive".len(),
+                    "checksum_sha256": sha(b"synthetic checksum"), "checksum_length": b"synthetic checksum".len(),
+                    "binary_sha256": sha(executable), "raw_packet_sha256": sha(b"synthetic packet"),
+                    "custody_facts_sha256": sha(&custody), "retained_until": packet,
+                }
+            }))?;
+            let pin = sha(&receipt);
+            write(&root.join("receipt.json"), receipt)?;
+            let mut campaign = staged_campaign(root.join(format!("out-{index}")));
+            let result = stage_archive_input(&mut campaign, root, &pin, &facts_path, || Ok(now));
+            if let Some(expected) = refusal {
+                let error = result.err().context("invalid retention was accepted")?;
+                ensure!(
+                    format!("{error:#}").contains(expected),
+                    "unexpected refusal: {error:#}"
+                );
+                ensure!(campaign.commands.is_empty() && !campaign.bin.exists());
+            } else {
+                result?;
+                ensure!(fs::read(&campaign.bin)? == executable);
+            }
+            let input = campaign
+                .archive_input
+                .as_ref()
+                .context("archive evidence")?;
+            ensure!(input["observed_wall_time_unix_seconds"] == json!(now));
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "requires an independently retained #1340 receipt, custody facts and private output parent"]
+    fn staged_archive_advisory_campaign() -> Result<()> {
+        let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+        let root = input_path("UB_ADVISORY_RECEIPTS")?;
+        fs::DirBuilder::new().mode(0o700).create(&root)?;
+        let mut campaign = staged_campaign(root);
+        let result = (|| {
+            stage_archive_input(
+                &mut campaign,
+                &input_path("UB_ONBOARDING_RECEIPTS")?,
+                &std::env::var("UB_ONBOARDING_RECEIPT_SHA256")
+                    .context("independently retained UB_ONBOARDING_RECEIPT_SHA256 required")?,
+                &input_path("UB_CANDIDATE_FACTS")?,
+                || Ok(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs()),
+            )?;
+            campaign_run(&mut campaign)
+        })();
         campaign.receipt(
             if result.is_ok() {
                 "bounded_observations_pass"

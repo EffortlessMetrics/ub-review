@@ -205,3 +205,15 @@ provenance and writes a terminal receipt on success or failure. The scenarios
 still use inert transports. Synthetic intake remains synthetic and supplies
 neither final #816 qualification nor live provider evidence. The source-built
 campaign remains the default CI path.
+
+For a selected candidate, the advisory receipt records observed Unix wall time
+and the packet and independent artifact retention horizons. Staging requires
+the packet expiry to be no later than either artifact horizon and strictly
+later than the observed time. Expired candidate evidence cannot be replayed
+through this path. Synthetic fixture qualification remains separate.
+
+Staged mode runs a private copy of the verifier bytes embedded from the harness
+checkout at compile time. It records their SHA-256 and checks the copy before
+each invocation. This packet-checking invocation uses only Python standard
+library imports. The verifier's separate self-test can read checkout Rust
+source, and the staged campaign does not run that self-test.
