@@ -215,6 +215,7 @@ fn local_cmd(output: &Path, name: &str, program: &str, args: &[&str], deadline: 
         .env("LC_ALL", "C")
         .env("GIT_NO_REPLACE_OBJECTS", "1")
         .env("GIT_NO_LAZY_FETCH", "1")
+        .env("GIT_ALLOW_PROTOCOL", "")
         .env("GIT_TERMINAL_PROMPT", "0")
         .stdin(Stdio::null())
         .stdout(fs::File::create(stdout)?)
@@ -345,13 +346,125 @@ fn docker(root: &Path, name: &str, args: &[&str], deadline: u64) -> Result<()> {
     local_cmd(root, name, program, &command, deadline)
 }
 
+fn check_local_image(bytes: &[u8], image: &str) -> Result<()> {
+    let inspected: Value = serde_json::from_slice(bytes)?;
+    ensure!(
+        inspected["id"] == image
+            && inspected["os"] == "linux"
+            && inspected["architecture"] == "amd64",
+        "local image identity or platform mismatch"
+    );
+    ensure!(
+        match inspected.get("volumes") {
+            Some(Value::Null) => true,
+            Some(Value::Object(volumes)) => volumes.is_empty(),
+            _ => false,
+        },
+        "local image must declare no volumes"
+    );
+    Ok(())
+}
+
+fn reconcile_cleanup(
+    root: &Path,
+    label_filter: &str,
+    known_id: Option<&str>,
+    mut command: impl FnMut(&str, &[&str], u64) -> Result<()>,
+) -> Result<()> {
+    let direct =
+        known_id.map(|id| command("cleanup-remove-known", &["container", "rm", "-f", id], 15));
+    let label_args = [
+        "container",
+        "ls",
+        "-aq",
+        "--no-trunc",
+        "--filter",
+        label_filter,
+    ];
+    let discovered = command("cleanup-discover", &label_args, 15).and_then(|()| {
+        let raw = fs::read_to_string(root.join("cleanup-discover.stdout"))?;
+        let ids: Vec<_> = raw.lines().collect();
+        ensure!(
+            ids.len() <= 8,
+            "unexpected number of containers for this run label"
+        );
+        for id in &ids {
+            ensure!(
+                image_id(&format!("sha256:{id}")),
+                "invalid cleanup container ID"
+            );
+        }
+        let mut removed = Ok(());
+        for (index, id) in ids.into_iter().enumerate() {
+            if Some(id) != known_id {
+                let attempt = command(
+                    &format!("cleanup-remove-label-{index}"),
+                    &["container", "rm", "-f", id],
+                    15,
+                );
+                removed = removed.and(attempt);
+            }
+        }
+        removed
+    });
+    // Run both absence checks even if a removal or discovery call failed.
+    let label_check = command("cleanup-check", &label_args, 15).and_then(|()| {
+        ensure!(
+            fs::read(root.join("cleanup-check.stdout"))?.is_empty(),
+            "owned container label remains"
+        );
+        Ok(())
+    });
+    let id_check = known_id.map(|id| {
+        command(
+            "cleanup-id-check",
+            &[
+                "container",
+                "ls",
+                "-aq",
+                "--no-trunc",
+                "--filter",
+                &format!("id={id}"),
+            ],
+            15,
+        )
+        .and_then(|()| {
+            ensure!(
+                fs::read(root.join("cleanup-id-check.stdout"))?.is_empty(),
+                "known container remains"
+            );
+            Ok(())
+        })
+    });
+    discovered?;
+    label_check?;
+    if let Some(check) = id_check {
+        check?;
+        if let Some(removed) = direct {
+            removed?;
+        }
+        write(
+            &root.join("cleanup.state"),
+            "confirmed: owned container absent\n",
+        )?;
+    }
+    Ok(())
+}
+
+// This capability must confine packet-controlled path reads independently of
+// tar admission. A direct checkout-side Python invocation is not a provider.
+type ConfinedPacketVerifier = fn(&Path, &Path, &Path) -> Result<()>;
+
 fn run_container(
     root: &Path,
     bundle: &Path,
     output: &Path,
     image: &str,
     consumer_args: [&str; 4],
+    confined_verifier: Option<ConfinedPacketVerifier>,
 ) -> Result<()> {
+    let verify = confined_verifier
+        .context("filesystem-confined packet verifier unavailable; run refused")?;
     docker(
         root,
         "image",
@@ -359,16 +472,13 @@ fn run_container(
             "image",
             "inspect",
             "--format",
-            "{{.Id}} {{.Os}} {{.Architecture}}",
+            r#"{"id":{{json .Id}},"os":{{json .Os}},"architecture":{{json .Architecture}},"volumes":{{json .Config.Volumes}}}"#,
             image,
         ],
         10,
     )
     .context("required pinned local image unavailable")?;
-    ensure!(
-        fs::read_to_string(root.join("image.stdout"))?.trim() == format!("{image} linux amd64"),
-        "local image identity or platform mismatch"
-    );
+    check_local_image(&fs::read(root.join("image.stdout"))?, image)?;
     let nonce = tempfile::tempdir_in(root)?;
     let label = format!(
         "ub-review.portability={}",
@@ -423,6 +533,7 @@ fn run_container(
         ],
         15,
     );
+    let mut known_id = None;
     let result = created.and_then(|()| {
         let id = fs::read_to_string(root.join("container-create.stdout"))?;
         let id = id.trim();
@@ -430,6 +541,7 @@ fn run_container(
             image_id(&format!("sha256:{id}")),
             "invalid created container ID"
         );
+        known_id = Some(id.to_owned());
         write(&root.join("container.id"), id)?;
         docker(root, "container", &["start", "--attach", id], 90)?;
         docker(
@@ -450,76 +562,23 @@ fn run_container(
         );
         Ok(())
     });
-    // List only this run's containers, including a surviving daemon-side task
-    // after a killed Docker client. Never remove an unrelated container.
-    docker(
+    reconcile_cleanup(
         root,
-        "cleanup-discover",
-        &[
-            "container",
-            "ls",
-            "-aq",
-            "--no-trunc",
-            "--filter",
-            &label_filter,
-        ],
-        15,
+        &label_filter,
+        known_id.as_deref(),
+        |name, args, deadline| docker(root, name, args, deadline),
     )?;
-    let ids = fs::read_to_string(root.join("cleanup-discover.stdout"))?;
-    let known_id = fs::read_to_string(root.join("container.id")).ok();
-    for id in ids.lines() {
-        ensure!(
-            image_id(&format!("sha256:{id}")),
-            "invalid cleanup container ID"
-        );
-        docker(root, "cleanup-remove", &["container", "rm", "-f", id], 15)?;
-    }
-    docker(
-        root,
-        "cleanup-check",
-        &[
-            "container",
-            "ls",
-            "-aq",
-            "--no-trunc",
-            "--filter",
-            &label_filter,
-        ],
-        15,
-    )?;
-    ensure!(
-        fs::read(root.join("cleanup-check.stdout"))?.is_empty(),
-        "owned container remains"
-    );
-    if let Some(id) = known_id {
-        docker(
-            root,
-            "cleanup-id-check",
-            &[
-                "container",
-                "ls",
-                "-aq",
-                "--no-trunc",
-                "--filter",
-                &format!("id={id}"),
-            ],
-            15,
-        )?;
-        ensure!(
-            fs::read(root.join("cleanup-id-check.stdout"))?.is_empty(),
-            "known container remains"
-        );
-        write(
-            &root.join("cleanup.state"),
-            "confirmed: owned container absent\n",
-        )?;
-    }
     // A failed consumer can still yield an admissible archive of partial evidence.
     let stream = root.join("container.stdout");
     if stream.is_file() && fs::metadata(&stream)?.len() > 0 {
         let admitted = admit_evidence(root, &stream, output);
         result?;
-        admitted
+        admitted?;
+        verify(
+            root,
+            &root.join("verify-bun-review-artifacts.py"),
+            &output.join("packet"),
+        )
     } else {
         result?;
         anyhow::bail!("consumer returned no evidence stream")
@@ -558,7 +617,8 @@ fn selected_archive_portability() -> Result<()> {
     let mut evidence = json!({
         "schema":"ub-review.portability.local.v1", "phase":phase, "distribution":distribution,
         "requested_ubuntu":distro, "mode":mode, "network":"none", "source_mount":false,
-        "resolver_receipt":"consumer/resolver.status", "packet":"consumer/packet"
+        "resolver_receipt":"consumer/resolver.status", "packet":"consumer/packet",
+        "packet_verification":"filesystem_confined_verifier_unavailable"
     });
     let result = (|| -> Result<()> {
         fs::create_dir(&bundle)?;
@@ -651,25 +711,13 @@ fn selected_archive_portability() -> Result<()> {
             &output,
             &image,
             [&distro, tag, bin_digest, version],
+            None, // No locally validated filesystem-confined verifier is available.
         )?;
         ensure!(
             fs::read_to_string(output.join("resolver.status"))?.trim()
                 == "strict_release_installed_no_fallback"
         );
         let packet = output.join("packet");
-        local_cmd(
-            &root,
-            "verify-packet",
-            "/usr/bin/python3",
-            &[
-                "-I",
-                string(&root.join("verify-bun-review-artifacts.py"))?,
-                string(&packet)?,
-                "--expected-repo-kind",
-                "rust",
-            ],
-            30,
-        )?;
         let gate: Value =
             serde_json::from_slice(&fs::read(packet.join("review/gate_outcome.json"))?)?;
         ensure!(
@@ -819,5 +867,98 @@ fn portability_host_command_caps_output_and_time() -> Result<()> {
     let result = local_cmd(root, "deadline", "/usr/bin/sleep", &["15"], 1);
     assert!(result.is_err());
     assert!(fs::read_to_string(root.join("deadline.status"))?.contains("124"));
+    Ok(())
+}
+
+#[test]
+fn portability_image_rejects_declared_or_unknown_volumes() -> Result<()> {
+    let id = format!("sha256:{}", "a".repeat(64));
+    let mut metadata = json!({"id": id, "os": "linux", "architecture": "amd64", "volumes": null});
+    check_local_image(&serde_json::to_vec(&metadata)?, &id)?;
+    metadata["volumes"] = json!({});
+    check_local_image(&serde_json::to_vec(&metadata)?, &id)?;
+    for volumes in [json!({"/ordinary-data": {}}), json!([])] {
+        metadata["volumes"] = volumes;
+        let error = check_local_image(&serde_json::to_vec(&metadata)?, &id)
+            .err()
+            .context("unsupported image volumes admitted")?;
+        assert!(error.to_string().contains("must declare no volumes"));
+    }
+    metadata
+        .as_object_mut()
+        .context("metadata object")?
+        .remove("volumes");
+    assert!(check_local_image(&serde_json::to_vec(&metadata)?, &id).is_err());
+    Ok(())
+}
+
+#[test]
+fn portability_cleanup_checks_label_and_id_even_after_failure() -> Result<()> {
+    let id = "a".repeat(64);
+    let label = "label=ub-review.portability=inert";
+    for failure in [
+        None,
+        Some("cleanup-remove-known"),
+        Some("cleanup-discover"),
+        Some("cleanup-check"),
+        Some("cleanup-id-check"),
+    ] {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path();
+        write(&root.join("cleanup.state"), "uncertain")?;
+        let mut calls = vec![];
+        let result = reconcile_cleanup(root, label, Some(&id), |name, args, _| {
+            calls.push(name.to_owned());
+            match name {
+                "cleanup-remove-known" => assert_eq!(args, ["container", "rm", "-f", &id]),
+                "cleanup-id-check" => {
+                    assert_eq!(args.last().copied(), Some(format!("id={id}").as_str()))
+                }
+                _ => assert_eq!(args.last().copied(), Some(label)),
+            }
+            if failure == Some(name) {
+                anyhow::bail!("inert daemon failure");
+            }
+            write(&root.join(format!("{name}.stdout")), "")
+        });
+        assert_eq!(
+            calls,
+            [
+                "cleanup-remove-known",
+                "cleanup-discover",
+                "cleanup-check",
+                "cleanup-id-check"
+            ]
+        );
+        assert_eq!(result.is_err(), failure.is_some());
+        assert_eq!(
+            fs::read_to_string(root.join("cleanup.state"))?.starts_with("confirmed"),
+            failure.is_none()
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn portability_run_refuses_before_docker_without_confined_verifier() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let root = temp.path();
+    let image = format!("sha256:{}", "a".repeat(64));
+    let error = run_container(
+        root,
+        &root.join("input"),
+        &root.join("output"),
+        &image,
+        ["24.04", "v0.1.2", "digest", "0.1.2"],
+        None,
+    )
+    .err()
+    .context("run unexpectedly accepted without confined verifier")?;
+    assert!(
+        error
+            .to_string()
+            .contains("filesystem-confined packet verifier unavailable")
+    );
+    assert_eq!(fs::read_dir(root)?.count(), 0);
     Ok(())
 }

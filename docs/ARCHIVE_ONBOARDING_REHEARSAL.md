@@ -161,30 +161,43 @@ UB_PORTABILITY_RECEIPTS=/absolute/private-parent/new-portability-output \
 cargo test --locked --offline --test archive_onboarding selected_archive_portability -- --ignored --nocapture
 ```
 
-Preparation terminates with `prepared_only`. For later consumer validation use
-a new output directory, `UB_PORTABILITY_MODE=run`, and
+Preparation terminates with `prepared_only`. Run mode currently refuses before
+Docker inspection or launch because no filesystem-confined packet verifier is
+available. Canonical tar member names do not constrain paths referenced inside
+packet JSON, and Python isolated mode does not confine filesystem access.
+Before enabling run mode, validate a verifier that can see only the admitted
+packet and its vetted interpreter and script, without network, credentials,
+checkout, or a writable host mount.
+
+After that boundary is implemented, use a new output directory, `UB_PORTABILITY_MODE=run`, and
 `UB_PORTABILITY_IMAGE_ID=sha256:…`, pointing to the immutable local image ID
 for the independently selected Ubuntu 24.04 x86_64 consumer. The image must
 already have Bash, git and standard archive/coreutils commands and have no
 Cargo, rustc or rustup. Record the provisioning/image provenance separately.
 The controller checks the actual local image ID, architecture, Ubuntu version
-and glibc. Docker uses no network or pulls and mounts only the read-only
+and glibc. Images declaring a volume are refused before container creation.
+Docker uses no network or pulls and mounts only the read-only
 prepared bundle. The worker runs as the caller's UID/GID and writes to a bounded
 container tmpfs. It streams an evidence tar to the host before exiting. The
 host validates path shape, entry type, file count and size before writing any
-file into a fresh private directory. The host verifier reads only those
-admitted files. The daemon needs read access to the private input mount.
+file into a fresh private directory. This checks filesystem entries, while the
+separate confined verifier is needed for paths referenced by their contents.
+The daemon needs read access to the private input mount.
 
 The container keeps missing-download and bad-checksum exit/output controls
 separate from the positive strict resolver receipt and installed digest.
 Model-off executes against a tiny generated git diff, with tokenless artifact
-completion, zero transport calls and host-side packet verification. Retain
+completion and confined packet verification. The planned container checks
+cover zero calls to the curl shim during model-off execution, disabled
+container networking, and absence of cargo, rustc and rustup on the sanitized
+PATH. Retain
 the container's stdout/stderr, resolver files, ELF output, model-off packet,
 verifier result and Docker cleanup files together. Host subprocess deadlines
 and file-size limits apply to Docker, evidence admission, and the verifier.
-The host records the container ID before starting it, attempts cleanup on
-success and error, and confirms absence by both run label and recorded ID.
-A failed daemon readback leaves cleanup uncertain. This does not establish
+The host records the container ID before starting it, targets that ID first
+for cleanup on success or error, and then checks the run label and recorded ID
+separately.
+A failed cleanup command or daemon readback leaves cleanup uncertain. This does not establish
 containment under abrupt host termination.
 
 Run again with an independently pinned 22.04 x86_64 image and
