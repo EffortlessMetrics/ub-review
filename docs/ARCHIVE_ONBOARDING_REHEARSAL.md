@@ -174,13 +174,15 @@ consumer starts.
 
 The verifier runs in a separately owned, network-disabled container with a
 read-only root, dropped capabilities, disabled health checks and IPC, and a
-cleared process environment. It receives only two read-only binds, the admitted
-packet directory and an exact copy of the verifier's compiled-in bytes. It
+cleared process environment. Its only read-only binds are the admitted packet
+directory, the admitted resolver-status file, the exact verifier bytes, and a
+separately hashed wrapper. The wrapper checks resolver status and model-off
+result planes inside the confined process, then runs the packet verifier. The
+host relies on the process result and retains capped logs. The verifier
 receives no checkout, Cargo, credentials, or writable host mount. Host
 subprocess limits bound its output and deadline. Preflight, consumer, and packet
 verification each retain their own container identity, exit and cleanup logs.
-The receipt records both image pins, the verifier script digest, and whether
-packet verification passed. The controller has local inert tests. A synthetic
+The receipt records both image pins, the verifier and wrapper digests, and whether confined verification passed. The controller has local inert tests. A synthetic
 run on the pinned Docker images is still needed to validate the full path.
 
 The image must

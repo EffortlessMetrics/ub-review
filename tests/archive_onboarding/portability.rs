@@ -13,6 +13,27 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const VERIFIER: &[u8] = include_bytes!("../../scripts/verify-bun-review-artifacts.py");
 // The host never extracts using container-provided paths or metadata. It
 // validates the complete archive first, then writes only ordinary files.
+const VERIFY_CONSUMER: &str = r#"import json, pathlib, subprocess, sys
+
+packet, resolver_status, verifier = map(pathlib.Path, sys.argv[1:])
+if resolver_status.read_text(encoding="utf-8").strip() != "strict_release_installed_no_fallback":
+    raise SystemExit("unexpected resolver status")
+with (packet / "review/gate_outcome.json").open(encoding="utf-8") as f:
+    gate = json.load(f)
+expected = {
+    "terminal_status": "artifact-only",
+    "gate_result": "not_proven",
+    "analysis_result": "not_proven",
+    "publication_result": "not_needed",
+}
+if not isinstance(gate, dict) or any(gate.get(key) != value for key, value in expected.items()):
+    raise SystemExit("unexpected model-off result planes")
+subprocess.run(
+    [sys.executable, "-I", "-B", str(verifier), str(packet), "--expected-repo-kind", "rust"],
+    check=True,
+)
+"#;
+
 const ADMIT_EVIDENCE: &str = r#"import pathlib, re, sys, tarfile
 archive, output = map(pathlib.Path, sys.argv[1:])
 limit = 32 * 1024 * 1024
@@ -524,7 +545,7 @@ fn owned_container(
     result
 }
 
-fn verifier_create_args(image: &str, user: &str, inputs: Option<(&str, &str)>) -> Vec<String> {
+fn verifier_create_args(image: &str, user: &str, inputs: Option<[&str; 4]>) -> Vec<String> {
     let mut args: Vec<_> = [
         "--pull=never",
         "--platform=linux/amd64",
@@ -542,12 +563,16 @@ fn verifier_create_args(image: &str, user: &str, inputs: Option<(&str, &str)>) -
     .into_iter()
     .map(str::to_owned)
     .collect();
-    if let Some((packet, script)) = inputs {
+    if let Some([packet, resolver_status, script, wrapper]) = inputs {
         args.extend([
             "--mount".into(),
             format!("type=bind,src={packet},dst=/packet,readonly,bind-recursive=disabled"),
             "--mount".into(),
             format!("type=bind,src={script},dst=/verify.py,readonly,bind-recursive=disabled"),
+            "--mount".into(),
+            format!("type=bind,src={resolver_status},dst=/resolver.status,readonly,bind-recursive=disabled"),
+            "--mount".into(),
+            format!("type=bind,src={wrapper},dst=/verify-consumer.py,readonly,bind-recursive=disabled"),
         ]);
     }
     args.extend(
@@ -567,7 +592,12 @@ fn verifier_create_args(image: &str, user: &str, inputs: Option<(&str, &str)>) -
         .map(str::to_owned),
     );
     let invocation: &[&str] = if inputs.is_some() {
-        &["/verify.py", "/packet", "--expected-repo-kind", "rust"]
+        &[
+            "/verify-consumer.py",
+            "/packet",
+            "/resolver.status",
+            "/verify.py",
+        ]
     } else {
         &[
             "-c",
@@ -578,7 +608,7 @@ fn verifier_create_args(image: &str, user: &str, inputs: Option<(&str, &str)>) -
     args
 }
 
-fn run_verifier_container(root: &Path, image: &str, inputs: Option<(&str, &str)>) -> Result<()> {
+fn run_verifier_container(root: &Path, image: &str, inputs: Option<[&str; 4]>) -> Result<()> {
     let user = format!(
         "{}:{}",
         rustix::process::getuid().as_raw(),
@@ -591,10 +621,21 @@ fn run_verifier_container(root: &Path, image: &str, inputs: Option<(&str, &str)>
     })
 }
 
-fn verify_admitted_packet(root: &Path, packet: &Path, retained: &Path, image: &str) -> Result<()> {
+fn verify_admitted_packet(
+    root: &Path,
+    admitted: &Path,
+    retained: &Path,
+    image: &str,
+) -> Result<()> {
+    let packet = admitted.join("packet");
+    let resolver_status = admitted.join("resolver.status");
     ensure!(
-        fs::symlink_metadata(packet)?.is_dir(),
+        fs::symlink_metadata(&packet)?.is_dir(),
         "admitted packet directory required"
+    );
+    ensure!(
+        fs::symlink_metadata(&resolver_status)?.is_file(),
+        "admitted regular resolver status required"
     );
     ensure!(
         fs::symlink_metadata(retained)?.is_file() && fs::read(retained)? == VERIFIER,
@@ -602,7 +643,18 @@ fn verify_admitted_packet(root: &Path, packet: &Path, retained: &Path, image: &s
     );
     let copy = root.join("verify.py");
     write(&copy, VERIFIER)?;
-    run_verifier_container(root, image, Some((string(packet)?, string(&copy)?)))
+    let wrapper = root.join("verify-consumer.py");
+    write(&wrapper, VERIFY_CONSUMER)?;
+    run_verifier_container(
+        root,
+        image,
+        Some([
+            string(&packet)?,
+            string(&resolver_status)?,
+            string(&copy)?,
+            string(&wrapper)?,
+        ]),
+    )
 }
 
 fn run_container(
@@ -644,6 +696,7 @@ fn run_container(
             "--read-only",
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
+            "--no-healthcheck",
             "--log-driver=none",
             "--pids-limit=128",
             "--user",
@@ -679,7 +732,7 @@ fn run_container(
         admitted?;
         verify_admitted_packet(
             &verifier_root,
-            &output.join("packet"),
+            output,
             &root.join("verify-bun-review-artifacts.py"),
             verifier_image,
         )
@@ -749,7 +802,7 @@ fn selected_archive_portability() -> Result<()> {
         let model_config = model_config();
         evidence["materials"] = json!({
             "action_sha256":digest(&action), "resolver_sha256":digest(resolver.as_bytes()),
-            "verifier_sha256":digest(VERIFIER), "adapter_sha256":digest(ADAPTER.as_bytes()),
+            "verifier_sha256":digest(VERIFIER), "verifier_wrapper_sha256":digest(VERIFY_CONSUMER.as_bytes()), "adapter_sha256":digest(ADAPTER.as_bytes()),
             "worker_sha256":digest(WORKER.as_bytes()), "config_sha256":digest(model_config.as_bytes()),
             "controller_sha256":digest(include_bytes!("portability.rs"))
         });
@@ -824,20 +877,6 @@ fn selected_archive_portability() -> Result<()> {
             verifier_image.as_deref(),
         )?;
         evidence["packet_verification"] = json!("confined_verifier_passed");
-        ensure!(
-            fs::read_to_string(output.join("resolver.status"))?.trim()
-                == "strict_release_installed_no_fallback"
-        );
-        let packet = output.join("packet");
-        let gate: Value =
-            serde_json::from_slice(&fs::read(packet.join("review/gate_outcome.json"))?)?;
-        ensure!(
-            gate["terminal_status"] == "artifact-only"
-                && gate["gate_result"] == "not_proven"
-                && gate["analysis_result"] == "not_proven"
-                && gate["publication_result"] == "not_needed",
-            "unexpected model-off result planes"
-        );
         Ok(())
     })();
     evidence["manifest"] = campaign.manifest;
@@ -1095,7 +1134,12 @@ fn portability_verifier_argv_uses_only_read_only_admitted_inputs() {
     let run = verifier_create_args(
         &id,
         "1000:1000",
-        Some(("/private/admitted/packet", "/private/verify.py")),
+        Some([
+            "/private/admitted/packet",
+            "/private/admitted/resolver.status",
+            "/private/verify.py",
+            "/private/verify-consumer.py",
+        ]),
     );
     for argv in [&run, &preflight] {
         for flag in [
@@ -1126,13 +1170,15 @@ fn portability_verifier_argv_uses_only_read_only_admitted_inputs() {
         [
             "type=bind,src=/private/admitted/packet,dst=/packet,readonly,bind-recursive=disabled",
             "type=bind,src=/private/verify.py,dst=/verify.py,readonly,bind-recursive=disabled",
+            "type=bind,src=/private/admitted/resolver.status,dst=/resolver.status,readonly,bind-recursive=disabled",
+            "type=bind,src=/private/verify-consumer.py,dst=/verify-consumer.py,readonly,bind-recursive=disabled",
         ]
     );
     assert!(run.ends_with(&[
-        "/verify.py".into(),
+        "/verify-consumer.py".into(),
         "/packet".into(),
-        "--expected-repo-kind".into(),
-        "rust".into()
+        "/resolver.status".into(),
+        "/verify.py".into()
     ]));
 }
 
@@ -1186,13 +1232,92 @@ fn portability_verifier_refuses_unadmitted_packet_and_modified_script() -> Resul
     let packet = root.join("packet");
     let script = root.join("retained.py");
     let id = format!("sha256:{}", "a".repeat(64));
-    assert!(verify_admitted_packet(root, &packet, &script, &id).is_err());
+    assert!(verify_admitted_packet(root, root, &script, &id).is_err());
     fs::create_dir(&packet)?;
+    write(&root.join("resolver.status"), "inert fixture")?;
     write(&script, "inert fixture")?;
-    let error = verify_admitted_packet(root, &packet, &script, &id)
+    let error = verify_admitted_packet(root, root, &script, &id)
         .err()
         .context("modified verifier accepted")?;
     assert!(error.to_string().contains("differs from compiled bytes"));
     assert!(!root.join("container-create.stdout").exists());
+    Ok(())
+}
+
+#[test]
+fn portability_wrapper_requires_resolver_and_model_off_outcomes() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let root = temp.path();
+    let packet = root.join("packet");
+    let status = root.join("resolver.status");
+    let gate = packet.join("review/gate_outcome.json");
+    let verifier = root.join("verifier.py");
+    let wrapper = root.join("wrapper.py");
+    write(&wrapper, VERIFY_CONSUMER)?;
+    write(
+        &verifier,
+        "import sys\nassert sys.argv[2:] == ['--expected-repo-kind', 'rust']\nprint('inert verifier invoked')\n",
+    )?;
+    for (resolver, gate_result, verifier_fails, failure) in [
+        (
+            "strict_release_installed_no_fallback",
+            "not_proven",
+            false,
+            None,
+        ),
+        (
+            "strict_release_installed_no_fallback",
+            "pass",
+            false,
+            Some("unexpected model-off result planes"),
+        ),
+        (
+            "wrong",
+            "not_proven",
+            false,
+            Some("unexpected resolver status"),
+        ),
+        (
+            "strict_release_installed_no_fallback",
+            "not_proven",
+            true,
+            Some("returned non-zero exit status"),
+        ),
+    ] {
+        write(&status, resolver)?;
+        write(
+            &gate,
+            serde_json::to_vec(&json!({
+                "terminal_status": "artifact-only", "gate_result": gate_result,
+                "analysis_result": "not_proven", "publication_result": "not_needed",
+            }))?,
+        )?;
+        if verifier_fails {
+            write(&verifier, "raise SystemExit(9)\n")?;
+        }
+        let result = local_cmd(
+            root,
+            "wrapper",
+            "/usr/bin/python3",
+            &[
+                "-I",
+                "-B",
+                string(&wrapper)?,
+                string(&packet)?,
+                string(&status)?,
+                string(&verifier)?,
+            ],
+            10,
+        );
+        let stdout = fs::read_to_string(root.join("wrapper.stdout"))?;
+        if let Some(message) = failure {
+            assert!(result.is_err());
+            assert!(fs::read_to_string(root.join("wrapper.stderr"))?.contains(message));
+            assert!(!stdout.contains("inert verifier invoked"));
+        } else {
+            result?;
+            assert!(stdout.contains("inert verifier invoked"));
+        }
+    }
     Ok(())
 }
