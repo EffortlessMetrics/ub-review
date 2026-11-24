@@ -344,6 +344,8 @@ mod campaign {
     use serde_json::{Value, json};
     use sha2::{Digest, Sha256};
     use std::fs;
+    use std::io::Read;
+    use std::os::unix::fs::DirBuilderExt;
     use std::os::unix::fs::{PermissionsExt, symlink};
     use std::path::{Path, PathBuf};
     use std::process::{Command, Stdio};
@@ -463,22 +465,32 @@ sys.exit(22 if status >= 400 else 0)
         root: PathBuf,
         bin: PathBuf,
         binary_sha256: String,
+        archive_input: Option<Value>,
         fixture_head: String,
         commands: Vec<Value>,
         scenarios: Value,
     }
 
     impl Campaign {
+        fn candidate_version(&self) -> Option<&str> {
+            match &self.archive_input {
+                Some(input) => input["manifest"]["version"].as_str(),
+                None => Some(env!("CARGO_PKG_VERSION")),
+            }
+        }
+
         fn receipt(&self, status: &str, error: Option<String>) -> Result<()> {
-            write(
-                &self.root.join("receipt.json"),
-                serde_json::to_vec_pretty(&json!({
+            let mut receipt = json!({
                     "schema": "ub-review.archive_advisory_campaign.v2",
-                    "phase": "source_candidate_deterministic",
+                    "phase": if self.archive_input.is_some() {
+                        "staged_archive_deterministic"
+                    } else {
+                        "source_candidate_deterministic"
+                    },
                     "status": status,
                     "error": error,
                     "candidate_binary_sha256": self.binary_sha256,
-                    "candidate_version": env!("CARGO_PKG_VERSION"),
+                    "candidate_version": self.candidate_version(),
                     "fixture_head": self.fixture_head,
                     "harness_sha256": sha(include_bytes!("archive_advisory_run.rs")),
                     "transport_adapter_sha256": sha(TRANSPORT.as_bytes()),
@@ -496,7 +508,13 @@ sys.exit(22 if status >= 400 else 0)
                         "platform matrix",
                         "general process-tree containment"
                     ]
-                }))?,
+            });
+            if let Some(input) = &self.archive_input {
+                receipt["archive_input"] = input.clone();
+            }
+            write(
+                &self.root.join("receipt.json"),
+                serde_json::to_vec_pretty(&receipt)?,
             )
         }
 
@@ -1381,9 +1399,13 @@ sys.exit(22 if status >= 400 else 0)
         script(&c.root.join("bin/curl"), TRANSPORT)?;
         let verifier =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/verify-bun-review-artifacts.py");
+        let expected_version = format!(
+            "ub-review {}",
+            c.candidate_version().context("candidate version")?
+        );
         let (ok, version) = c.cli(&strings(&["--version"]), &[])?;
         ensure!(
-            ok && version.trim() == format!("ub-review {}", env!("CARGO_PKG_VERSION")),
+            ok && version.trim() == expected_version,
             "candidate version mismatch: {version}"
         );
 
@@ -1460,24 +1482,174 @@ sys.exit(22 if status >= 400 else 0)
         Ok(())
     }
 
+    fn pending_scenarios() -> Value {
+        let scenarios = RUN_SCENARIOS
+            .iter()
+            .chain(["post-error", "mismatched-identity"].iter())
+            .map(|id| ((*id).to_owned(), json!({"status": "not_run"})))
+            .collect::<serde_json::Map<String, Value>>();
+        Value::Object(scenarios)
+    }
+
+    fn retained_bytes(path: &Path, limit: usize) -> Result<Vec<u8>> {
+        ensure!(
+            fs::symlink_metadata(path)?.is_file(),
+            "expected regular input: {}",
+            path.display()
+        );
+        let mut bytes = Vec::new();
+        fs::File::open(path)?
+            .take(limit as u64 + 1)
+            .read_to_end(&mut bytes)?;
+        ensure!(
+            bytes.len() <= limit,
+            "input exceeds limit: {}",
+            path.display()
+        );
+        Ok(bytes)
+    }
+
+    fn input_path(key: &str) -> Result<PathBuf> {
+        let path = PathBuf::from(std::env::var_os(key).with_context(|| format!("{key} required"))?);
+        ensure!(path.is_absolute(), "{key} must be absolute");
+        Ok(path)
+    }
+
+    fn stage_archive_input(c: &mut Campaign) -> Result<()> {
+        use xtask::release_bytes::{ASSET, CHECKSUM_ASSET, MAX_ARCHIVE_BYTES, MAX_PACKET_BYTES};
+
+        // The caller retains this digest independently from the receipt bytes.
+        let expected = std::env::var("UB_ONBOARDING_RECEIPT_SHA256")
+            .context("independently retained UB_ONBOARDING_RECEIPT_SHA256 required")?;
+        c.archive_input = Some(json!({"expected_onboarding_receipt_sha256": expected}));
+        let source = input_path("UB_ONBOARDING_RECEIPTS")?;
+        let receipt_bytes = retained_bytes(&source.join("receipt.json"), 1024 * 1024)?;
+        let receipt_sha256 = sha(&receipt_bytes);
+        ensure!(
+            receipt_sha256 == expected,
+            "onboarding receipt digest mismatch"
+        );
+        let receipt: Value = serde_json::from_slice(&receipt_bytes)?;
+        ensure!(
+            receipt["schema"] == "ub-review.archive_onboarding_rehearsal.v1"
+                && receipt["status"] == "bounded_pass"
+                && matches!(
+                    (receipt["phase"].as_str(), receipt["distribution"].as_str()),
+                    (
+                        Some("synthetic_candidate_intake"),
+                        Some("synthetic_fixture")
+                    ) | (
+                        Some("selected_candidate_intake"),
+                        Some("candidate_rehearsal")
+                    )
+                ),
+            "expected a successful archive-backed #1340 receipt"
+        );
+        let manifest = receipt["frozen_manifest"]
+            .as_object()
+            .context("onboarding manifest")?;
+        c.archive_input = Some(json!({
+            "onboarding_receipt_sha256": receipt_sha256,
+            "onboarding_phase": receipt["phase"],
+            "onboarding_action_sha256": receipt["action_sha256"],
+            "onboarding_intake_sha256": receipt["candidate_intake_sha256"],
+            "distribution": receipt["distribution"],
+            "manifest": manifest
+        }));
+        for key in [
+            "source_commit",
+            "source_tree",
+            "version",
+            "archive_sha256",
+            "checksum_sha256",
+            "binary_sha256",
+            "raw_packet_sha256",
+            "custody_facts_sha256",
+        ] {
+            ensure!(
+                manifest
+                    .get(key)
+                    .and_then(Value::as_str)
+                    .is_some_and(|s| !s.is_empty()),
+                "onboarding manifest is missing {key}"
+            );
+        }
+        let custody = retained_bytes(&input_path("UB_CANDIDATE_FACTS")?, MAX_PACKET_BYTES)?;
+        ensure!(
+            sha(&custody) == receipt["frozen_manifest"]["custody_facts_sha256"],
+            "custody facts digest mismatch"
+        );
+        for (name, hash, length, limit) in [
+            (ASSET, "archive_sha256", "archive_length", MAX_ARCHIVE_BYTES),
+            (CHECKSUM_ASSET, "checksum_sha256", "checksum_length", 512),
+        ] {
+            let bytes = retained_bytes(&source.join("frozen").join(name), limit)?;
+            ensure!(
+                sha(&bytes) == receipt["frozen_manifest"][hash]
+                    && json!(bytes.len()) == receipt["frozen_manifest"][length],
+                "retained {name} identity mismatch"
+            );
+        }
+        let binary = retained_bytes(
+            &source.join("runtime/ub-review-action-release/ub-review"),
+            MAX_ARCHIVE_BYTES,
+        )?;
+        c.binary_sha256 = receipt["frozen_manifest"]["binary_sha256"]
+            .as_str()
+            .context("onboarding binary digest")?
+            .to_owned();
+        ensure!(
+            sha(&binary) == c.binary_sha256,
+            "staged executable digest mismatch"
+        );
+        // Take a private byte-for-byte copy. invoke checks its digest again
+        // before each campaign CLI launch.
+        write(&c.bin, &binary)?;
+        fs::set_permissions(&c.bin, fs::Permissions::from_mode(0o700))?;
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "requires an independently retained #1340 receipt, custody facts and private output parent"]
+    fn staged_archive_advisory_campaign() -> Result<()> {
+        let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+        let root = input_path("UB_ADVISORY_RECEIPTS")?;
+        fs::DirBuilder::new().mode(0o700).create(&root)?;
+        let mut campaign = Campaign {
+            bin: root.join("admitted-ub-review"),
+            root,
+            binary_sha256: String::new(),
+            archive_input: Some(json!({})),
+            fixture_head: String::new(),
+            commands: vec![],
+            scenarios: pending_scenarios(),
+        };
+        let result = stage_archive_input(&mut campaign).and_then(|()| campaign_run(&mut campaign));
+        campaign.receipt(
+            if result.is_ok() {
+                "bounded_observations_pass"
+            } else {
+                "failed"
+            },
+            result.as_ref().err().map(|error| format!("{error:#}")),
+        )?;
+        result
+    }
+
     #[test]
     fn source_candidate_archive_advisory_campaign() -> Result<()> {
         let _cli_subprocess_guard = cli_subprocess_test_lock()?;
         let root = tempfile::tempdir()?;
         let bin = PathBuf::from(env!("CARGO_BIN_EXE_ub-review"));
         let binary_sha256 = sha(&fs::read(&bin)?);
-        let scenarios = RUN_SCENARIOS
-            .iter()
-            .chain(["post-error", "mismatched-identity"].iter())
-            .map(|id| ((*id).to_owned(), json!({"status": "not_run"})))
-            .collect::<serde_json::Map<String, Value>>();
         let mut campaign = Campaign {
             root: root.path().to_owned(),
             bin,
             binary_sha256,
+            archive_input: None,
             fixture_head: String::new(),
             commands: vec![],
-            scenarios: Value::Object(scenarios),
+            scenarios: pending_scenarios(),
         };
         let result = campaign_run(&mut campaign);
         campaign.receipt(
@@ -1501,6 +1673,7 @@ sys.exit(22 if status >= 400 else 0)
             root: root.path().to_owned(),
             bin: root.path().join("unused-binary"),
             binary_sha256: String::new(),
+            archive_input: None,
             fixture_head: String::new(),
             commands: vec![],
             scenarios: json!({}),

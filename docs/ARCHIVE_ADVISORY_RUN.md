@@ -181,3 +181,27 @@ observation qualifies candidate content directly.
 These local runs are not hosted release evidence. The hosted action-smoke
 dispatch (`run_model_smoke=true`) and its receipt consumption remain the
 orchestrator's step.
+
+## Opt-in staged archive advisory campaign
+
+Retain the successful #1340 receipt directory, the original independent custody
+facts file, and the SHA-256 of the exact #1340 receipt from independent custody.
+Use an absolute path for a new output directory under a caller-owned private
+parent. Run locally on Linux x86_64:
+
+```sh
+UB_ONBOARDING_RECEIPTS=/absolute/private-parent/onboarding \
+UB_ONBOARDING_RECEIPT_SHA256=RETAINED_HEX_DIGEST \
+UB_CANDIDATE_FACTS=/absolute/custody.json \
+UB_ADVISORY_RECEIPTS=/absolute/private-parent/advisory \
+cargo test --locked --test archive_advisory_run campaign::staged_archive_advisory_campaign -- --ignored --exact --nocapture
+```
+
+This path consumes the previous intake decision, binding the retained archive,
+checksum, staged executable and custody facts to the digest-pinned receipt. It
+copies the verified executable into the owned output directory and checks its
+digest before every advisory CLI launch. The campaign records the original
+provenance and writes a terminal receipt on success or failure. The scenarios
+still use inert transports. Synthetic intake remains synthetic and supplies
+neither final #816 qualification nor live provider evidence. The source-built
+campaign remains the default CI path.
