@@ -137,7 +137,11 @@ execution and live provider delivery require separate proof.
 
 Use the same independently retained ZIPs and custody file described above. The
 opt-in host controller reuses intake and the exact production resolver step.
-It retains the full Action file and its digest on the host along with the
+Supply independently selected full Action commit, tree and regular-file blob
+IDs and a local Git object repository that has them. The controller reads the
+blob from Git and verifies its identity independently of the package producer
+and the checkout's mutable Action file. It retains the exact Action file and
+its digest on the host along with the
 extracted step, inert adapter, model-off config, packet verifier and their
 digests. Host `readelf -hW -lW -dW -VW` records the executable header,
 interpreter, needed libraries and version requirements for the verified archive
@@ -148,6 +152,10 @@ UB_CANDIDATE_BYTES_ZIP=/absolute/candidate.zip \
 UB_CANDIDATE_PACKET_ZIP=/absolute/packet.zip \
 UB_CANDIDATE_FACTS=/absolute/custody.json \
 UB_CANDIDATE_PROVENANCE=synthetic_fixture \
+UB_PORTABILITY_ACTION_REPO=/absolute/selected-action-git-repo \
+UB_PORTABILITY_ACTION_COMMIT=SELECTED_COMMIT \
+UB_PORTABILITY_ACTION_TREE=SELECTED_TREE \
+UB_PORTABILITY_ACTION_BLOB=SELECTED_ACTION_YML_BLOB \
 UB_PORTABILITY_MODE=prepare UB_PORTABILITY_OS=24.04 \
 UB_PORTABILITY_RECEIPTS=/absolute/private-parent/new-portability-output \
 cargo test --locked --offline --test archive_onboarding selected_archive_portability -- --ignored --nocapture
@@ -161,18 +169,23 @@ already have Bash, git and standard archive/coreutils commands and have no
 Cargo, rustc or rustup. Record the provisioning/image provenance separately.
 The controller checks the actual local image ID, architecture, Ubuntu version
 and glibc. Docker uses no network or pulls and mounts only the read-only
-prepared bundle and the dedicated writable evidence directory. It runs as the
-host caller's UID/GID, so the daemon must be able to mount and write the
-caller-owned output without broadening its permissions.
+prepared bundle. The worker runs as the caller's UID/GID and writes to a bounded
+container tmpfs. It streams an evidence tar to the host before exiting. The
+host validates path shape, entry type, file count and size before writing any
+file into a fresh private directory. The host verifier reads only those
+admitted files. The daemon needs read access to the private input mount.
 
 The container keeps missing-download and bad-checksum exit/output controls
 separate from the positive strict resolver receipt and installed digest.
 Model-off executes against a tiny generated git diff, with tokenless artifact
 completion, zero transport calls and host-side packet verification. Retain
 the container's stdout/stderr, resolver files, ELF output, model-off packet,
-verifier result and Docker cleanup files together. A timeout bounds the host
-Docker client and cleanup targets only the container label created for this
-run. It does not establish general process-tree or output-size containment.
+verifier result and Docker cleanup files together. Host subprocess deadlines
+and file-size limits apply to Docker, evidence admission, and the verifier.
+The host records the container ID before starting it, attempts cleanup on
+success and error, and confirms absence by both run label and recorded ID.
+A failed daemon readback leaves cleanup uncertain. This does not establish
+containment under abrupt host termination.
 
 Run again with an independently pinned 22.04 x86_64 image and
 `UB_PORTABILITY_OS=22.04` or retain the release owner's explicit bounded
