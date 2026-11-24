@@ -239,13 +239,18 @@ fn candidate_campaign(root: PathBuf, provenance: Provenance) -> Campaign {
 #[test]
 #[ignore = "requires independently retained candidate ZIPs, custody facts and receipt directory"]
 fn selected_candidate_archive_onboarding() -> Result<()> {
+    let mode = std::env::var("UB_CANDIDATE_PROVENANCE").context(
+        "UB_CANDIDATE_PROVENANCE must explicitly select candidate_rehearsal or synthetic_fixture",
+    )?;
+    let provenance = match mode.as_str() {
+        "candidate_rehearsal" => Provenance::Candidate,
+        "synthetic_fixture" => Provenance::Synthetic,
+        _ => anyhow::bail!(
+            "invalid UB_CANDIDATE_PROVENANCE: expected candidate_rehearsal or synthetic_fixture"
+        ),
+    };
     let root = input("UB_ARCHIVE_RECEIPTS")?;
     ensure!(root.is_absolute(), "receipt directory must be absolute");
-    let provenance = match std::env::var("UB_CANDIDATE_PROVENANCE").as_deref() {
-        Err(std::env::VarError::NotPresent) | Ok("candidate_rehearsal") => Provenance::Candidate,
-        Ok("synthetic_fixture") => Provenance::Synthetic,
-        _ => anyhow::bail!("invalid UB_CANDIDATE_PROVENANCE"),
-    };
     fs::DirBuilder::new().mode(0o700).create(&root)?;
     let mut campaign = candidate_campaign(root, provenance);
     let result = (|| {

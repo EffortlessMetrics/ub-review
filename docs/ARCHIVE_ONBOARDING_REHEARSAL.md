@@ -87,7 +87,10 @@ Retain both original Actions ZIP downloads and a separate custody JSON file.
 Populate the custody file from the independently observed producer run, commit,
 tree, package version and artifact metadata. Record the raw receipt SHA-256
 independently before handoff. The harness uses this file as its trust input.
-Keep it outside the ZIPs and retain it read-only.
+Keep it outside the ZIPs and retain it read-only. The caller must establish
+producer custody independently of the harness. Selecting a provenance mode
+declares the input class. It does not authenticate the custody record.
+Place the fresh absolute receipt directory under a caller-owned private parent.
 
 | JSON key | Required fields |
 | --- | --- |
@@ -105,7 +108,8 @@ automatic synthetic controls also use `zip` and GNU `tar`.
 UB_CANDIDATE_BYTES_ZIP=/absolute/candidate.zip \
 UB_CANDIDATE_PACKET_ZIP=/absolute/packet.zip \
 UB_CANDIDATE_FACTS=/absolute/independent-custody.json \
-UB_ARCHIVE_RECEIPTS=/absolute/new-receipts \
+UB_CANDIDATE_PROVENANCE=candidate_rehearsal \
+UB_ARCHIVE_RECEIPTS=/absolute/private-parent/new-receipts \
   cargo test --locked --test archive_onboarding selected_candidate_archive_onboarding -- --ignored --nocapture
 ```
 
@@ -113,7 +117,11 @@ Before the resolver starts, intake verifies both ZIPs and the raw packet,
 checks producer identity and retention, verifies the archive and checksum, and
 derives the single executable member's digest. The existing resolver and
 onboarding campaign then run against private copies of those admitted bytes.
-Every campaign CLI call checks the installed path and digest. Synthetic controls
+The production resolver itself runs `--version` on the executable staged from
+the archive-bound bytes before the harness performs its additional installed-file
+digest check. Each subsequent campaign CLI call checks the installed path and
+digest. Missing or invalid provenance is refused before the receipt directory is
+created or the resolver runs. Synthetic controls
 exercise the same intake and resolver and label their receipts
 `synthetic_fixture`. Set `UB_CANDIDATE_PROVENANCE=synthetic_fixture` when
 running the full entry point with substitute artifacts.
